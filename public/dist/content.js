@@ -169,6 +169,40 @@
       textboxContent: textbox.textContent?.slice(0, 100)
     });
   }
+  async function clickPostButton(dialog) {
+    let postButton = dialog.querySelector(`div[aria-label="Post"]`);
+    if (postButton) {
+      console.log("[Facebook Groups Bulk Poster] Dialog has Post button");
+    } else {
+      console.warn(
+        "[Facebook Groups Bulk Poster] Dialog does not have Post button, trying page level selector"
+      );
+      postButton = document.querySelector(`div[aria-label="Post"]`);
+    }
+    if (!postButton) {
+      throw new Error("Could not find Post button.");
+    }
+    postButton.click();
+    console.log("[Facebook Groups Bulk Poster] Post button clicked");
+    for (let i = 0; i < 120; i += 1) {
+      await sleep(2e3);
+      const dialogStillVisible = document.contains(dialog) && dialog.offsetParent !== null;
+      if (dialogStillVisible) {
+        const dialogText = dialog.textContent ?? "";
+        if (dialogText.includes("We limit")) {
+          console.warn(
+            "[Facebook Groups Bulk Poster] Hit posting limit. Please wait and try again later."
+          );
+          throw new Error("Hit posting limit. Please wait and try again later.");
+        }
+        console.log("[Facebook Groups Bulk Poster] Posting...");
+        continue;
+      }
+      console.log("[Facebook Groups Bulk Poster] Ad posted successfully");
+      return;
+    }
+    throw new Error("Post did not complete in time.");
+  }
   chrome.runtime.onMessage.addListener(
     (request, _sender, sendResponse) => {
       if (request.type !== "FIND_WRITE_SOMETHING") {
@@ -206,7 +240,9 @@
         }
         if (request.body) {
           await insertDescription(dialog, request.body);
+          await sleep(500);
         }
+        await clickPostButton(dialog);
         sendResponse({
           ok: true,
           found: true,
