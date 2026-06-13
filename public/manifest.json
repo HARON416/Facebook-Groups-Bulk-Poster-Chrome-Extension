@@ -1,0 +1,40 @@
+{
+  "manifest_version": 3,
+  "name": "Facebook Groups Bulk Poster",
+  "version": "1.3.7",
+  "description": "Post to multiple Facebook groups at once with ease. Save time and reach more people with our bulk posting tool.",
+  "icons": {
+    "48": "images/icon-48.png",
+    "128": "images/icon-128.png"
+  },
+  "action": {
+    "default_title": "Open Facebook Groups Bulk Poster"
+  },
+  "permissions": [
+    "sidePanel",
+    "tabs",
+    "contextMenus",
+    "storage",
+    "scripting",
+    "webRequest"
+  ],
+  "side_panel": {
+    "default_path": "sidepanel.html"
+  },
+  "host_permissions": [
+    "https://www.facebook.com/*",
+    "https://web.facebook.com/*"
+  ],
+  "background": {
+    "service_worker": "dist/background.js"
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "https://www.facebook.com/groups/joins/*",
+        "https://web.facebook.com/groups/joins/*"
+      ],
+      "js": ["dist/content.js"]
+    }
+  ]
+}

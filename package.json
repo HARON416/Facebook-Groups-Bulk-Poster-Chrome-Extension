@@ -1,0 +1,23 @@
+{
+  "name": "chrome-extension",
+  "version": "1.0.0",
+  "description": "",
+  "scripts": {
+    "build": "esbuild src/content.ts src/background.ts src/sidepanel.ts --bundle --outdir=public/dist --platform=browser",
+    "watch": "esbuild src/content.ts src/background.ts src/sidepanel.ts --bundle --outdir=public/dist --platform=browser --watch"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "devDependencies": {
+    "@types/chrome": "^0.1.36",
+    "@types/node": "^25.3.0",
+    "esbuild": "^0.27.3",
+    "prettier": "^3.8.1",
+    "typescript": "^5.9.3"
+  },
+  "dependencies": {
+    "@google/genai": "^1.42.0",
+    "mime": "^4.1.0"
+  }
+}

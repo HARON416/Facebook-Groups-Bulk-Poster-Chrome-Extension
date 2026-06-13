@@ -1,0 +1,81 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <link rel="stylesheet" href="styles/sidepanel.css" />
+    <title>Facebook Groups Bulk Poster</title>
+  </head>
+  <body>
+    <main id="app">
+      <form id="create-form" class="workflow">
+        <section class="panel-section">
+          <div class="field">
+            <label for="post-body-input">Post Body</label>
+            <textarea
+              id="post-body-input"
+              name="post-body"
+              rows="9"
+              placeholder="Write your post..."
+            ></textarea>
+          </div>
+        </section>
+
+        <section class="panel-section">
+          <div class="field">
+            <label for="post-images-input">Image Selection</label>
+            <label id="image-picker" for="post-images-input">
+              <span>Choose images</span>
+              <small>Multiple images supported</small>
+            </label>
+            <input
+              type="file"
+              id="post-images-input"
+              name="post-images"
+              accept="image/*"
+              multiple
+            />
+          </div>
+
+          <div id="image-preview-list" class="image-preview-list">
+            <div class="empty-state">No images selected.</div>
+          </div>
+        </section>
+
+        <section class="panel-section">
+          <button type="button" id="load-groups-btn">Load Groups</button>
+          <div id="groups-status" class="status-bar" role="status">
+            <span id="groups-status-message">Ready to load groups.</span>
+            <span id="groups-status-count">0 loaded</span>
+          </div>
+          <div id="groups-selection-count" class="selection-count">
+            0 groups selected
+          </div>
+          <div id="groups-list" class="empty-state">No groups loaded yet.</div>
+        </section>
+
+        <section class="panel-section">
+          <div class="field">
+            <label for="post-sleep-input">Sleep Time in Seconds Between Posts</label>
+            <div class="number-input-row">
+              <input
+                type="number"
+                id="post-sleep-input"
+                name="post-sleep"
+                min="300"
+                step="60"
+                value="300"
+              />
+            </div>
+          </div>
+
+          <button type="submit" id="start-posting-btn" disabled>
+            START POSTING
+          </button>
+        </section>
+      </form>
+    </main>
+
+    <script defer src="dist/sidepanel.js"></script>
+  </body>
+</html>
