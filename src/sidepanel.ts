@@ -2,6 +2,10 @@ import type {
   FacebookGroup,
   GroupExtractionStatusMessage,
   LoadGroupsResponse,
+  StartUiPostingRequest,
+  UiPostImage,
+  UiPostingResponse,
+  UiPostingStatusMessage,
 } from "./config";
 
 const loadGroupsButton =
@@ -20,8 +24,9 @@ const postBodyInput =
   document.querySelector<HTMLTextAreaElement>("#post-body-input");
 const postImagesInput =
   document.querySelector<HTMLInputElement>("#post-images-input");
-const imagePreviewList =
-  document.querySelector<HTMLElement>("#image-preview-list");
+const imagePreviewList = document.querySelector<HTMLElement>(
+  "#image-preview-list",
+);
 const postSleepInput =
   document.querySelector<HTMLInputElement>("#post-sleep-input");
 const createForm = document.querySelector<HTMLFormElement>("#create-form");
@@ -29,11 +34,14 @@ const startPostingButton =
   document.querySelector<HTMLButtonElement>("#start-posting-btn");
 const selectedImagePreviewUrls: string[] = [];
 let selectedImageFiles: File[] = [];
+let loadedGroups: FacebookGroup[] = [];
 
 function renderGroups(groups: FacebookGroup[]) {
   if (!groupsList) {
     return;
   }
+
+  loadedGroups = groups;
 
   if (groups.length === 0) {
     groupsList.className = "empty-state";
@@ -111,14 +119,40 @@ function updatePostingReadiness() {
 }
 
 chrome.runtime.onMessage.addListener(
-  (message: GroupExtractionStatusMessage) => {
-    if (message.type !== "GROUP_EXTRACTION_STATUS") {
-      return;
+  (message: GroupExtractionStatusMessage | UiPostingStatusMessage) => {
+    if (message.type === "GROUP_EXTRACTION_STATUS") {
+      updateGroupsStatus(message.message, message.loadedCount);
     }
 
-    updateGroupsStatus(message.message, message.loadedCount);
+    if (message.type === "UI_POSTING_STATUS") {
+      updateUiPostingStatus(message);
+    }
   },
 );
+
+function updateUiPostingStatus(message: UiPostingStatusMessage) {
+  if (groupsStatusMessage) {
+    groupsStatusMessage.textContent = message.error
+      ? `${message.message}: ${message.error}`
+      : message.message;
+  }
+
+  if (groupsStatusCount) {
+    groupsStatusCount.textContent = `${message.successCount ?? 0}/${message.total} opened`;
+  }
+
+  if (
+    message.status === "done" ||
+    message.status === "rate_limited"
+  ) {
+    if (startPostingButton) {
+      startPostingButton.disabled = false;
+      startPostingButton.textContent = "START POSTING";
+    }
+
+    updatePostingReadiness();
+  }
+}
 
 loadGroupsButton?.addEventListener("click", async () => {
   if (!groupsList || !loadGroupsButton) {
@@ -143,7 +177,10 @@ loadGroupsButton?.addEventListener("click", async () => {
 
     const groups = response.groups ?? [];
     renderGroups(groups);
-    updateGroupsStatus(`Finished loading ${groups.length} groups.`, groups.length);
+    updateGroupsStatus(
+      `Finished loading ${groups.length} groups.`,
+      groups.length,
+    );
   } catch (error) {
     updateGroupsStatus("Group extraction failed.", 0);
     groupsList.className = "empty-state";
@@ -253,6 +290,101 @@ createForm?.addEventListener("submit", (event) => {
   event.preventDefault();
 });
 
+startPostingButton?.addEventListener("click", async () => {
+  if (!startPostingButton) {
+    return;
+  }
+
+  const selectedGroupIds = Array.from(
+    document.querySelectorAll<HTMLInputElement>(
+      ".group-item__checkbox:checked",
+    ),
+  ).map((checkbox) => checkbox.value);
+
+  if (selectedGroupIds.length === 0) {
+    alert("Please select at least one group");
+    return;
+  }
+
+  const postText = postBodyInput?.value.trim() ?? "";
+  if (postText.length === 0) {
+    alert("Please enter post text");
+    return;
+  }
+
+  const sleepTime = Number(postSleepInput?.value ?? 300);
+  if (!Number.isFinite(sleepTime) || sleepTime < 300) {
+    alert("Sleep time must be at least 300 seconds");
+    return;
+  }
+
+  const selectedGroups = loadedGroups.filter((group) =>
+    selectedGroupIds.includes(group.id),
+  );
+
+  if (selectedGroups.length === 0) {
+    alert("Selected groups are no longer loaded. Click Load Groups and try again.");
+    return;
+  }
+
+  startPostingButton.disabled = true;
+  startPostingButton.textContent = "Posting...";
+  updateGroupsStatus("Preparing UI automation...", 0);
+
+  try {
+    const images = await Promise.all(selectedImageFiles.map(fileToUiPostImage));
+    const request: StartUiPostingRequest = {
+      type: "START_UI_POSTING",
+      body: postText,
+      groups: selectedGroups.map((group) => ({
+        id: group.id,
+        name: group.name,
+        url: group.url,
+      })),
+      images,
+      delaySeconds: sleepTime,
+    };
+    const response = await chrome.runtime.sendMessage<
+      StartUiPostingRequest,
+      UiPostingResponse
+    >(request);
+
+    if (!response?.ok) {
+      throw new Error(response?.error ?? "Unable to start UI posting.");
+    }
+  } catch (error) {
+    startPostingButton.disabled = false;
+    startPostingButton.textContent = "START POSTING";
+    alert(
+      error instanceof Error
+        ? error.message
+        : "Unable to start UI posting automation.",
+    );
+  }
+});
+
 updatePostingReadiness();
 
 window.addEventListener("beforeunload", clearImagePreviewUrls);
+
+function fileToUiPostImage(file: File): Promise<UiPostImage> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.addEventListener("load", () => {
+      if (typeof reader.result !== "string") {
+        reject(new Error(`Unable to read ${file.name}.`));
+        return;
+      }
+
+      resolve({
+        name: file.name,
+        type: file.type || "application/octet-stream",
+        dataUrl: reader.result,
+      });
+    });
+    reader.addEventListener("error", () => {
+      reject(reader.error ?? new Error(`Unable to read ${file.name}.`));
+    });
+    reader.readAsDataURL(file);
+  });
+}

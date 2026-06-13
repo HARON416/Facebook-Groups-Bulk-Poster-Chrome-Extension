@@ -8,6 +8,7 @@
   var pendingRequests = /* @__PURE__ */ new Map();
   var capturedGroupsRequest;
   var captureTabId;
+  var activeUiPosting = false;
   chrome.runtime.onInstalled.addListener(() => {
     void chrome.sidePanel.setPanelBehavior({ openPanelOnActionClick: true });
   });
@@ -35,7 +36,12 @@
       maybeCaptureRequest(details.requestId);
       return void 0;
     },
-    { urls: ["https://www.facebook.com/api/graphql/*", "https://web.facebook.com/api/graphql/*"] },
+    {
+      urls: [
+        "https://www.facebook.com/api/graphql/*",
+        "https://web.facebook.com/api/graphql/*"
+      ]
+    },
     ["requestBody"]
   );
   chrome.webRequest.onBeforeSendHeaders.addListener(
@@ -50,21 +56,31 @@
       maybeCaptureRequest(details.requestId);
       return void 0;
     },
-    { urls: ["https://www.facebook.com/api/graphql/*", "https://web.facebook.com/api/graphql/*"] },
+    {
+      urls: [
+        "https://www.facebook.com/api/graphql/*",
+        "https://web.facebook.com/api/graphql/*"
+      ]
+    },
     ["requestHeaders", "extraHeaders"]
   );
   chrome.runtime.onMessage.addListener(
     (request, _sender, sendResponse) => {
-      if (request.type !== "LOAD_GROUPS") {
+      if (request.type === "LOAD_GROUPS") {
+        void loadGroups().then((groups) => sendResponse({ ok: true, groups })).catch((error) => {
+          sendResponse({
+            ok: false,
+            error: error instanceof Error ? error.message : "Unable to load groups."
+          });
+        });
+        return true;
+      }
+      if (request.type === "START_UI_POSTING") {
+        void runUiPostingQueue(request);
+        sendResponse({ ok: true });
         return false;
       }
-      void loadGroups().then((groups) => sendResponse({ ok: true, groups })).catch((error) => {
-        sendResponse({
-          ok: false,
-          error: error instanceof Error ? error.message : "Unable to load groups."
-        });
-      });
-      return true;
+      return false;
     }
   );
   function readRequestBody(requestBody) {
@@ -148,6 +164,16 @@
     }
     return chrome.tabs.create({ url: JOINED_GROUPS_URL, active: true });
   }
+  async function getActiveTabForPosting() {
+    const [activeTab] = await chrome.tabs.query({
+      active: true,
+      currentWindow: true
+    });
+    if (!activeTab?.id) {
+      throw new Error("Unable to find the active tab for posting.");
+    }
+    return activeTab;
+  }
   async function navigateToJoinedGroups(tabId) {
     if (!tabId) {
       throw new Error("Unable to open joined groups in the current tab.");
@@ -188,7 +214,9 @@
       }
       await sleep(250);
     }
-    throw new Error("Could not capture Facebook groups request. Try again while logged into Facebook.");
+    throw new Error(
+      "Could not capture Facebook groups request. Try again while logged into Facebook."
+    );
   }
   function updateFetchGroupsConfigFromCapturedRequest(capturedRequest) {
     const formData = {};
@@ -254,7 +282,10 @@
       const allGroups = [];
       let cursor = null;
       for (let page = 0; page < 100; page += 1) {
-        notifyGroupsStatus2(`Fetching groups page ${page + 1}...`, allGroups.length);
+        notifyGroupsStatus2(
+          `Fetching groups page ${page + 1}...`,
+          allGroups.length
+        );
         const params = new URLSearchParams(config.formData);
         params.set(
           "variables",
@@ -272,7 +303,9 @@
           body: params.toString()
         });
         if (!response.ok) {
-          throw new Error(`Facebook groups request failed with ${response.status}.`);
+          throw new Error(
+            `Facebook groups request failed with ${response.status}.`
+          );
         }
         const json = await response.json();
         const tabGroupsList = json?.data?.viewer?.all_joined_groups?.tab_groups_list;
@@ -304,7 +337,11 @@
         );
         await new Promise((resolve) => setTimeout(resolve, 2e3));
       }
-      notifyGroupsStatus2(`Finished loading ${allGroups.length} groups.`, allGroups.length, true);
+      notifyGroupsStatus2(
+        `Finished loading ${allGroups.length} groups.`,
+        allGroups.length,
+        true
+      );
       return allGroups;
     } catch (error) {
       return {
@@ -334,5 +371,167 @@
   }
   function sleep(duration) {
     return new Promise((resolve) => setTimeout(resolve, duration));
+  }
+  async function runUiPostingQueue(request) {
+    if (activeUiPosting) {
+      notifyUiPostingStatus({
+        status: "failed",
+        message: "A posting queue is already running.",
+        current: 0,
+        total: request.groups.length,
+        successCount: 0,
+        error: "Wait for the current queue to finish before starting another."
+      });
+      return;
+    }
+    activeUiPosting = true;
+    let successCount = 0;
+    const total = request.groups.length;
+    try {
+      if (total === 0) {
+        throw new Error("Select at least one group before posting.");
+      }
+      const postingTab = await getActiveTabForPosting();
+      const postingTabId = postingTab.id;
+      if (!postingTabId) {
+        throw new Error("Unable to find the active tab for posting.");
+      }
+      notifyUiPostingStatus({
+        status: "posting",
+        message: "Starting posting queue...",
+        current: 0,
+        total,
+        successCount
+      });
+      for (let index = 0; index < request.groups.length; index += 1) {
+        const group = request.groups[index];
+        const current = index + 1;
+        notifyUiPostingStatus({
+          status: "posting",
+          message: `Opening ${group.name}...`,
+          current,
+          total,
+          groupId: group.id,
+          groupName: group.name,
+          successCount
+        });
+        const groupUrl = normalizeGroupUrl(group.id);
+        await chrome.tabs.update(postingTabId, { url: groupUrl, active: true });
+        await waitForTabComplete(postingTabId, "/groups/");
+        await sleep(5e3);
+        const writeSomething = await findWriteSomethingInTab(
+          postingTabId,
+          request.images,
+          request.body
+        );
+        successCount += 1;
+        notifyUiPostingStatus({
+          status: "posted",
+          message: writeSomething.clicked ? `Opened ${group.name}. Composer trigger clicked.` : `Opened ${group.name}. Composer trigger not found.`,
+          current,
+          total,
+          groupId: group.id,
+          groupName: group.name,
+          successCount
+        });
+        if (index < request.groups.length - 1) {
+          notifyUiPostingStatus({
+            status: "waiting",
+            message: `Waiting ${request.delaySeconds} seconds before next group...`,
+            current,
+            total,
+            groupId: group.id,
+            groupName: group.name,
+            successCount
+          });
+          await sleep(request.delaySeconds * 1e3);
+        }
+      }
+      notifyUiPostingStatus({
+        status: "done",
+        message: `Finished opening ${successCount}/${total} groups.`,
+        current: total,
+        total,
+        successCount
+      });
+    } catch (error) {
+      notifyUiPostingStatus({
+        status: "done",
+        message: "UI posting automation stopped.",
+        current: 0,
+        total,
+        successCount,
+        error: error instanceof Error ? error.message : "Unknown error"
+      });
+    } finally {
+      activeUiPosting = false;
+    }
+  }
+  function normalizeGroupUrl(groupUrlOrId) {
+    if (groupUrlOrId.startsWith("http://") || groupUrlOrId.startsWith("https://")) {
+      return groupUrlOrId;
+    }
+    return `https://www.facebook.com/groups/${groupUrlOrId}/`;
+  }
+  async function findWriteSomethingInTab(tabId, images = [], body = "") {
+    const request = {
+      type: "FIND_WRITE_SOMETHING",
+      images,
+      body
+    };
+    for (let attempt = 0; attempt < 20; attempt += 1) {
+      try {
+        const response = await chrome.tabs.sendMessage(
+          tabId,
+          request
+        );
+        if (response?.ok) {
+          return response;
+        }
+        return {
+          ok: false,
+          found: false,
+          clicked: false,
+          spanCount: 0,
+          error: response?.error ?? "Unable to inspect Facebook page."
+        };
+      } catch (error) {
+        if (attempt === 19) {
+          return {
+            ok: false,
+            found: false,
+            clicked: false,
+            spanCount: 0,
+            error: error instanceof Error ? error.message : "Content script did not respond."
+          };
+        }
+        await sleep(250);
+      }
+    }
+    return {
+      ok: false,
+      found: false,
+      clicked: false,
+      spanCount: 0,
+      error: "Content script did not respond."
+    };
+  }
+  async function waitForTabComplete(tabId, urlIncludes) {
+    const startedAt = Date.now();
+    while (Date.now() - startedAt < 45e3) {
+      const tab = await chrome.tabs.get(tabId);
+      if (tab.status === "complete" && tab.url?.includes(urlIncludes)) {
+        return;
+      }
+      await sleep(250);
+    }
+    throw new Error("Facebook group page took too long to load.");
+  }
+  function notifyUiPostingStatus(partial) {
+    const status = {
+      type: "UI_POSTING_STATUS",
+      ...partial
+    };
+    void chrome.runtime.sendMessage(status);
   }
 })();

@@ -321,6 +321,7 @@ textarea:focus,
   cursor: pointer;
   font-size: 1.4rem;
   font-weight: 700;
+  width: 100%;
 }
 
 #start-posting-btn:hover {
