@@ -65,6 +65,8 @@ export type UiPostingStatusMessage = {
   groupId?: string;
   groupName?: string;
   successCount?: number;
+  failedCount?: number;
+  processedCount?: number;
   error?: string;
 };
 
@@ -73,18 +75,31 @@ export type UiPostingResponse = {
   error?: string;
 };
 
-export interface FindWriteSomethingRequest {
-  type: "FIND_WRITE_SOMETHING";
-  body?: string;
-  images?: UiPostImage[];
-}
+export type CreatePostRequest = {
+  type: "CREATE_POST";
+  body: string;
+  images: UiPostImage[];
+};
 
-export type FindWriteSomethingResponse = {
+export type CreatePostResponse = {
   ok: boolean;
-  found: boolean;
-  clicked: boolean;
+  composerFound: boolean;
+  composerClicked: boolean;
   spanCount: number;
   error?: string;
+};
+
+export type StatusBannerTone = "info" | "success" | "warning" | "error";
+
+export type StatusBannerMessage = {
+  type: "STATUS_BANNER";
+  message: string;
+  tone?: StatusBannerTone;
+  detail?: string;
+};
+
+export type ClearStatusBannerMessage = {
+  type: "CLEAR_STATUS_BANNER";
 };
 
 export type ExtensionRequest = LoadGroupsRequest | StartUiPostingRequest;

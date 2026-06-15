@@ -332,3 +332,114 @@ textarea:focus,
   cursor: not-allowed;
   opacity: 0.55;
 }
+
+.posting-progress {
+  display: flex;
+  flex-direction: column;
+  gap: 1.1rem;
+  border: 0.1rem solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+  padding: 1.2rem;
+}
+
+.posting-progress[hidden] {
+  display: none;
+}
+
+.posting-progress__header {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 1rem;
+  color: var(--text);
+  font-size: 1.3rem;
+  font-weight: 700;
+}
+
+.posting-progress__header strong {
+  color: var(--primary-dark);
+  font-size: 1.35rem;
+}
+
+.posting-progress__bar {
+  overflow: hidden;
+  height: 0.7rem;
+  border-radius: 999rem;
+  background: var(--surface-muted);
+}
+
+.posting-progress__bar span {
+  display: block;
+  width: 0%;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--primary);
+  transition: width 180ms ease;
+}
+
+.posting-progress__stats {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.8rem;
+}
+
+.posting-progress__stats span {
+  border: 0.1rem solid var(--border);
+  border-radius: calc(var(--radius) - 0.2rem);
+  background: var(--surface-muted);
+  color: var(--text-muted);
+  font-size: 1.1rem;
+  line-height: 1.3;
+  padding: 0.75rem;
+  text-align: center;
+}
+
+.posting-progress__stats strong {
+  display: block;
+  color: var(--text);
+  font-size: 1.45rem;
+  line-height: 1.1;
+}
+
+.posting-progress__current {
+  color: var(--text);
+  font-size: 1.25rem;
+  font-weight: 700;
+  line-height: 1.4;
+}
+
+.posting-progress__log {
+  display: flex;
+  max-height: 18rem;
+  flex-direction: column;
+  gap: 0.75rem;
+  margin: 0;
+  overflow: auto;
+  padding: 0;
+  list-style: none;
+}
+
+.posting-progress__log li {
+  border-left: 0.3rem solid var(--border);
+  color: var(--text-muted);
+  font-size: 1.2rem;
+  line-height: 1.4;
+  padding-left: 0.8rem;
+}
+
+.posting-progress__log li[data-status="posted"] {
+  border-left-color: #16a34a;
+  color: #166534;
+}
+
+.posting-progress__log li[data-status="failed"],
+.posting-progress__log li[data-status="rate_limited"] {
+  border-left-color: #dc2626;
+  color: #991b1b;
+}
+
+.posting-progress__log li[data-status="waiting"] {
+  border-left-color: #f97316;
+  color: #9a3412;
+}

@@ -72,6 +72,34 @@
           <button type="submit" id="start-posting-btn" disabled>
             START POSTING
           </button>
+
+          <div id="posting-progress" class="posting-progress" hidden>
+            <div class="posting-progress__header">
+              <span id="posting-progress-title">Posting progress</span>
+              <strong id="posting-progress-percent">0%</strong>
+            </div>
+            <div class="posting-progress__bar" aria-hidden="true">
+              <span id="posting-progress-bar"></span>
+            </div>
+            <div class="posting-progress__stats">
+              <span>
+                <strong id="posting-progress-success">0</strong>
+                posted
+              </span>
+              <span>
+                <strong id="posting-progress-failed">0</strong>
+                failed
+              </span>
+              <span>
+                <strong id="posting-progress-remaining">0</strong>
+                remaining
+              </span>
+            </div>
+            <div id="posting-progress-current" class="posting-progress__current">
+              No posting queue running.
+            </div>
+            <ol id="posting-progress-log" class="posting-progress__log"></ol>
+          </div>
         </section>
       </form>
     </main>

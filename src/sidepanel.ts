@@ -32,6 +32,32 @@ const postSleepInput =
 const createForm = document.querySelector<HTMLFormElement>("#create-form");
 const startPostingButton =
   document.querySelector<HTMLButtonElement>("#start-posting-btn");
+const postingProgress =
+  document.querySelector<HTMLElement>("#posting-progress");
+const postingProgressTitle = document.querySelector<HTMLElement>(
+  "#posting-progress-title",
+);
+const postingProgressPercent = document.querySelector<HTMLElement>(
+  "#posting-progress-percent",
+);
+const postingProgressBar = document.querySelector<HTMLElement>(
+  "#posting-progress-bar",
+);
+const postingProgressSuccess = document.querySelector<HTMLElement>(
+  "#posting-progress-success",
+);
+const postingProgressFailed = document.querySelector<HTMLElement>(
+  "#posting-progress-failed",
+);
+const postingProgressRemaining = document.querySelector<HTMLElement>(
+  "#posting-progress-remaining",
+);
+const postingProgressCurrent = document.querySelector<HTMLElement>(
+  "#posting-progress-current",
+);
+const postingProgressLog = document.querySelector<HTMLOListElement>(
+  "#posting-progress-log",
+);
 const selectedImagePreviewUrls: string[] = [];
 let selectedImageFiles: File[] = [];
 let loadedGroups: FacebookGroup[] = [];
@@ -131,6 +157,8 @@ chrome.runtime.onMessage.addListener(
 );
 
 function updateUiPostingStatus(message: UiPostingStatusMessage) {
+  updatePostingProgress(message);
+
   if (groupsStatusMessage) {
     groupsStatusMessage.textContent = message.error
       ? `${message.message}: ${message.error}`
@@ -138,7 +166,7 @@ function updateUiPostingStatus(message: UiPostingStatusMessage) {
   }
 
   if (groupsStatusCount) {
-    groupsStatusCount.textContent = `${message.successCount ?? 0}/${message.total} opened`;
+    groupsStatusCount.textContent = `${message.successCount ?? 0}/${message.total} posted`;
   }
 
   if (
@@ -151,6 +179,80 @@ function updateUiPostingStatus(message: UiPostingStatusMessage) {
     }
 
     updatePostingReadiness();
+  }
+}
+
+function updatePostingProgress(message: UiPostingStatusMessage) {
+  if (postingProgress) {
+    postingProgress.hidden = false;
+  }
+
+  const successCount = message.successCount ?? 0;
+  const failedCount = message.failedCount ?? 0;
+  const processedCount =
+    message.processedCount ??
+    Math.min(message.total, successCount + failedCount);
+  const remainingCount = Math.max(message.total - processedCount, 0);
+  const percent =
+    message.total > 0
+      ? Math.round((processedCount / message.total) * 100)
+      : 0;
+
+  if (postingProgressTitle) {
+    postingProgressTitle.textContent = `${processedCount}/${message.total} groups processed`;
+  }
+
+  if (postingProgressPercent) {
+    postingProgressPercent.textContent = `${percent}%`;
+  }
+
+  if (postingProgressBar) {
+    postingProgressBar.style.width = `${percent}%`;
+  }
+
+  if (postingProgressSuccess) {
+    postingProgressSuccess.textContent = String(successCount);
+  }
+
+  if (postingProgressFailed) {
+    postingProgressFailed.textContent = String(failedCount);
+  }
+
+  if (postingProgressRemaining) {
+    postingProgressRemaining.textContent = String(remainingCount);
+  }
+
+  if (postingProgressCurrent) {
+    const prefix =
+      message.current > 0 && message.total > 0
+        ? `Group ${message.current}/${message.total}`
+        : "Queue";
+    postingProgressCurrent.textContent = message.groupName
+      ? `${prefix}: ${message.groupName}`
+      : message.message;
+  }
+
+  appendPostingProgressLog(message);
+}
+
+function appendPostingProgressLog(message: UiPostingStatusMessage) {
+  if (!postingProgressLog) {
+    return;
+  }
+
+  const item = document.createElement("li");
+  item.dataset.status = message.status;
+  const count =
+    message.current > 0 && message.total > 0
+      ? `${message.current}/${message.total} · `
+      : "";
+  item.textContent = `${count}${message.message}${
+    message.error ? `: ${message.error}` : ""
+  }`;
+  postingProgressLog.prepend(item);
+
+  while (postingProgressLog.children.length > 12) {
+    postingProgressLog.lastElementChild?.remove();
   }
 }
 
@@ -329,7 +431,9 @@ startPostingButton?.addEventListener("click", async () => {
 
   startPostingButton.disabled = true;
   startPostingButton.textContent = "Posting...";
-  updateGroupsStatus("Preparing UI automation...", 0);
+  updateGroupsStatus("Preparing GraphQL posting...", 0);
+  resetPostingProgress(selectedGroups.length);
+  scrollPostingProgressIntoView();
 
   try {
     const images = await Promise.all(selectedImageFiles.map(fileToUiPostImage));
@@ -350,7 +454,7 @@ startPostingButton?.addEventListener("click", async () => {
     >(request);
 
     if (!response?.ok) {
-      throw new Error(response?.error ?? "Unable to start UI posting.");
+      throw new Error(response?.error ?? "Unable to start GraphQL posting.");
     }
   } catch (error) {
     startPostingButton.disabled = false;
@@ -358,7 +462,7 @@ startPostingButton?.addEventListener("click", async () => {
     alert(
       error instanceof Error
         ? error.message
-        : "Unable to start UI posting automation.",
+        : "Unable to start GraphQL posting.",
     );
   }
 });
@@ -386,5 +490,48 @@ function fileToUiPostImage(file: File): Promise<UiPostImage> {
       reject(reader.error ?? new Error(`Unable to read ${file.name}.`));
     });
     reader.readAsDataURL(file);
+  });
+}
+
+function resetPostingProgress(total: number) {
+  if (postingProgress) {
+    postingProgress.hidden = false;
+  }
+
+  if (postingProgressTitle) {
+    postingProgressTitle.textContent = `0/${total} groups processed`;
+  }
+
+  if (postingProgressPercent) {
+    postingProgressPercent.textContent = "0%";
+  }
+
+  if (postingProgressBar) {
+    postingProgressBar.style.width = "0%";
+  }
+
+  if (postingProgressSuccess) {
+    postingProgressSuccess.textContent = "0";
+  }
+
+  if (postingProgressFailed) {
+    postingProgressFailed.textContent = "0";
+  }
+
+  if (postingProgressRemaining) {
+    postingProgressRemaining.textContent = String(total);
+  }
+
+  if (postingProgressCurrent) {
+    postingProgressCurrent.textContent = "Preparing posting queue...";
+  }
+
+  postingProgressLog?.replaceChildren();
+}
+
+function scrollPostingProgressIntoView() {
+  postingProgress?.scrollIntoView({
+    behavior: "smooth",
+    block: "start",
   });
 }

@@ -1,36 +1,76 @@
+import { GoogleGenAI } from "@google/genai";
 import {
   GROUPS_QUERY_FRIENDLY_NAME,
   JOINED_GROUPS_URL,
+  type ClearStatusBannerMessage,
+  type CreatePostRequest,
+  type CreatePostResponse,
   type ExtensionRequest,
   type FacebookGroup,
-  type FindWriteSomethingRequest,
-  type FindWriteSomethingResponse,
   type GroupExtractionStatusMessage,
-  type LoadGroupsResponse,
+  type SimpleGroup,
   type StartUiPostingRequest,
+  type StatusBannerMessage,
+  type StatusBannerTone,
   type UiPostImage,
   type UiPostingStatusMessage,
 } from "./config";
 
-type CapturedGraphQLRequest = {
+type CapturedRequest = {
+  url: string;
+  method: string;
   body: string;
   headers: Record<string, string>;
+  formData: Record<string, string>;
 };
 
-type PendingGraphQLRequest = Partial<CapturedGraphQLRequest>;
+type PendingRequest = Partial<CapturedRequest>;
+
 type FetchGroupsConfig = {
   formData: Record<string, string>;
   headers: Record<string, string>;
 };
+
 type WebRequestBody = {
   formData?: Record<string, string[]>;
   raw?: Array<{ bytes?: ArrayBuffer }>;
 };
 
-const pendingRequests = new Map<string, PendingGraphQLRequest>();
-let capturedGroupsRequest: CapturedGraphQLRequest | undefined;
+type UploadResponse = {
+  success: boolean;
+  photoId?: string;
+  error?: string;
+};
+
+type GraphqlPostResult = {
+  success: boolean;
+  postId?: string;
+  postUrl?: string;
+  error?: string;
+};
+
+const POST_MUTATION_FRIENDLY_NAME = "ComposerStoryCreateMutation";
+const UPLOAD_CANDIDATE_MATCHES = [
+  "upload.facebook.com/ajax/react_composer/attachments/photo/upload",
+  "www.facebook.com/ajax/react_composer/attachments/photo/upload",
+  "web.facebook.com/ajax/react_composer/attachments/photo/upload",
+  "/ajax/react_composer/attachments/photo/upload",
+];
+const GEMINI_API_KEY_STORAGE_KEYS = ["geminiApiKey", "GEMINI_API_KEY"] as const;
+const GEMINI_MODEL = "gemini-2.5-flash";
+const GEMINI_TIMEOUT_MS = 30_000;
+const LOG_PREFIX = "[Facebook Groups Bulk Poster]";
+
+const pendingRequests = new Map<string, PendingRequest>();
+
+let capturedGroupsRequest: CapturedRequest | undefined;
 let captureTabId: number | undefined;
-let activeUiPosting = false;
+
+let activePosting = false;
+let postingCaptureTabId: number | undefined;
+let capturedUploadTemplate: CapturedRequest | undefined;
+let capturedPostTemplate: CapturedRequest | undefined;
+const loggedUploadCandidateRequestIds = new Set<string>();
 
 chrome.runtime.onInstalled.addListener(() => {
   void chrome.sidePanel.setPanelBehavior({ openPanelOnActionClick: true });
@@ -44,31 +84,95 @@ chrome.action.onClicked.addListener((tab) => {
   void chrome.sidePanel.open({ windowId: tab.windowId });
 });
 
+function debugLog(message: string, data?: unknown) {
+  if (data === undefined) {
+    console.log(`${LOG_PREFIX} ${message}`);
+    return;
+  }
+
+  console.log(`${LOG_PREFIX} ${message}`, data);
+}
+
+function debugWarn(message: string, data?: unknown) {
+  if (data === undefined) {
+    console.warn(`${LOG_PREFIX} ${message}`);
+    return;
+  }
+
+  console.warn(`${LOG_PREFIX} ${message}`, data);
+}
+
+function extractCookieNamesFromHeader(cookieHeader: string | undefined): string[] {
+  if (!cookieHeader) {
+    return [];
+  }
+
+  return cookieHeader
+    .split(";")
+    .map((part) => part.trim())
+    .filter(Boolean)
+    .map((part) => part.split("=")[0]?.trim())
+    .filter((name): name is string => Boolean(name));
+}
+
+async function logCookieDiagnostics(
+  label: string,
+  url: string,
+  requestHeaders?: Record<string, string>,
+): Promise<void> {
+  try {
+    const cookieHeader = requestHeaders?.cookie;
+    const headerCookieNames = extractCookieNamesFromHeader(cookieHeader);
+    const browserCookies = await chrome.cookies.getAll({ url });
+
+    debugLog(`${label} cookie diagnostics.`, {
+      url,
+      requestCookieHeaderPresent: Boolean(cookieHeader),
+      requestCookieCount: headerCookieNames.length,
+      requestCookieNames: headerCookieNames,
+      browserCookieCount: browserCookies.length,
+      browserCookieNames: browserCookies.map((cookie) => cookie.name),
+    });
+  } catch (error) {
+    debugWarn(`${label} cookie diagnostics failed.`, {
+      url,
+      error: error instanceof Error ? error.message : String(error),
+    });
+  }
+}
+
 chrome.webRequest.onBeforeRequest.addListener(
   (details): chrome.webRequest.BlockingResponse | undefined => {
-    if (captureTabId !== undefined && details.tabId !== captureTabId) {
-      return undefined;
-    }
-
     if (details.method !== "POST" || !details.requestBody) {
       return undefined;
     }
 
-    const body = readRequestBody(details.requestBody as WebRequestBody);
-    if (!body.includes(GROUPS_QUERY_FRIENDLY_NAME)) {
+    const shouldCaptureGroups =
+      captureTabId !== undefined && details.tabId === captureTabId;
+    const shouldCapturePosting =
+      postingCaptureTabId !== undefined && details.tabId === postingCaptureTabId;
+
+    if (!shouldCaptureGroups && !shouldCapturePosting) {
       return undefined;
     }
 
+    const { body, formData } = readRequestBody(details.requestBody as WebRequestBody);
     const pending = pendingRequests.get(details.requestId) ?? {};
+    pending.url = details.url;
+    pending.method = details.method;
     pending.body = body;
+    pending.formData = formData;
     pendingRequests.set(details.requestId, pending);
-    maybeCaptureRequest(details.requestId);
+    maybeCaptureRequest(details.requestId, details.tabId);
     return undefined;
   },
   {
     urls: [
       "https://www.facebook.com/api/graphql/*",
       "https://web.facebook.com/api/graphql/*",
+      "https://upload.facebook.com/ajax/react_composer/attachments/photo/upload*",
+      "https://www.facebook.com/ajax/react_composer/attachments/photo/upload*",
+      "https://web.facebook.com/ajax/react_composer/attachments/photo/upload*",
     ],
   },
   ["requestBody"],
@@ -76,32 +180,37 @@ chrome.webRequest.onBeforeRequest.addListener(
 
 chrome.webRequest.onBeforeSendHeaders.addListener(
   (details): chrome.webRequest.BlockingResponse | undefined => {
-    if (captureTabId !== undefined && details.tabId !== captureTabId) {
+    const shouldCaptureGroups =
+      captureTabId !== undefined && details.tabId === captureTabId;
+    const shouldCapturePosting =
+      postingCaptureTabId !== undefined && details.tabId === postingCaptureTabId;
+
+    if (!shouldCaptureGroups && !shouldCapturePosting) {
       return undefined;
     }
 
-    const headers = normalizeHeaders(details.requestHeaders ?? []);
     const pending = pendingRequests.get(details.requestId) ?? {};
-    pending.headers = headers;
+    pending.url = details.url;
+    pending.method = details.method;
+    pending.headers = normalizeHeaders(details.requestHeaders ?? []);
     pendingRequests.set(details.requestId, pending);
-    maybeCaptureRequest(details.requestId);
+    maybeCaptureRequest(details.requestId, details.tabId);
     return undefined;
   },
   {
     urls: [
       "https://www.facebook.com/api/graphql/*",
       "https://web.facebook.com/api/graphql/*",
+      "https://upload.facebook.com/ajax/react_composer/attachments/photo/upload*",
+      "https://www.facebook.com/ajax/react_composer/attachments/photo/upload*",
+      "https://web.facebook.com/ajax/react_composer/attachments/photo/upload*",
     ],
   },
   ["requestHeaders", "extraHeaders"],
 );
 
 chrome.runtime.onMessage.addListener(
-  (
-    request: ExtensionRequest,
-    _sender,
-    sendResponse: (response: any) => void,
-  ) => {
+  (request: ExtensionRequest, _sender, sendResponse: (response: any) => void) => {
     if (request.type === "LOAD_GROUPS") {
       void loadGroups()
         .then((groups) => sendResponse({ ok: true, groups }))
@@ -116,7 +225,7 @@ chrome.runtime.onMessage.addListener(
     }
 
     if (request.type === "START_UI_POSTING") {
-      void runUiPostingQueue(request);
+      void runGraphqlPostingQueue(request);
       sendResponse({ ok: true });
       return false;
     }
@@ -125,25 +234,39 @@ chrome.runtime.onMessage.addListener(
   },
 );
 
-function readRequestBody(requestBody: WebRequestBody): string {
+function readRequestBody(requestBody: WebRequestBody): {
+  body: string;
+  formData: Record<string, string>;
+} {
+  const normalizedFormData: Record<string, string> = {};
+
   if (requestBody.formData) {
     const params = new URLSearchParams();
 
     for (const [key, values] of Object.entries(requestBody.formData)) {
+      const firstValue = values?.[0] ?? "";
+      normalizedFormData[key] = firstValue;
+
       for (const value of values ?? []) {
         params.append(key, value);
       }
     }
 
-    return params.toString();
+    return {
+      body: params.toString(),
+      formData: normalizedFormData,
+    };
   }
 
   const rawBody = requestBody.raw?.[0]?.bytes;
   if (!rawBody) {
-    return "";
+    return { body: "", formData: normalizedFormData };
   }
 
-  return new TextDecoder().decode(rawBody);
+  return {
+    body: new TextDecoder().decode(rawBody),
+    formData: normalizedFormData,
+  };
 }
 
 function normalizeHeaders(
@@ -162,27 +285,128 @@ function normalizeHeaders(
   return normalized;
 }
 
-function maybeCaptureRequest(requestId: string) {
+function maybeCaptureRequest(requestId: string, tabId: number) {
   const pending = pendingRequests.get(requestId);
 
-  if (!pending?.body || !pending.headers) {
+  if (!pending?.url || !pending?.method || !pending?.headers) {
     return;
   }
 
-  const params = new URLSearchParams(pending.body);
+  const body = pending.body ?? "";
+  const formData = pending.formData ?? {};
+  const params = new URLSearchParams(body);
   const friendlyName =
     pending.headers["x-fb-friendly-name"] ??
-    params.get("fb_api_req_friendly_name");
+    formData.fb_api_req_friendly_name ??
+    params.get("fb_api_req_friendly_name") ??
+    "";
 
-  if (friendlyName !== GROUPS_QUERY_FRIENDLY_NAME) {
+  if (
+    tabId === captureTabId &&
+    friendlyName === GROUPS_QUERY_FRIENDLY_NAME &&
+    body.length > 0
+  ) {
+    capturedGroupsRequest = {
+      url: pending.url,
+      method: pending.method,
+      body,
+      headers: pending.headers,
+      formData: formDataFromBody(body, formData),
+    };
+    debugLog("Captured joined groups GraphQL request.", {
+      url: pending.url,
+      friendlyName,
+    });
+    void logCookieDiagnostics("Captured joined groups request", pending.url, pending.headers);
+    pendingRequests.delete(requestId);
     return;
   }
 
-  capturedGroupsRequest = {
-    body: pending.body,
-    headers: pending.headers,
-  };
-  pendingRequests.delete(requestId);
+  if (tabId !== postingCaptureTabId) {
+    return;
+  }
+
+  const isUploadCandidate = matchesUploadCandidateUrl(pending.url);
+  if (isUploadCandidate && !loggedUploadCandidateRequestIds.has(requestId)) {
+    loggedUploadCandidateRequestIds.add(requestId);
+    debugLog("Saw upload candidate request.", {
+      url: pending.url,
+      method: pending.method,
+      contentType: pending.headers["content-type"],
+      friendlyName,
+      hasBody: body.length > 0,
+      formKeys: Object.keys(formData),
+    });
+  }
+
+  if (
+    isUploadCandidate &&
+    pending.method === "POST" &&
+    !capturedUploadTemplate
+  ) {
+    capturedUploadTemplate = {
+      url: pending.url,
+      method: pending.method,
+      body,
+      headers: pending.headers,
+      formData: formDataFromBody(body, formData),
+    };
+    debugLog("Captured upload template request.", {
+      url: pending.url,
+      formKeys: Object.keys(capturedUploadTemplate.formData),
+    });
+    void logCookieDiagnostics("Captured upload template", pending.url, pending.headers);
+  }
+
+  if (
+    friendlyName === POST_MUTATION_FRIENDLY_NAME &&
+    pending.method === "POST" &&
+    body.length > 0 &&
+    !capturedPostTemplate
+  ) {
+    capturedPostTemplate = {
+      url: pending.url,
+      method: pending.method,
+      body,
+      headers: pending.headers,
+      formData: formDataFromBody(body, formData),
+    };
+    debugLog("Captured post mutation template request.", {
+      url: pending.url,
+      friendlyName,
+      formKeys: Object.keys(capturedPostTemplate.formData),
+    });
+    void logCookieDiagnostics("Captured post mutation template", pending.url, pending.headers);
+  }
+
+  if (
+    (capturedUploadTemplate || !isUploadCandidate) &&
+    (capturedPostTemplate || friendlyName !== POST_MUTATION_FRIENDLY_NAME)
+  ) {
+    pendingRequests.delete(requestId);
+  }
+}
+
+function matchesUploadCandidateUrl(url: string): boolean {
+  return UPLOAD_CANDIDATE_MATCHES.some((candidate) => url.includes(candidate));
+}
+
+function formDataFromBody(
+  body: string,
+  explicitFormData: Record<string, string>,
+): Record<string, string> {
+  if (Object.keys(explicitFormData).length > 0) {
+    return explicitFormData;
+  }
+
+  const formData: Record<string, string> = {};
+  const params = new URLSearchParams(body);
+
+  for (const [key, value] of params.entries()) {
+    formData[key] = value;
+  }
+
+  return formData;
 }
 
 async function loadGroups(): Promise<FacebookGroup[]> {
@@ -197,6 +421,7 @@ async function loadGroups(): Promise<FacebookGroup[]> {
 
     notifyGroupsStatus("Opening Facebook joined groups page...", 0);
     await navigateToJoinedGroups(tab.id);
+    notifyGroupsStatus("Facebook joined groups page loaded.", 0);
     notifyGroupsStatus("Scrolling to trigger Facebook groups request...", 0);
     await scrollJoinedGroupsPage(tab.id);
 
@@ -254,7 +479,8 @@ async function navigateToJoinedGroups(
 
   await chrome.tabs.update(tabId, { url: JOINED_GROUPS_URL });
   await waitForJoinedGroupsPage(tabId);
-  await sleep(1_000);
+  await waitForPageDomReady(tabId, "/groups/joins/");
+  await sleep(2_000);
 }
 
 async function waitForJoinedGroupsPage(tabId: number): Promise<void> {
@@ -273,6 +499,36 @@ async function waitForJoinedGroupsPage(tabId: number): Promise<void> {
   throw new Error("Facebook joined groups page took too long to load.");
 }
 
+async function waitForPageDomReady(
+  tabId: number,
+  urlIncludes: string,
+): Promise<void> {
+  const startedAt = Date.now();
+
+  while (Date.now() - startedAt < 30_000) {
+    try {
+      const [result] = await chrome.scripting.executeScript({
+        target: { tabId },
+        func: (expectedUrlPart: string) =>
+          window.location.href.includes(expectedUrlPart) &&
+          document.readyState === "complete" &&
+          Boolean(document.body),
+        args: [urlIncludes],
+      });
+
+      if (result?.result) {
+        return;
+      }
+    } catch {
+      // The page may still be swapping documents during navigation.
+    }
+
+    await sleep(250);
+  }
+
+  throw new Error("Facebook page DOM took too long to finish loading.");
+}
+
 async function scrollJoinedGroupsPage(tabId: number | undefined) {
   if (!tabId) {
     throw new Error("Unable to scroll joined groups tab.");
@@ -288,7 +544,7 @@ async function scrollJoinedGroupsPage(tabId: number | undefined) {
   }
 }
 
-async function waitForCapturedGroupsRequest(): Promise<CapturedGraphQLRequest> {
+async function waitForCapturedGroupsRequest(): Promise<CapturedRequest> {
   const startedAt = Date.now();
 
   while (Date.now() - startedAt < 20_000) {
@@ -305,14 +561,9 @@ async function waitForCapturedGroupsRequest(): Promise<CapturedGraphQLRequest> {
 }
 
 function updateFetchGroupsConfigFromCapturedRequest(
-  capturedRequest: CapturedGraphQLRequest,
+  capturedRequest: CapturedRequest,
 ): FetchGroupsConfig {
-  const formData: Record<string, string> = {};
-  const params = new URLSearchParams(capturedRequest.body);
-
-  for (const [key, value] of params.entries()) {
-    formData[key] = value;
-  }
+  const formData = { ...capturedRequest.formData };
 
   if (!formData.fb_api_req_friendly_name) {
     formData.fb_api_req_friendly_name = GROUPS_QUERY_FRIENDLY_NAME;
@@ -335,7 +586,7 @@ async function extractAllGroups(
   const [result] = await chrome.scripting.executeScript({
     target: { tabId },
     func: fetchAllGroupsInPage,
-    args: [config],
+    args: [config, GROUPS_QUERY_FRIENDLY_NAME],
   });
 
   const value = result?.result as
@@ -356,6 +607,7 @@ async function extractAllGroups(
 
 async function fetchAllGroupsInPage(
   config: FetchGroupsConfig,
+  groupsQueryFriendlyName: string,
 ): Promise<FacebookGroup[] | { error: string }> {
   try {
     const notifyGroupsStatus = (
@@ -363,6 +615,90 @@ async function fetchAllGroupsInPage(
       loadedCount: number,
       done = false,
     ) => {
+      const updateStatusBanner = () => {
+        const banner = document.getElementById("fgbp-status-banner");
+        const styleId = "fgbp-status-banner-style";
+
+        if (!document.getElementById(styleId)) {
+          const style = document.createElement("style");
+          style.id = styleId;
+          style.textContent = `
+            #fgbp-status-banner {
+              position: fixed;
+              top: 12px;
+              left: 12px;
+              z-index: 2147483647;
+              width: max-content;
+              min-width: 240px;
+              max-width: min(720px, calc(100vw - 24px));
+              box-sizing: border-box;
+              display: grid;
+              grid-template-columns: minmax(0, 1fr);
+              gap: 3px;
+              padding: 12px 16px;
+              border-radius: 3px;
+              border: 1px solid rgba(255, 255, 255, 0.16);
+              background: #1E3A8A;
+              color: #ffffff;
+              box-shadow: 0 14px 36px rgba(0, 0, 0, 0.26);
+              font: 13px/1.4 Arial, Helvetica, sans-serif;
+              letter-spacing: 0;
+              backdrop-filter: blur(8px);
+            }
+            #fgbp-status-banner[data-tone="success"] {
+              background: #166534;
+            }
+            #fgbp-status-banner[data-tone="warning"] {
+              background: #B45309;
+            }
+            #fgbp-status-banner[data-tone="error"] {
+              background: #B91C1C;
+            }
+            #fgbp-status-banner strong {
+              display: block;
+              margin: 0;
+              font-size: 14px;
+              font-weight: 700;
+              white-space: normal;
+              overflow-wrap: anywhere;
+            }
+            #fgbp-status-banner span {
+              display: block;
+              color: rgba(255, 255, 255, 0.82);
+              font-size: 12px;
+              overflow-wrap: anywhere;
+            }
+            @media (min-width: 900px) {
+              #fgbp-status-banner {
+                left: 24px;
+                top: 16px;
+                max-width: min(760px, calc(100vw - 48px));
+                padding: 14px 18px;
+              }
+            }
+          `;
+          document.documentElement.append(style);
+        }
+
+        const nextBanner = banner ?? document.createElement("div");
+        nextBanner.id = "fgbp-status-banner";
+        nextBanner.dataset.tone = done ? "success" : "info";
+        nextBanner.setAttribute("role", "status");
+        nextBanner.setAttribute("aria-live", "polite");
+        nextBanner.replaceChildren();
+
+        const title = document.createElement("strong");
+        title.textContent = message;
+        const detail = document.createElement("span");
+        detail.textContent = `${loadedCount} groups loaded`;
+        nextBanner.append(title, detail);
+
+        if (!banner) {
+          document.documentElement.append(nextBanner);
+        }
+      };
+
+      updateStatusBanner();
       void chrome.runtime.sendMessage({
         type: "GROUP_EXTRACTION_STATUS",
         message,
@@ -392,8 +728,7 @@ async function fetchAllGroupsInPage(
 
       replayHeaders["content-type"] =
         replayHeaders["content-type"] ?? "application/x-www-form-urlencoded";
-      replayHeaders["x-fb-friendly-name"] =
-        "GroupsCometAllJoinedGroupsSectionPaginationQuery";
+      replayHeaders["x-fb-friendly-name"] = groupsQueryFriendlyName;
 
       return replayHeaders;
     };
@@ -509,30 +844,105 @@ function notifyGroupsStatus(
   };
 
   void chrome.runtime.sendMessage(status);
+
+  if (captureTabId !== undefined) {
+    void sendStatusBannerToTab(
+      captureTabId,
+      message,
+      done ? "success" : "info",
+      `${loadedCount} groups loaded`,
+    );
+  }
 }
 
 function sleep(duration: number) {
   return new Promise((resolve) => setTimeout(resolve, duration));
 }
 
-async function runUiPostingQueue(
+async function sendStatusBannerToTab(
+  tabId: number | undefined,
+  message: string,
+  tone: StatusBannerTone = "info",
+  detail?: string,
+): Promise<void> {
+  if (!tabId) {
+    return;
+  }
+
+  const request: StatusBannerMessage = {
+    type: "STATUS_BANNER",
+    message,
+    tone,
+    detail,
+  };
+
+  try {
+    await chrome.tabs.sendMessage(tabId, request);
+  } catch {
+    // The content script may not be ready yet on freshly navigated pages.
+  }
+}
+
+async function clearStatusBannerInTab(tabId: number | undefined): Promise<void> {
+  if (!tabId) {
+    return;
+  }
+
+  const request: ClearStatusBannerMessage = {
+    type: "CLEAR_STATUS_BANNER",
+  };
+
+  try {
+    await chrome.tabs.sendMessage(tabId, request);
+  } catch {
+    // The page may already be gone or the content script may not be present.
+  }
+}
+
+async function sleepWithPostingCountdown(
+  tabId: number,
+  durationSeconds: number,
+  groupName: string,
+): Promise<void> {
+  for (let remaining = durationSeconds; remaining > 0; remaining -= 1) {
+    await sendStatusBannerToTab(
+      tabId,
+      "Waiting before next group...",
+      "warning",
+      `${remaining}s remaining after ${groupName}`,
+    );
+    await sleep(1_000);
+  }
+}
+
+async function runGraphqlPostingQueue(
   request: StartUiPostingRequest,
 ): Promise<void> {
-  if (activeUiPosting) {
+  debugLog("Starting posting queue.", {
+    groups: request.groups.length,
+    images: request.images.length,
+    delaySeconds: request.delaySeconds,
+  });
+
+  if (activePosting) {
     notifyUiPostingStatus({
       status: "failed",
       message: "A posting queue is already running.",
       current: 0,
       total: request.groups.length,
       successCount: 0,
+      failedCount: 0,
+      processedCount: 0,
       error: "Wait for the current queue to finish before starting another.",
     });
     return;
   }
 
-  activeUiPosting = true;
+  activePosting = true;
   let successCount = 0;
+  let failedCount = 0;
   const total = request.groups.length;
+  let postingTabId: number | undefined;
 
   try {
     if (total === 0) {
@@ -540,58 +950,192 @@ async function runUiPostingQueue(
     }
 
     const postingTab = await getActiveTabForPosting();
-    const postingTabId = postingTab.id;
+    postingTabId = postingTab.id;
 
     if (!postingTabId) {
       throw new Error("Unable to find the active tab for posting.");
     }
 
-    notifyUiPostingStatus({
-      status: "posting",
-      message: "Starting posting queue...",
-      current: 0,
-      total,
-      successCount,
+    const postBody = await maybeRewriteDescription(request.body);
+    debugLog("Post body prepared.", {
+      originalLength: request.body.length,
+      finalLength: postBody.length,
+      rewritten: postBody !== request.body,
     });
+    const templates = await ensurePostingTemplates(
+      postingTabId,
+      request.groups,
+      postBody,
+      request.images,
+      total,
+    );
 
-    for (let index = 0; index < request.groups.length; index += 1) {
-      const group = request.groups[index];
-      const current = index + 1;
-
-      notifyUiPostingStatus({
-        status: "posting",
-        message: `Opening ${group.name}...`,
-        current,
-        total,
-        groupId: group.id,
-        groupName: group.name,
-        successCount,
-      });
-
-      const groupUrl = normalizeGroupUrl(group.id);
-      await chrome.tabs.update(postingTabId, { url: groupUrl, active: true });
-
-      await waitForTabComplete(postingTabId, "/groups/");
-      await sleep(5_000);
-
-      const writeSomething = await findWriteSomethingInTab(
-        postingTabId,
-        request.images,
-        request.body,
-      );
-
+    if (templates.firstGroupPosted) {
       successCount += 1;
       notifyUiPostingStatus({
         status: "posted",
-        message: writeSomething.clicked
-          ? `Opened ${group.name}. Composer trigger clicked.`
-          : `Opened ${group.name}. Composer trigger not found.`,
+        message: `Posted to ${request.groups[0].name}.`,
+        current: 1,
+        total,
+        groupId: request.groups[0].id,
+        groupName: request.groups[0].name,
+        successCount,
+        failedCount,
+        processedCount: 1,
+      });
+    }
+
+    const startIndex = templates.firstGroupPosted ? 1 : 0;
+
+    notifyUiPostingStatus({
+      status: "posting",
+      message: "Starting GraphQL posting queue...",
+      current: startIndex,
+      total,
+      successCount,
+      failedCount,
+      processedCount: startIndex,
+    });
+    await sendStatusBannerToTab(
+      postingTabId,
+      "GraphQL posting queue ready.",
+      "success",
+      `${total} ${total === 1 ? "group" : "groups"} selected`,
+    );
+
+    for (let index = startIndex; index < request.groups.length; index += 1) {
+      const group = request.groups[index];
+      const current = index + 1;
+      debugLog("Processing group.", {
+        current,
+        total,
+        groupId: group.id,
+        groupName: group.name,
+      });
+
+      notifyUiPostingStatus({
+        status: "posting",
+        message: `Uploading media for ${group.name}...`,
         current,
         total,
         groupId: group.id,
         groupName: group.name,
         successCount,
+        failedCount,
+        processedCount: index,
       });
+
+      await sendStatusBannerToTab(
+        postingTabId,
+        `Preparing ${group.name}...`,
+        "info",
+        `Group ${current} of ${total}`,
+      );
+
+      const photoIds = templates.uploadTemplate
+        ? await uploadImagesForGroup(
+            postingTabId,
+            templates.uploadTemplate,
+            request.images,
+          )
+        : [];
+      debugLog("Image upload phase complete.", {
+        groupId: group.id,
+        uploadedPhotoCount: photoIds.length,
+      });
+
+      notifyUiPostingStatus({
+        status: "posting",
+        message: `Posting to ${group.name}...`,
+        current,
+        total,
+        groupId: group.id,
+        groupName: group.name,
+        successCount,
+        failedCount,
+        processedCount: index,
+      });
+
+      const postResult = await createGraphqlPost(
+        postingTabId,
+        templates.postTemplate,
+        postBody,
+        photoIds,
+        group.id,
+      );
+      debugLog("GraphQL post result received.", {
+        groupId: group.id,
+        success: postResult.success,
+        postId: postResult.postId,
+        postUrl: postResult.postUrl,
+        error: postResult.error,
+      });
+
+      if (postResult.success) {
+        successCount += 1;
+        notifyUiPostingStatus({
+          status: "posted",
+          message: `Posted to ${group.name}.`,
+          current,
+          total,
+          groupId: group.id,
+          groupName: group.name,
+          successCount,
+          failedCount,
+          processedCount: index + 1,
+        });
+        await sendStatusBannerToTab(
+          postingTabId,
+          `Posted to ${group.name}.`,
+          "success",
+          `${successCount}/${total} posted`,
+        );
+      } else {
+        failedCount += 1;
+
+        if (isRateLimitError(postResult.error)) {
+          notifyUiPostingStatus({
+            status: "rate_limited",
+            message: "Facebook rate limit detected. Stopping.",
+            current,
+            total,
+            groupId: group.id,
+            groupName: group.name,
+            successCount,
+            failedCount,
+            processedCount: index + 1,
+            error: postResult.error,
+          });
+          await sendStatusBannerToTab(
+            postingTabId,
+            "Facebook rate limit detected. Stopping.",
+            "error",
+            postResult.error,
+          );
+          await sleep(2_000);
+          await clearStatusBannerInTab(postingTabId);
+          return;
+        }
+
+        notifyUiPostingStatus({
+          status: "failed",
+          message: `Failed to post to ${group.name}.`,
+          current,
+          total,
+          groupId: group.id,
+          groupName: group.name,
+          successCount,
+          failedCount,
+          processedCount: index + 1,
+          error: postResult.error,
+        });
+        await sendStatusBannerToTab(
+          postingTabId,
+          `Failed to post to ${group.name}.`,
+          "error",
+          postResult.error,
+        );
+      }
 
       if (index < request.groups.length - 1) {
         notifyUiPostingStatus({
@@ -602,30 +1146,220 @@ async function runUiPostingQueue(
           groupId: group.id,
           groupName: group.name,
           successCount,
+          failedCount,
+          processedCount: index + 1,
         });
-        await sleep(request.delaySeconds * 1_000);
+        await sleepWithPostingCountdown(
+          postingTabId,
+          request.delaySeconds,
+          group.name,
+        );
       }
     }
 
     notifyUiPostingStatus({
       status: "done",
-      message: `Finished opening ${successCount}/${total} groups.`,
+      message: `Finished posting ${successCount}/${total}.`,
       current: total,
       total,
       successCount,
+      failedCount,
+      processedCount: total,
     });
+    await sendStatusBannerToTab(
+      postingTabId,
+      "Posting queue complete.",
+      "success",
+      `${successCount}/${total} posted`,
+    );
+    await sleep(2_000);
+    await clearStatusBannerInTab(postingTabId);
   } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : "Unknown error";
+    debugWarn("Posting queue stopped with error.", { error: errorMessage });
     notifyUiPostingStatus({
       status: "done",
-      message: "UI posting automation stopped.",
+      message: "GraphQL posting stopped.",
       current: 0,
       total,
       successCount,
-      error: error instanceof Error ? error.message : "Unknown error",
+      failedCount,
+      processedCount: Math.min(successCount + failedCount, total),
+      error: errorMessage,
     });
+    await sendStatusBannerToTab(
+      postingTabId,
+      "Posting stopped.",
+      "error",
+      errorMessage,
+    );
+    await sleep(2_000);
+    await clearStatusBannerInTab(postingTabId);
   } finally {
-    activeUiPosting = false;
+    debugLog("Posting queue finished.", {
+      total,
+      successCount,
+      failedCount,
+    });
+    activePosting = false;
   }
+}
+
+async function ensurePostingTemplates(
+  tabId: number,
+  groups: SimpleGroup[],
+  body: string,
+  images: UiPostImage[],
+  total: number,
+): Promise<{
+  uploadTemplate?: CapturedRequest;
+  postTemplate: CapturedRequest;
+  firstGroupPosted: boolean;
+}> {
+  const requiresUploadTemplate = images.length > 0;
+
+  const firstGroup = groups[0];
+  if (!firstGroup) {
+    throw new Error("Select at least one group before posting.");
+  }
+
+  debugLog("Capturing fresh templates from first group post.", {
+    groupId: firstGroup.id,
+    groupName: firstGroup.name,
+    requiresUploadTemplate,
+  });
+
+  notifyUiPostingStatus({
+    status: "posting",
+    message: "Capturing Facebook request templates from the first post...",
+    current: 1,
+    total,
+    groupId: firstGroup.id,
+    groupName: firstGroup.name,
+    successCount: 0,
+    failedCount: 0,
+    processedCount: 0,
+  });
+
+  await sendStatusBannerToTab(
+    tabId,
+    "Capturing Facebook request templates...",
+    "warning",
+    "The first selected group will be posted normally so later groups can use GraphQL.",
+  );
+
+  beginPostingTemplateCapture(tabId);
+
+  const groupUrl = normalizeGroupUrl(firstGroup.id);
+  await chrome.tabs.update(tabId, { url: groupUrl, active: true });
+  await waitForTabComplete(tabId, "/groups/");
+  await sleep(5_000);
+
+  const postResult = await createPostInTab(tabId, images, body);
+  if (!postResult.ok) {
+    stopPostingTemplateCapture();
+    throw new Error(postResult.error ?? "Unable to create the first post.");
+  }
+
+  const capturedTemplates = await waitForPostingTemplates(requiresUploadTemplate);
+
+  return {
+    uploadTemplate: capturedTemplates.uploadTemplate,
+    postTemplate: capturedTemplates.postTemplate,
+    firstGroupPosted: true,
+  };
+}
+
+function beginPostingTemplateCapture(tabId: number) {
+  postingCaptureTabId = tabId;
+  capturedUploadTemplate = undefined;
+  capturedPostTemplate = undefined;
+  loggedUploadCandidateRequestIds.clear();
+  debugLog("Template capture started.", { tabId });
+}
+
+function stopPostingTemplateCapture() {
+  loggedUploadCandidateRequestIds.clear();
+  debugLog("Template capture stopped.");
+  postingCaptureTabId = undefined;
+}
+
+async function waitForPostingTemplates(): Promise<{
+  uploadTemplate?: CapturedRequest;
+  postTemplate: CapturedRequest;
+}> {
+  return waitForPostingTemplatesInternal(true);
+}
+
+async function waitForPostingTemplatesInternal(
+  requiresUploadTemplate: boolean,
+): Promise<{
+  uploadTemplate?: CapturedRequest;
+  postTemplate: CapturedRequest;
+}> {
+  const startedAt = Date.now();
+
+  while (Date.now() - startedAt < 30_000) {
+    if (
+      capturedPostTemplate &&
+      (!requiresUploadTemplate || capturedUploadTemplate)
+    ) {
+      const uploadTemplate =
+        requiresUploadTemplate && capturedUploadTemplate
+          ? finalizeUploadTemplate(capturedUploadTemplate, capturedPostTemplate)
+          : undefined;
+      const postTemplate = capturedPostTemplate;
+      stopPostingTemplateCapture();
+      debugLog("Template capture complete.", {
+        hasUploadTemplate: Boolean(uploadTemplate),
+        hasPostTemplate: true,
+      });
+      return { uploadTemplate, postTemplate };
+    }
+
+    await sleep(250);
+  }
+
+  stopPostingTemplateCapture();
+  const missing: string[] = [];
+  if (requiresUploadTemplate && !capturedUploadTemplate) {
+    missing.push("upload template");
+  }
+  if (!capturedPostTemplate) {
+    missing.push("post mutation template");
+  }
+  throw new Error(
+    `The first post completed, but these templates were not captured in time: ${missing.join(", ")}.`,
+  );
+}
+
+function finalizeUploadTemplate(
+  uploadTemplate: CapturedRequest,
+  postTemplate: CapturedRequest,
+): CapturedRequest {
+  const formData = { ...uploadTemplate.formData };
+  const userId = extractUserIdFromFormData(postTemplate.formData);
+
+  if (!formData.source) {
+    formData.source = "8";
+  }
+
+  if (!formData.profile_id && userId) {
+    formData.profile_id = userId;
+  }
+
+  if (!formData.waterfallxapp) {
+    formData.waterfallxapp = "comet";
+  }
+
+  if (!formData.upload_id) {
+    formData.upload_id = `jsc_${crypto.randomUUID()}`;
+  }
+
+  return {
+    ...uploadTemplate,
+    formData,
+  };
 }
 
 function normalizeGroupUrl(groupUrlOrId: string): string {
@@ -639,15 +1373,19 @@ function normalizeGroupUrl(groupUrlOrId: string): string {
   return `https://www.facebook.com/groups/${groupUrlOrId}/`;
 }
 
-async function findWriteSomethingInTab(
+function isRateLimitError(error: string | undefined): boolean {
+  return /limit|temporarily blocked/i.test(error ?? "");
+}
+
+async function createPostInTab(
   tabId: number,
-  images: UiPostImage[] = [],
-  body = "",
-): Promise<FindWriteSomethingResponse> {
-  const request: FindWriteSomethingRequest = {
-    type: "FIND_WRITE_SOMETHING",
-    images,
+  images: CreatePostRequest["images"],
+  body: string,
+): Promise<CreatePostResponse> {
+  const request: CreatePostRequest = {
+    type: "CREATE_POST",
     body,
+    images,
   };
 
   for (let attempt = 0; attempt < 20; attempt += 1) {
@@ -655,7 +1393,7 @@ async function findWriteSomethingInTab(
       const response = (await chrome.tabs.sendMessage(
         tabId,
         request,
-      )) as FindWriteSomethingResponse;
+      )) as CreatePostResponse;
 
       if (response?.ok) {
         return response;
@@ -663,8 +1401,8 @@ async function findWriteSomethingInTab(
 
       return {
         ok: false,
-        found: false,
-        clicked: false,
+        composerFound: false,
+        composerClicked: false,
         spanCount: 0,
         error: response?.error ?? "Unable to inspect Facebook page.",
       };
@@ -672,8 +1410,8 @@ async function findWriteSomethingInTab(
       if (attempt === 19) {
         return {
           ok: false,
-          found: false,
-          clicked: false,
+          composerFound: false,
+          composerClicked: false,
           spanCount: 0,
           error:
             error instanceof Error
@@ -688,8 +1426,8 @@ async function findWriteSomethingInTab(
 
   return {
     ok: false,
-    found: false,
-    clicked: false,
+    composerFound: false,
+    composerClicked: false,
     spanCount: 0,
     error: "Content script did not respond.",
   };
@@ -713,6 +1451,802 @@ async function waitForTabComplete(
   throw new Error("Facebook group page took too long to load.");
 }
 
+async function uploadImagesForGroup(
+  tabId: number,
+  uploadTemplate: CapturedRequest,
+  images: UiPostImage[],
+): Promise<string[]> {
+  const photoIds: string[] = [];
+  debugLog("Starting image uploads.", { imageCount: images.length });
+
+  for (const image of images) {
+    try {
+      debugLog("Uploading image.", {
+        name: image.name,
+        type: image.type,
+      });
+      const response = await uploadImage(tabId, uploadTemplate, image);
+      if (response.success && response.photoId) {
+        photoIds.push(response.photoId);
+        debugLog("Image uploaded successfully.", {
+          name: image.name,
+          photoId: response.photoId,
+        });
+      } else if (response.error) {
+        debugWarn("Image upload failed.", {
+          image: image.name,
+          error: response.error,
+        });
+      }
+    } catch (error) {
+      debugWarn("Image upload crashed.", {
+        image: image.name,
+        error,
+      });
+    }
+  }
+
+  return photoIds;
+}
+
+async function uploadImage(
+  tabId: number,
+  uploadTemplate: CapturedRequest,
+  image: UiPostImage,
+): Promise<UploadResponse> {
+  await logPageCookieDiagnostics(tabId, "Before upload replay");
+  let result:
+    | chrome.scripting.InjectionResult<{
+        status: number;
+        ok: boolean;
+        responseText: string;
+        contentType?: string;
+        error?: string;
+      }>
+    | undefined;
+
+  try {
+    [result] = await chrome.scripting.executeScript({
+      target: { tabId },
+      func: uploadImageInPage,
+      args: [uploadTemplate, image],
+    });
+  } catch (error) {
+    return {
+      success: false,
+      error:
+        error instanceof Error
+          ? error.message
+          : "Upload replay script failed to execute.",
+    };
+  }
+
+  const payload = (result?.result ?? {
+    status: 0,
+    ok: false,
+    responseText: "",
+    contentType: "",
+    error: "Upload replay returned no result.",
+  }) as {
+    status: number;
+    ok: boolean;
+    responseText: string;
+    contentType?: string;
+    error?: string;
+  };
+
+  debugLog("Upload response received.", {
+    image: image.name,
+    status: payload.status,
+    ok: payload.ok,
+    contentType: payload.contentType,
+    error: payload.error,
+    preview: payload.responseText.slice(0, 200),
+  });
+
+  if (payload.error) {
+    return {
+      success: false,
+      error: payload.error,
+    };
+  }
+
+  return parseUploadResponse(payload.responseText);
+}
+
+function parseUploadResponse(responseText: string): UploadResponse {
+  const normalized = responseText.trim().replace(/^for\s*\(;;\);\s*/, "");
+
+  try {
+    const parsed = JSON.parse(normalized) as {
+      __ar?: number;
+      payload?: { photoID?: string };
+    };
+    const photoId = parsed.payload?.photoID;
+
+    if (parsed.__ar === 1 && photoId) {
+      return { success: true, photoId };
+    }
+
+    return {
+      success: false,
+      error: "Upload failed - no photo ID returned.",
+    };
+  } catch (error) {
+    return {
+      success: false,
+      error:
+        error instanceof Error
+          ? error.message
+          : "Failed to parse Facebook upload response.",
+    };
+  }
+}
+
+async function createGraphqlPost(
+  tabId: number,
+  postTemplate: CapturedRequest,
+  text: string,
+  photoIds: string[],
+  groupId: string,
+): Promise<GraphqlPostResult> {
+  await logPageCookieDiagnostics(tabId, "Before GraphQL replay");
+  const variables = buildPostVariables(
+    postTemplate.formData,
+    text,
+    photoIds,
+    groupId,
+  );
+  debugLog("Sending GraphQL post request.", {
+    groupId,
+    photoCount: photoIds.length,
+    variableLength: variables.length,
+  });
+  let result:
+    | chrome.scripting.InjectionResult<{
+        status: number;
+        ok: boolean;
+        responseText: string;
+        contentType?: string;
+        error?: string;
+      }>
+    | undefined;
+
+  try {
+    [result] = await chrome.scripting.executeScript({
+      target: { tabId },
+      func: createGraphqlPostInPage,
+      args: [postTemplate, variables],
+    });
+  } catch (error) {
+    return {
+      success: false,
+      error:
+        error instanceof Error
+          ? error.message
+          : "GraphQL replay script failed to execute.",
+    };
+  }
+
+  const payload = (result?.result ?? {
+    status: 0,
+    ok: false,
+    responseText: "",
+    contentType: "",
+    error: "GraphQL replay returned no result.",
+  }) as {
+    status: number;
+    ok: boolean;
+    responseText: string;
+    contentType?: string;
+    error?: string;
+  };
+  debugLog("GraphQL post response received.", {
+    groupId,
+    status: payload.status,
+    ok: payload.ok,
+    contentType: payload.contentType,
+    error: payload.error,
+    preview: payload.responseText.slice(0, 300),
+  });
+
+  if (payload.error) {
+    return {
+      success: false,
+      error: payload.error,
+    };
+  }
+
+  if (isRateLimitBody(payload.responseText)) {
+    debugWarn("Facebook rate limit detected in GraphQL response.", {
+      groupId,
+    });
+    return {
+      success: false,
+      error: "Facebook returned a posting limit response.",
+    };
+  }
+
+  return parsePostResponse(payload.responseText);
+}
+
+function buildPostVariables(
+  _templateFormData: Record<string, string>,
+  text: string,
+  photoIds: string[],
+  groupId: string,
+): string {
+  const attachments = photoIds.map((photoId) => ({
+    photo: {
+      id: photoId,
+    },
+  }));
+  const actorId = extractUserIdFromFormData(_templateFormData) ?? "61553861467726";
+
+  return JSON.stringify({
+    input: {
+      composer_entry_point: "inline_composer",
+      composer_source_surface: "group",
+      composer_type: "group",
+      logging: {
+        composer_session_id: generateSessionId(),
+      },
+      source: "WWW",
+      message: {
+        ranges: [],
+        text,
+      },
+      with_tags_ids: null,
+      inline_activities: [],
+      text_format_preset_id: "0",
+      group_flair: {
+        flair_id: null,
+      },
+      attachments,
+      composed_text: {
+        block_data: ["{}"],
+        block_depths: [0],
+        block_types: [0],
+        blocks: [text],
+        entities: ["[]"],
+        entity_map: "{}",
+        inline_styles: ["[]"],
+      },
+      navigation_data: {
+        attribution_id_v2:
+          "CometGroupDiscussionRoot.react,comet.group,via_cold_start,1755966072871,86686,2361831622,,",
+      },
+      tracking: [null],
+      event_share_metadata: {
+        surface: "newsfeed",
+      },
+      audience: {
+        to_id: groupId,
+      },
+      actor_id: actorId,
+      client_mutation_id: "1",
+    },
+    feedLocation: "GROUP",
+    feedbackSource: 0,
+    focusCommentID: null,
+    gridMediaWidth: null,
+    groupID: null,
+    scale: 1,
+    privacySelectorRenderLocation: "COMET_STREAM",
+    checkPhotosToReelsUpsellEligibility: false,
+    renderLocation: "group",
+    useDefaultActor: false,
+    inviteShortLinkKey: null,
+    isFeed: false,
+    isFundraiser: false,
+    isFunFactPost: false,
+    isGroup: true,
+    isEvent: false,
+    isTimeline: false,
+    isSocialLearning: false,
+    isPageNewsFeed: false,
+    isProfileReviews: false,
+    isWorkSharedDraft: false,
+    hashtag: null,
+    canUserManageOffers: false,
+    __relay_internal__pv__CometUFIShareActionMigrationrelayprovider: true,
+    __relay_internal__pv__GHLShouldChangeSponsoredDataFieldNamerelayprovider:
+      true,
+    __relay_internal__pv__GHLShouldChangeAdIdFieldNamerelayprovider: true,
+    __relay_internal__pv__CometUFI_dedicated_comment_routable_dialog_gkrelayprovider:
+      false,
+    __relay_internal__pv__IsWorkUserrelayprovider: false,
+    __relay_internal__pv__CometUFIReactionsEnableShortNamerelayprovider: false,
+    __relay_internal__pv__FBReels_enable_view_dubbed_audio_type_gkrelayprovider:
+      false,
+    __relay_internal__pv__FBReels_deprecate_short_form_video_context_gkrelayprovider:
+      true,
+    __relay_internal__pv__FeedDeepDiveTopicPillThreadViewEnabledrelayprovider:
+      false,
+    __relay_internal__pv__CometImmersivePhotoCanUserDisable3DMotionrelayprovider:
+      false,
+    __relay_internal__pv__WorkCometIsEmployeeGKProviderrelayprovider: false,
+    __relay_internal__pv__IsMergQAPollsrelayprovider: false,
+    __relay_internal__pv__FBReelsMediaFooter_comet_enable_reels_ads_gkrelayprovider:
+      true,
+    __relay_internal__pv__StoriesArmadilloReplyEnabledrelayprovider: true,
+    __relay_internal__pv__FBReelsIFUTileContent_reelsIFUPlayOnHoverrelayprovider:
+      true,
+    __relay_internal__pv__GHLShouldChangeSponsoredAuctionDistanceFieldNamerelayprovider:
+      true,
+  });
+}
+
+function parsePostResponse(responseText: string): GraphqlPostResult {
+  const normalized = responseText.trim().replace(/^for\s*\(;;\);\s*/, "");
+
+  if (!normalized) {
+    return {
+      success: true,
+      postId: "unknown-empty-response",
+    };
+  }
+
+  try {
+    const decoder = new JsonObjectDecoder(normalized);
+    const objects = decoder.decodeAll();
+    const firstObject = objects[0];
+    if (!firstObject) {
+      return {
+        success: false,
+        error: "Facebook returned an empty JSON payload.",
+      };
+    }
+
+    if (isRecord(firstObject) && typeof firstObject.errorSummary === "string") {
+      return {
+        success: false,
+        error:
+          typeof firstObject.errorDescription === "string"
+            ? `${firstObject.errorSummary}: ${firstObject.errorDescription}`
+            : firstObject.errorSummary,
+      };
+    }
+
+    const storyCreateMatch = findStoryCreateResult(firstObject);
+    if (storyCreateMatch) {
+      return {
+        success: true,
+        postId: storyCreateMatch.postId,
+        postUrl: storyCreateMatch.url,
+      };
+    }
+
+    const matches = findPostRecords(firstObject);
+    const lastMatch = matches.at(-1);
+
+    if (!lastMatch) {
+      return {
+        success: false,
+        error: "Facebook did not return a post permalink.",
+      };
+    }
+
+    return {
+      success: true,
+      postId: lastMatch.postId,
+      postUrl: lastMatch.url,
+    };
+  } catch (error) {
+    return {
+      success: false,
+      error:
+        error instanceof Error
+          ? error.message
+          : "Failed to parse Facebook post response.",
+    };
+  }
+}
+
+function findStoryCreateResult(
+  value: unknown,
+): { postId: string; url: string } | undefined {
+  if (Array.isArray(value)) {
+    for (const entry of value) {
+      const nested = findStoryCreateResult(entry);
+      if (nested) {
+        return nested;
+      }
+    }
+
+    return undefined;
+  }
+
+  if (!isRecord(value)) {
+    return undefined;
+  }
+
+  const storyCreate = value.story_create;
+  if (isRecord(storyCreate)) {
+    const directUrl =
+      typeof storyCreate.url === "string" ? storyCreate.url : undefined;
+    const directPostId =
+      typeof storyCreate.post_id === "string" ? storyCreate.post_id : undefined;
+    const story = isRecord(storyCreate.story) ? storyCreate.story : undefined;
+    const storyUrl = story && typeof story.url === "string" ? story.url : undefined;
+    const storyId = story && typeof story.id === "string" ? story.id : undefined;
+    const fallbackUrl = directUrl ?? storyUrl;
+    const fallbackId = directPostId ?? storyId;
+
+    if (
+      fallbackUrl &&
+      (fallbackUrl.includes("/pending_posts/") ||
+        fallbackUrl.includes("/permalink/") ||
+        fallbackUrl.includes("/posts/"))
+    ) {
+      return {
+        postId: fallbackId ?? "unknown-story-id",
+        url: fallbackUrl,
+      };
+    }
+  }
+
+  for (const nestedValue of Object.values(value)) {
+    const nested = findStoryCreateResult(nestedValue);
+    if (nested) {
+      return nested;
+    }
+  }
+
+  return undefined;
+}
+
+function findPostRecords(value: unknown): Array<{ postId: string; url: string }> {
+  if (Array.isArray(value)) {
+    return value.flatMap((entry) => findPostRecords(entry));
+  }
+
+  if (!isRecord(value)) {
+    return [];
+  }
+
+  const matches: Array<{ postId: string; url: string }> = [];
+  if (
+    typeof value.post_id === "string" &&
+    typeof value.url === "string" &&
+    value.url.includes("permalink")
+  ) {
+    matches.push({ postId: value.post_id, url: value.url });
+  }
+
+  for (const nestedValue of Object.values(value)) {
+    matches.push(...findPostRecords(nestedValue));
+  }
+
+  return matches;
+}
+
+function isRateLimitBody(responseText: string): boolean {
+  return /We limit how often you|temporarily blocked/i.test(responseText);
+}
+
+function isRecord(value: unknown): value is Record<string, any> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function extractUserIdFromFormData(formData: Record<string, string>): string | undefined {
+  const userId = formData.__user || formData.av;
+  if (userId) {
+    return userId;
+  }
+
+  const variables = safeParseJson(formData.variables);
+  if (isRecord(variables) && isRecord(variables.input)) {
+    const actorId = variables.input.actor_id;
+    if (typeof actorId === "string" && actorId) {
+      return actorId;
+    }
+  }
+
+  return undefined;
+}
+
+function generateSessionId(): string {
+  return crypto.randomUUID();
+}
+
+function safeParseJson(value: string | undefined): unknown {
+  if (!value) {
+    return undefined;
+  }
+
+  try {
+    return JSON.parse(value);
+  } catch {
+    return undefined;
+  }
+}
+
+async function dataUrlToBlob(dataUrl: string): Promise<Blob> {
+  const response = await fetch(dataUrl);
+  return response.blob();
+}
+
+async function logPageCookieDiagnostics(
+  tabId: number,
+  label: string,
+): Promise<void> {
+  try {
+    const [tabInfo, result] = await Promise.all([
+      chrome.tabs.get(tabId),
+      chrome.scripting.executeScript({
+        target: { tabId },
+        func: () => {
+          const cookieNames = document.cookie
+            .split(";")
+            .map((part) => part.trim())
+            .filter(Boolean)
+            .map((part) => part.split("=")[0]?.trim())
+            .filter((name): name is string => Boolean(name));
+
+          return {
+            href: window.location.href,
+            origin: window.location.origin,
+            cookieCount: cookieNames.length,
+            cookieNames,
+          };
+        },
+      }),
+    ]);
+
+    const pageData = result[0]?.result as
+      | {
+          href: string;
+          origin: string;
+          cookieCount: number;
+          cookieNames: string[];
+        }
+      | undefined;
+
+    debugLog(`${label} page cookie diagnostics.`, {
+      tabUrl: tabInfo.url,
+      pageUrl: pageData?.href,
+      pageOrigin: pageData?.origin,
+      pageCookieCount: pageData?.cookieCount ?? 0,
+      pageCookieNames: pageData?.cookieNames ?? [],
+    });
+  } catch (error) {
+    debugWarn(`${label} page cookie diagnostics failed.`, {
+      tabId,
+      error: error instanceof Error ? error.message : String(error),
+    });
+  }
+}
+
+async function uploadImageInPage(
+  uploadTemplate: CapturedRequest,
+  image: UiPostImage,
+): Promise<{
+  status: number;
+  ok: boolean;
+  responseText: string;
+  contentType: string;
+  error?: string;
+}> {
+  try {
+    const buildHeaders = (headers: Record<string, string>): HeadersInit => {
+      const replayHeaders: Record<string, string> = {};
+      const allowedHeaders = [
+        "accept",
+        "accept-language",
+        "priority",
+        "sec-fetch-dest",
+        "sec-fetch-mode",
+        "sec-fetch-site",
+        "x-asbd-id",
+        "x-fb-lsd",
+      ];
+
+      for (const header of allowedHeaders) {
+        const value = headers[header];
+        if (value) {
+          replayHeaders[header] = value;
+        }
+      }
+
+      return replayHeaders;
+    };
+
+    const response = await fetch(image.dataUrl);
+    const blob = await response.blob();
+    const formData = new FormData();
+
+    for (const [key, value] of Object.entries(uploadTemplate.formData)) {
+      if (!value || key === "farr") {
+        continue;
+      }
+
+      formData.append(key, value);
+    }
+
+    formData.append("farr", blob, image.name);
+
+    const uploadResponse = await fetch(uploadTemplate.url, {
+      method: "POST",
+      credentials: "include",
+      headers: buildHeaders(uploadTemplate.headers),
+      body: formData,
+    });
+
+    return {
+      status: uploadResponse.status,
+      ok: uploadResponse.ok,
+      responseText: await uploadResponse.text(),
+      contentType: uploadResponse.headers.get("content-type") ?? "",
+    };
+  } catch (error) {
+    return {
+      status: 0,
+      ok: false,
+      responseText: "",
+      contentType: "",
+      error: error instanceof Error ? error.message : String(error),
+    };
+  }
+}
+
+async function createGraphqlPostInPage(
+  postTemplate: CapturedRequest,
+  variables: string,
+): Promise<{
+  status: number;
+  ok: boolean;
+  responseText: string;
+  contentType: string;
+  error?: string;
+}> {
+  try {
+    const buildHeaders = (headers: Record<string, string>): HeadersInit => {
+      const replayHeaders: Record<string, string> = {};
+      const allowedHeaders = [
+        "accept",
+        "accept-language",
+        "content-type",
+        "priority",
+        "sec-fetch-dest",
+        "sec-fetch-mode",
+        "sec-fetch-site",
+        "x-asbd-id",
+        "x-fb-friendly-name",
+        "x-fb-lsd",
+      ];
+
+      for (const header of allowedHeaders) {
+        const value = headers[header];
+        if (value) {
+          replayHeaders[header] = value;
+        }
+      }
+
+      replayHeaders["content-type"] =
+        replayHeaders["content-type"] ?? "application/x-www-form-urlencoded";
+      replayHeaders["x-fb-friendly-name"] =
+        replayHeaders["x-fb-friendly-name"] ?? "ComposerStoryCreateMutation";
+
+      return replayHeaders;
+    };
+
+    const formData = new URLSearchParams(postTemplate.formData);
+    formData.set("variables", variables);
+
+    const response = await fetch(postTemplate.url, {
+      method: "POST",
+      credentials: "include",
+      headers: buildHeaders(postTemplate.headers),
+      body: formData.toString(),
+    });
+
+    return {
+      status: response.status,
+      ok: response.ok,
+      responseText: await response.text(),
+      contentType: response.headers.get("content-type") ?? "",
+    };
+  } catch (error) {
+    return {
+      status: 0,
+      ok: false,
+      responseText: "",
+      contentType: "",
+      error: error instanceof Error ? error.message : String(error),
+    };
+  }
+}
+
+async function maybeRewriteDescription(description: string): Promise<string> {
+  const trimmed = description.trim();
+  if (!trimmed) {
+    return trimmed;
+  }
+
+  const storage = await chrome.storage.local.get([...GEMINI_API_KEY_STORAGE_KEYS]);
+  const apiKey = GEMINI_API_KEY_STORAGE_KEYS.map((key) => storage[key]).find(
+    (value): value is string => typeof value === "string" && value.trim().length > 0,
+  );
+
+  if (!apiKey) {
+    debugLog("Gemini rewrite skipped because no API key was found.");
+    return trimmed;
+  }
+
+  const prompt = `Rewrite this Facebook Group product description to be concise, clear, natural, and persuasive.
+
+Rules:
+- Return only the rewritten description.
+- Keep important product details.
+- Do not invent details.
+- Always make the description easy to scan using short lines and natural paragraph breaks instead of one wall of text.
+- Use a few appropriate, persuasive emojis where they make the listing feel more engaging.
+- Do not use Markdown formatting, asterisks, bullet symbols, or decorative separator symbols.
+- Keep emojis natural and relevant; do not overuse them.
+- If the phone number is present, keep it exactly as written.
+- Include exactly 6 relevant hashtags based on the product and description context.
+- Put all 6 hashtags together at the very bottom of the description.
+
+Description:
+${trimmed}`;
+
+  try {
+    debugLog("Sending Gemini rewrite request.", {
+      model: GEMINI_MODEL,
+      inputLength: trimmed.length,
+    });
+    const ai = new GoogleGenAI({ apiKey });
+    const response = await withTimeout(
+      ai.models.generateContent({
+        model: GEMINI_MODEL,
+        contents: prompt,
+        config: {
+          thinkingConfig: {
+            thinkingBudget: 0,
+          },
+        },
+      }),
+      GEMINI_TIMEOUT_MS,
+      "Gemini rewrite timed out.",
+    );
+
+    const rewritten = String(response.text ?? "").trim();
+    debugLog("Gemini rewrite completed.", {
+      outputLength: rewritten.length,
+      changed: rewritten !== trimmed,
+    });
+    return rewritten || trimmed;
+  } catch (error) {
+    debugWarn("Gemini rewrite failed.", error);
+    return trimmed;
+  }
+}
+
+async function withTimeout<T>(
+  promise: Promise<T>,
+  timeoutMs: number,
+  message: string,
+): Promise<T> {
+  let timeoutId = 0;
+
+  return new Promise<T>((resolve, reject) => {
+    timeoutId = self.setTimeout(() => {
+      reject(new Error(message));
+    }, timeoutMs);
+
+    void promise
+      .then((value) => {
+        clearTimeout(timeoutId);
+        resolve(value);
+      })
+      .catch((error) => {
+        clearTimeout(timeoutId);
+        reject(error);
+      });
+  });
+}
+
 function notifyUiPostingStatus(
   partial: Omit<UiPostingStatusMessage, "type">,
 ): void {
@@ -722,4 +2256,73 @@ function notifyUiPostingStatus(
   };
 
   void chrome.runtime.sendMessage(status);
+}
+
+class JsonObjectDecoder {
+  private readonly input: string;
+  private index = 0;
+
+  constructor(input: string) {
+    this.input = input;
+  }
+
+  decodeAll(): unknown[] {
+    const results: unknown[] = [];
+
+    while (this.index < this.input.length) {
+      this.skipWhitespace();
+      if (this.index >= this.input.length) {
+        break;
+      }
+
+      const start = this.index;
+      let depth = 0;
+      let inString = false;
+      let escaped = false;
+
+      while (this.index < this.input.length) {
+        const character = this.input[this.index];
+
+        if (inString) {
+          if (escaped) {
+            escaped = false;
+          } else if (character === "\\") {
+            escaped = true;
+          } else if (character === "\"") {
+            inString = false;
+          }
+          this.index += 1;
+          continue;
+        }
+
+        if (character === "\"") {
+          inString = true;
+          this.index += 1;
+          continue;
+        }
+
+        if (character === "{") {
+          depth += 1;
+        } else if (character === "}") {
+          depth -= 1;
+          if (depth === 0) {
+            this.index += 1;
+            const segment = this.input.slice(start, this.index);
+            results.push(JSON.parse(segment));
+            break;
+          }
+        }
+
+        this.index += 1;
+      }
+    }
+
+    return results;
+  }
+
+  private skipWhitespace() {
+    while (this.index < this.input.length && /\s/.test(this.input[this.index])) {
+      this.index += 1;
+    }
+  }
 }

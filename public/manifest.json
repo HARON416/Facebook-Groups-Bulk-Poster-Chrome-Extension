@@ -14,6 +14,7 @@
     "sidePanel",
     "tabs",
     "contextMenus",
+    "cookies",
     "storage",
     "unlimitedStorage",
     "scripting",
@@ -25,7 +26,8 @@
   },
   "host_permissions": [
     "https://www.facebook.com/*",
-    "https://web.facebook.com/*"
+    "https://web.facebook.com/*",
+    "https://upload.facebook.com/*"
   ],
   "background": {
     "service_worker": "dist/background.js"
