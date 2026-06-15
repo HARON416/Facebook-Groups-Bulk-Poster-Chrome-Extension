@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "name": "Facebook Groups Bulk Poster",
   "version": "1.3.7",
-  "description": "Post to multiple Facebook groups at once with ease. Save time and reach more people with our bulk posting tool.",
+  "description": "Bulk post to Facebook groups. Load your groups, queue posts, and optionally rewrite descriptions with Gemini.",
   "icons": {
     "48": "images/icon-48.png",
     "128": "images/icon-128.png"
@@ -13,12 +13,9 @@
   "permissions": [
     "sidePanel",
     "tabs",
-    "contextMenus",
     "cookies",
     "storage",
-    "unlimitedStorage",
     "scripting",
-    "debugger",
     "webRequest"
   ],
   "side_panel": {

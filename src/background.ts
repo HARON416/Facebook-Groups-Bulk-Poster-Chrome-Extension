@@ -58,6 +58,11 @@ const GEMINI_REWRITE_ENABLED_STORAGE_KEY = "geminiRewriteEnabled";
 const GEMINI_MODEL = "gemini-2.5-flash";
 const GEMINI_TIMEOUT_MS = 30_000;
 const LOG_PREFIX = "[Facebook Groups Bulk Poster]";
+const FACEBOOK_HOSTS = new Set([
+  "www.facebook.com",
+  "web.facebook.com",
+  "upload.facebook.com",
+]);
 
 const pendingRequests = new Map<string, PendingRequest>();
 
@@ -74,8 +79,22 @@ chrome.runtime.onInstalled.addListener(() => {
   void chrome.sidePanel.setPanelBehavior({ openPanelOnActionClick: true });
 });
 
+void syncSidePanelForCurrentTab();
+
+chrome.tabs.onActivated.addListener(() => {
+  void syncSidePanelForCurrentTab();
+});
+
+chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
+  if (!changeInfo.status && !changeInfo.url) {
+    return;
+  }
+
+  void updateSidePanelAccessForTab(tabId, tab.url);
+});
+
 chrome.action.onClicked.addListener((tab) => {
-  if (!tab.windowId) {
+  if (!tab.windowId || !isFacebookUrl(tab.url)) {
     return;
   }
 
@@ -100,7 +119,45 @@ function debugWarn(message: string, data?: unknown) {
   console.warn(`${LOG_PREFIX} ${message}`, data);
 }
 
-function extractCookieNamesFromHeader(cookieHeader: string | undefined): string[] {
+function isFacebookUrl(url: string | undefined): boolean {
+  if (!url) {
+    return false;
+  }
+
+  try {
+    return FACEBOOK_HOSTS.has(new URL(url).hostname);
+  } catch {
+    return false;
+  }
+}
+
+async function syncSidePanelForCurrentTab(): Promise<void> {
+  const [activeTab] = await chrome.tabs.query({
+    active: true,
+    currentWindow: true,
+  });
+
+  if (!activeTab?.id) {
+    return;
+  }
+
+  await updateSidePanelAccessForTab(activeTab.id, activeTab.url);
+}
+
+async function updateSidePanelAccessForTab(
+  tabId: number,
+  url: string | undefined,
+): Promise<void> {
+  await chrome.sidePanel.setOptions({
+    tabId,
+    path: "sidepanel.html",
+    enabled: isFacebookUrl(url),
+  });
+}
+
+function extractCookieNamesFromHeader(
+  cookieHeader: string | undefined,
+): string[] {
   if (!cookieHeader) {
     return [];
   }
@@ -148,13 +205,16 @@ chrome.webRequest.onBeforeRequest.addListener(
     const shouldCaptureGroups =
       captureTabId !== undefined && details.tabId === captureTabId;
     const shouldCapturePosting =
-      postingCaptureTabId !== undefined && details.tabId === postingCaptureTabId;
+      postingCaptureTabId !== undefined &&
+      details.tabId === postingCaptureTabId;
 
     if (!shouldCaptureGroups && !shouldCapturePosting) {
       return undefined;
     }
 
-    const { body, formData } = readRequestBody(details.requestBody as WebRequestBody);
+    const { body, formData } = readRequestBody(
+      details.requestBody as WebRequestBody,
+    );
     const pending = pendingRequests.get(details.requestId) ?? {};
     pending.url = details.url;
     pending.method = details.method;
@@ -181,7 +241,8 @@ chrome.webRequest.onBeforeSendHeaders.addListener(
     const shouldCaptureGroups =
       captureTabId !== undefined && details.tabId === captureTabId;
     const shouldCapturePosting =
-      postingCaptureTabId !== undefined && details.tabId === postingCaptureTabId;
+      postingCaptureTabId !== undefined &&
+      details.tabId === postingCaptureTabId;
 
     if (!shouldCaptureGroups && !shouldCapturePosting) {
       return undefined;
@@ -208,7 +269,11 @@ chrome.webRequest.onBeforeSendHeaders.addListener(
 );
 
 chrome.runtime.onMessage.addListener(
-  (request: ExtensionRequest, _sender, sendResponse: (response: any) => void) => {
+  (
+    request: ExtensionRequest,
+    _sender,
+    sendResponse: (response: any) => void,
+  ) => {
     if (request.type === "LOAD_GROUPS") {
       void loadGroups()
         .then((groups) => sendResponse({ ok: true, groups }))
@@ -315,7 +380,11 @@ function maybeCaptureRequest(requestId: string, tabId: number) {
       url: pending.url,
       friendlyName,
     });
-    void logCookieDiagnostics("Captured joined groups request", pending.url, pending.headers);
+    void logCookieDiagnostics(
+      "Captured joined groups request",
+      pending.url,
+      pending.headers,
+    );
     pendingRequests.delete(requestId);
     return;
   }
@@ -353,7 +422,11 @@ function maybeCaptureRequest(requestId: string, tabId: number) {
       url: pending.url,
       formKeys: Object.keys(capturedUploadTemplate.formData),
     });
-    void logCookieDiagnostics("Captured upload template", pending.url, pending.headers);
+    void logCookieDiagnostics(
+      "Captured upload template",
+      pending.url,
+      pending.headers,
+    );
   }
 
   if (
@@ -374,7 +447,11 @@ function maybeCaptureRequest(requestId: string, tabId: number) {
       friendlyName,
       formKeys: Object.keys(capturedPostTemplate.formData),
     });
-    void logCookieDiagnostics("Captured post mutation template", pending.url, pending.headers);
+    void logCookieDiagnostics(
+      "Captured post mutation template",
+      pending.url,
+      pending.headers,
+    );
   }
 
   if (
@@ -448,11 +525,13 @@ async function getActiveTabForLoadingGroups(): Promise<chrome.tabs.Tab> {
     currentWindow: true,
   });
 
-  if (activeTab?.id) {
+  if (activeTab?.id && isFacebookUrl(activeTab.url)) {
     return activeTab;
   }
 
-  return chrome.tabs.create({ url: JOINED_GROUPS_URL, active: true });
+  throw new Error(
+    "Open Facebook first. This extension only works on facebook.com.",
+  );
 }
 
 async function getActiveTabForPosting(): Promise<chrome.tabs.Tab> {
@@ -463,6 +542,12 @@ async function getActiveTabForPosting(): Promise<chrome.tabs.Tab> {
 
   if (!activeTab?.id) {
     throw new Error("Unable to find the active tab for posting.");
+  }
+
+  if (!isFacebookUrl(activeTab.url)) {
+    throw new Error(
+      "Open Facebook first. This extension only works on facebook.com.",
+    );
   }
 
   return activeTab;
@@ -766,15 +851,27 @@ function sleep(duration: number) {
 
 async function sleepWithPostingCountdown(
   durationSeconds: number,
-  groupName: string,
+  statusContext: {
+    current: number;
+    total: number;
+    groupId?: string;
+    groupName?: string;
+    successCount: number;
+    failedCount: number;
+    processedCount: number;
+  },
 ): Promise<void> {
   for (let remaining = durationSeconds; remaining > 0; remaining -= 1) {
     notifyUiPostingStatus({
       status: "waiting",
       message: `Waiting ${remaining} seconds before next group...`,
-      current: 0,
-      total: 0,
-      groupName,
+      current: statusContext.current,
+      total: statusContext.total,
+      groupId: statusContext.groupId,
+      groupName: statusContext.groupName,
+      successCount: statusContext.successCount,
+      failedCount: statusContext.failedCount,
+      processedCount: statusContext.processedCount,
     });
     await sleep(1_000);
   }
@@ -971,21 +1068,29 @@ async function runGraphqlPostingQueue(
       }
 
       if (index < request.groups.length - 1) {
+        const nextGroup = request.groups[index + 1];
+        const nextCurrent = current + 1;
+
         notifyUiPostingStatus({
           status: "waiting",
-          message: `Waiting ${request.delaySeconds} seconds before next group...`,
-          current,
+          message: `Waiting ${request.delaySeconds} seconds before posting to ${nextGroup.name}...`,
+          current: nextCurrent,
           total,
-          groupId: group.id,
-          groupName: group.name,
+          groupId: nextGroup.id,
+          groupName: nextGroup.name,
           successCount,
           failedCount,
           processedCount: index + 1,
         });
-        await sleepWithPostingCountdown(
-          request.delaySeconds,
-          group.name,
-        );
+        await sleepWithPostingCountdown(request.delaySeconds, {
+          current: nextCurrent,
+          total,
+          groupId: nextGroup.id,
+          groupName: nextGroup.name,
+          successCount,
+          failedCount,
+          processedCount: index + 1,
+        });
       }
     }
 
@@ -1000,7 +1105,8 @@ async function runGraphqlPostingQueue(
     });
     await sleep(2_000);
   } catch (error) {
-    const errorMessage = error instanceof Error ? error.message : "Unknown error";
+    const errorMessage =
+      error instanceof Error ? error.message : "Unknown error";
     debugWarn("Posting queue stopped with error.", { error: errorMessage });
     notifyUiPostingStatus({
       status: "done",
@@ -1049,7 +1155,8 @@ async function ensurePostingTemplates(
 
   notifyUiPostingStatus({
     status: "posting",
-    message: "Capturing fresh Facebook request templates from the first post...",
+    message:
+      "Capturing fresh Facebook request templates from the first post...",
     current: 1,
     total,
     groupId: firstGroup.id,
@@ -1072,7 +1179,9 @@ async function ensurePostingTemplates(
     throw new Error(postResult.error ?? "Unable to create the first post.");
   }
 
-  const capturedTemplates = await waitForPostingTemplates(requiresUploadTemplate);
+  const capturedTemplates = await waitForPostingTemplatesInternal(
+    requiresUploadTemplate,
+  );
 
   return {
     uploadTemplate: capturedTemplates.uploadTemplate,
@@ -1492,7 +1601,8 @@ function buildPostVariables(
       id: photoId,
     },
   }));
-  const actorId = extractUserIdFromFormData(_templateFormData) ?? "61553861467726";
+  const actorId =
+    extractUserIdFromFormData(_templateFormData) ?? "61553861467726";
 
   return JSON.stringify({
     input: {
@@ -1561,30 +1671,21 @@ function buildPostVariables(
     hashtag: null,
     canUserManageOffers: false,
     __relay_internal__pv__CometUFIShareActionMigrationrelayprovider: true,
-    __relay_internal__pv__GHLShouldChangeSponsoredDataFieldNamerelayprovider:
-      true,
+    __relay_internal__pv__GHLShouldChangeSponsoredDataFieldNamerelayprovider: true,
     __relay_internal__pv__GHLShouldChangeAdIdFieldNamerelayprovider: true,
-    __relay_internal__pv__CometUFI_dedicated_comment_routable_dialog_gkrelayprovider:
-      false,
+    __relay_internal__pv__CometUFI_dedicated_comment_routable_dialog_gkrelayprovider: false,
     __relay_internal__pv__IsWorkUserrelayprovider: false,
     __relay_internal__pv__CometUFIReactionsEnableShortNamerelayprovider: false,
-    __relay_internal__pv__FBReels_enable_view_dubbed_audio_type_gkrelayprovider:
-      false,
-    __relay_internal__pv__FBReels_deprecate_short_form_video_context_gkrelayprovider:
-      true,
-    __relay_internal__pv__FeedDeepDiveTopicPillThreadViewEnabledrelayprovider:
-      false,
-    __relay_internal__pv__CometImmersivePhotoCanUserDisable3DMotionrelayprovider:
-      false,
+    __relay_internal__pv__FBReels_enable_view_dubbed_audio_type_gkrelayprovider: false,
+    __relay_internal__pv__FBReels_deprecate_short_form_video_context_gkrelayprovider: true,
+    __relay_internal__pv__FeedDeepDiveTopicPillThreadViewEnabledrelayprovider: false,
+    __relay_internal__pv__CometImmersivePhotoCanUserDisable3DMotionrelayprovider: false,
     __relay_internal__pv__WorkCometIsEmployeeGKProviderrelayprovider: false,
     __relay_internal__pv__IsMergQAPollsrelayprovider: false,
-    __relay_internal__pv__FBReelsMediaFooter_comet_enable_reels_ads_gkrelayprovider:
-      true,
+    __relay_internal__pv__FBReelsMediaFooter_comet_enable_reels_ads_gkrelayprovider: true,
     __relay_internal__pv__StoriesArmadilloReplyEnabledrelayprovider: true,
-    __relay_internal__pv__FBReelsIFUTileContent_reelsIFUPlayOnHoverrelayprovider:
-      true,
-    __relay_internal__pv__GHLShouldChangeSponsoredAuctionDistanceFieldNamerelayprovider:
-      true,
+    __relay_internal__pv__FBReelsIFUTileContent_reelsIFUPlayOnHoverrelayprovider: true,
+    __relay_internal__pv__GHLShouldChangeSponsoredAuctionDistanceFieldNamerelayprovider: true,
   });
 }
 
@@ -1629,7 +1730,8 @@ function parsePostResponse(responseText: string): GraphqlPostResult {
     }
 
     const matches = findPostRecords(firstObject);
-    const lastMatch = matches.at(-1);
+    const lastMatch =
+      matches.length > 0 ? matches[matches.length - 1] : undefined;
 
     if (!lastMatch) {
       return {
@@ -1679,8 +1781,10 @@ function findStoryCreateResult(
     const directPostId =
       typeof storyCreate.post_id === "string" ? storyCreate.post_id : undefined;
     const story = isRecord(storyCreate.story) ? storyCreate.story : undefined;
-    const storyUrl = story && typeof story.url === "string" ? story.url : undefined;
-    const storyId = story && typeof story.id === "string" ? story.id : undefined;
+    const storyUrl =
+      story && typeof story.url === "string" ? story.url : undefined;
+    const storyId =
+      story && typeof story.id === "string" ? story.id : undefined;
     const fallbackUrl = directUrl ?? storyUrl;
     const fallbackId = directPostId ?? storyId;
 
@@ -1707,7 +1811,9 @@ function findStoryCreateResult(
   return undefined;
 }
 
-function findPostRecords(value: unknown): Array<{ postId: string; url: string }> {
+function findPostRecords(
+  value: unknown,
+): Array<{ postId: string; url: string }> {
   if (Array.isArray(value)) {
     return value.flatMap((entry) => findPostRecords(entry));
   }
@@ -1740,7 +1846,9 @@ function isRecord(value: unknown): value is Record<string, any> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
-function extractUserIdFromFormData(formData: Record<string, string>): string | undefined {
+function extractUserIdFromFormData(
+  formData: Record<string, string>,
+): string | undefined {
   const userId = formData.__user || formData.av;
   if (userId) {
     return userId;
@@ -1987,7 +2095,8 @@ async function maybeRewriteDescription(description: string): Promise<string> {
   }
 
   const apiKey = GEMINI_API_KEY_STORAGE_KEYS.map((key) => storage[key]).find(
-    (value): value is string => typeof value === "string" && value.trim().length > 0,
+    (value): value is string =>
+      typeof value === "string" && value.trim().length > 0,
   );
 
   if (!apiKey) {
@@ -2109,14 +2218,14 @@ class JsonObjectDecoder {
             escaped = false;
           } else if (character === "\\") {
             escaped = true;
-          } else if (character === "\"") {
+          } else if (character === '"') {
             inString = false;
           }
           this.index += 1;
           continue;
         }
 
-        if (character === "\"") {
+        if (character === '"') {
           inString = true;
           this.index += 1;
           continue;
@@ -2142,7 +2251,10 @@ class JsonObjectDecoder {
   }
 
   private skipWhitespace() {
-    while (this.index < this.input.length && /\s/.test(this.input[this.index])) {
+    while (
+      this.index < this.input.length &&
+      /\s/.test(this.input[this.index])
+    ) {
       this.index += 1;
     }
   }

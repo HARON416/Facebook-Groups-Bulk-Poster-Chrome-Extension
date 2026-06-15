@@ -17069,6 +17069,11 @@ ${underline}`);
   var GEMINI_MODEL = "gemini-2.5-flash";
   var GEMINI_TIMEOUT_MS = 3e4;
   var LOG_PREFIX = "[Facebook Groups Bulk Poster]";
+  var FACEBOOK_HOSTS = /* @__PURE__ */ new Set([
+    "www.facebook.com",
+    "web.facebook.com",
+    "upload.facebook.com"
+  ]);
   var pendingRequests = /* @__PURE__ */ new Map();
   var capturedGroupsRequest;
   var captureTabId;
@@ -17080,8 +17085,18 @@ ${underline}`);
   chrome.runtime.onInstalled.addListener(() => {
     void chrome.sidePanel.setPanelBehavior({ openPanelOnActionClick: true });
   });
+  void syncSidePanelForCurrentTab();
+  chrome.tabs.onActivated.addListener(() => {
+    void syncSidePanelForCurrentTab();
+  });
+  chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
+    if (!changeInfo.status && !changeInfo.url) {
+      return;
+    }
+    void updateSidePanelAccessForTab(tabId, tab.url);
+  });
   chrome.action.onClicked.addListener((tab) => {
-    if (!tab.windowId) {
+    if (!tab.windowId || !isFacebookUrl(tab.url)) {
       return;
     }
     void chrome.sidePanel.open({ windowId: tab.windowId });
@@ -17099,6 +17114,33 @@ ${underline}`);
       return;
     }
     console.warn(`${LOG_PREFIX} ${message}`, data);
+  }
+  function isFacebookUrl(url) {
+    if (!url) {
+      return false;
+    }
+    try {
+      return FACEBOOK_HOSTS.has(new URL(url).hostname);
+    } catch {
+      return false;
+    }
+  }
+  async function syncSidePanelForCurrentTab() {
+    const [activeTab] = await chrome.tabs.query({
+      active: true,
+      currentWindow: true
+    });
+    if (!activeTab?.id) {
+      return;
+    }
+    await updateSidePanelAccessForTab(activeTab.id, activeTab.url);
+  }
+  async function updateSidePanelAccessForTab(tabId, url) {
+    await chrome.sidePanel.setOptions({
+      tabId,
+      path: "sidepanel.html",
+      enabled: isFacebookUrl(url)
+    });
   }
   function extractCookieNamesFromHeader(cookieHeader) {
     if (!cookieHeader) {
@@ -17136,7 +17178,9 @@ ${underline}`);
       if (!shouldCaptureGroups && !shouldCapturePosting) {
         return void 0;
       }
-      const { body, formData } = readRequestBody(details.requestBody);
+      const { body, formData } = readRequestBody(
+        details.requestBody
+      );
       const pending = pendingRequests.get(details.requestId) ?? {};
       pending.url = details.url;
       pending.method = details.method;
@@ -17258,7 +17302,11 @@ ${underline}`);
         url: pending.url,
         friendlyName
       });
-      void logCookieDiagnostics("Captured joined groups request", pending.url, pending.headers);
+      void logCookieDiagnostics(
+        "Captured joined groups request",
+        pending.url,
+        pending.headers
+      );
       pendingRequests.delete(requestId);
       return;
     }
@@ -17289,7 +17337,11 @@ ${underline}`);
         url: pending.url,
         formKeys: Object.keys(capturedUploadTemplate.formData)
       });
-      void logCookieDiagnostics("Captured upload template", pending.url, pending.headers);
+      void logCookieDiagnostics(
+        "Captured upload template",
+        pending.url,
+        pending.headers
+      );
     }
     if (friendlyName === POST_MUTATION_FRIENDLY_NAME && pending.method === "POST" && body.length > 0 && !capturedPostTemplate) {
       capturedPostTemplate = {
@@ -17304,7 +17356,11 @@ ${underline}`);
         friendlyName,
         formKeys: Object.keys(capturedPostTemplate.formData)
       });
-      void logCookieDiagnostics("Captured post mutation template", pending.url, pending.headers);
+      void logCookieDiagnostics(
+        "Captured post mutation template",
+        pending.url,
+        pending.headers
+      );
     }
     if ((capturedUploadTemplate || !isUploadCandidate) && (capturedPostTemplate || friendlyName !== POST_MUTATION_FRIENDLY_NAME)) {
       pendingRequests.delete(requestId);
@@ -17359,10 +17415,12 @@ ${underline}`);
       active: true,
       currentWindow: true
     });
-    if (activeTab?.id) {
+    if (activeTab?.id && isFacebookUrl(activeTab.url)) {
       return activeTab;
     }
-    return chrome.tabs.create({ url: JOINED_GROUPS_URL, active: true });
+    throw new Error(
+      "Open Facebook first. This extension only works on facebook.com."
+    );
   }
   async function getActiveTabForPosting() {
     const [activeTab] = await chrome.tabs.query({
@@ -17371,6 +17429,11 @@ ${underline}`);
     });
     if (!activeTab?.id) {
       throw new Error("Unable to find the active tab for posting.");
+    }
+    if (!isFacebookUrl(activeTab.url)) {
+      throw new Error(
+        "Open Facebook first. This extension only works on facebook.com."
+      );
     }
     return activeTab;
   }
@@ -17587,14 +17650,18 @@ ${underline}`);
   function sleep2(duration) {
     return new Promise((resolve) => setTimeout(resolve, duration));
   }
-  async function sleepWithPostingCountdown(durationSeconds, groupName) {
+  async function sleepWithPostingCountdown(durationSeconds, statusContext) {
     for (let remaining = durationSeconds; remaining > 0; remaining -= 1) {
       notifyUiPostingStatus({
         status: "waiting",
         message: `Waiting ${remaining} seconds before next group...`,
-        current: 0,
-        total: 0,
-        groupName
+        current: statusContext.current,
+        total: statusContext.total,
+        groupId: statusContext.groupId,
+        groupName: statusContext.groupName,
+        successCount: statusContext.successCount,
+        failedCount: statusContext.failedCount,
+        processedCount: statusContext.processedCount
       });
       await sleep2(1e3);
     }
@@ -17768,21 +17835,28 @@ ${underline}`);
           });
         }
         if (index < request.groups.length - 1) {
+          const nextGroup = request.groups[index + 1];
+          const nextCurrent = current + 1;
           notifyUiPostingStatus({
             status: "waiting",
-            message: `Waiting ${request.delaySeconds} seconds before next group...`,
-            current,
+            message: `Waiting ${request.delaySeconds} seconds before posting to ${nextGroup.name}...`,
+            current: nextCurrent,
             total,
-            groupId: group.id,
-            groupName: group.name,
+            groupId: nextGroup.id,
+            groupName: nextGroup.name,
             successCount,
             failedCount,
             processedCount: index + 1
           });
-          await sleepWithPostingCountdown(
-            request.delaySeconds,
-            group.name
-          );
+          await sleepWithPostingCountdown(request.delaySeconds, {
+            current: nextCurrent,
+            total,
+            groupId: nextGroup.id,
+            groupName: nextGroup.name,
+            successCount,
+            failedCount,
+            processedCount: index + 1
+          });
         }
       }
       notifyUiPostingStatus({
@@ -17850,7 +17924,9 @@ ${underline}`);
       stopPostingTemplateCapture();
       throw new Error(postResult.error ?? "Unable to create the first post.");
     }
-    const capturedTemplates = await waitForPostingTemplates(requiresUploadTemplate);
+    const capturedTemplates = await waitForPostingTemplatesInternal(
+      requiresUploadTemplate
+    );
     return {
       uploadTemplate: capturedTemplates.uploadTemplate,
       postTemplate: capturedTemplates.postTemplate,
@@ -17868,9 +17944,6 @@ ${underline}`);
     loggedUploadCandidateRequestIds.clear();
     debugLog("Template capture stopped.");
     postingCaptureTabId = void 0;
-  }
-  async function waitForPostingTemplates() {
-    return waitForPostingTemplatesInternal(true);
   }
   async function waitForPostingTemplatesInternal(requiresUploadTemplate) {
     const startedAt = Date.now();
@@ -18251,7 +18324,7 @@ ${underline}`);
         };
       }
       const matches = findPostRecords(firstObject);
-      const lastMatch = matches.at(-1);
+      const lastMatch = matches.length > 0 ? matches[matches.length - 1] : void 0;
       if (!lastMatch) {
         return {
           success: false,
