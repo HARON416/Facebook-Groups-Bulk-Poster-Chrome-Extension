@@ -2,7 +2,6 @@ import { GoogleGenAI } from "@google/genai";
 import {
   GROUPS_QUERY_FRIENDLY_NAME,
   JOINED_GROUPS_URL,
-  type ClearStatusBannerMessage,
   type CreatePostRequest,
   type CreatePostResponse,
   type ExtensionRequest,
@@ -10,8 +9,6 @@ import {
   type GroupExtractionStatusMessage,
   type SimpleGroup,
   type StartUiPostingRequest,
-  type StatusBannerMessage,
-  type StatusBannerTone,
   type UiPostImage,
   type UiPostingStatusMessage,
 } from "./config";
@@ -57,6 +54,7 @@ const UPLOAD_CANDIDATE_MATCHES = [
   "/ajax/react_composer/attachments/photo/upload",
 ];
 const GEMINI_API_KEY_STORAGE_KEYS = ["geminiApiKey", "GEMINI_API_KEY"] as const;
+const GEMINI_REWRITE_ENABLED_STORAGE_KEY = "geminiRewriteEnabled";
 const GEMINI_MODEL = "gemini-2.5-flash";
 const GEMINI_TIMEOUT_MS = 30_000;
 const LOG_PREFIX = "[Facebook Groups Bulk Poster]";
@@ -615,90 +613,6 @@ async function fetchAllGroupsInPage(
       loadedCount: number,
       done = false,
     ) => {
-      const updateStatusBanner = () => {
-        const banner = document.getElementById("fgbp-status-banner");
-        const styleId = "fgbp-status-banner-style";
-
-        if (!document.getElementById(styleId)) {
-          const style = document.createElement("style");
-          style.id = styleId;
-          style.textContent = `
-            #fgbp-status-banner {
-              position: fixed;
-              top: 12px;
-              left: 12px;
-              z-index: 2147483647;
-              width: max-content;
-              min-width: 240px;
-              max-width: min(720px, calc(100vw - 24px));
-              box-sizing: border-box;
-              display: grid;
-              grid-template-columns: minmax(0, 1fr);
-              gap: 3px;
-              padding: 12px 16px;
-              border-radius: 3px;
-              border: 1px solid rgba(255, 255, 255, 0.16);
-              background: #1E3A8A;
-              color: #ffffff;
-              box-shadow: 0 14px 36px rgba(0, 0, 0, 0.26);
-              font: 13px/1.4 Arial, Helvetica, sans-serif;
-              letter-spacing: 0;
-              backdrop-filter: blur(8px);
-            }
-            #fgbp-status-banner[data-tone="success"] {
-              background: #166534;
-            }
-            #fgbp-status-banner[data-tone="warning"] {
-              background: #B45309;
-            }
-            #fgbp-status-banner[data-tone="error"] {
-              background: #B91C1C;
-            }
-            #fgbp-status-banner strong {
-              display: block;
-              margin: 0;
-              font-size: 14px;
-              font-weight: 700;
-              white-space: normal;
-              overflow-wrap: anywhere;
-            }
-            #fgbp-status-banner span {
-              display: block;
-              color: rgba(255, 255, 255, 0.82);
-              font-size: 12px;
-              overflow-wrap: anywhere;
-            }
-            @media (min-width: 900px) {
-              #fgbp-status-banner {
-                left: 24px;
-                top: 16px;
-                max-width: min(760px, calc(100vw - 48px));
-                padding: 14px 18px;
-              }
-            }
-          `;
-          document.documentElement.append(style);
-        }
-
-        const nextBanner = banner ?? document.createElement("div");
-        nextBanner.id = "fgbp-status-banner";
-        nextBanner.dataset.tone = done ? "success" : "info";
-        nextBanner.setAttribute("role", "status");
-        nextBanner.setAttribute("aria-live", "polite");
-        nextBanner.replaceChildren();
-
-        const title = document.createElement("strong");
-        title.textContent = message;
-        const detail = document.createElement("span");
-        detail.textContent = `${loadedCount} groups loaded`;
-        nextBanner.append(title, detail);
-
-        if (!banner) {
-          document.documentElement.append(nextBanner);
-        }
-      };
-
-      updateStatusBanner();
       void chrome.runtime.sendMessage({
         type: "GROUP_EXTRACTION_STATUS",
         message,
@@ -844,73 +758,24 @@ function notifyGroupsStatus(
   };
 
   void chrome.runtime.sendMessage(status);
-
-  if (captureTabId !== undefined) {
-    void sendStatusBannerToTab(
-      captureTabId,
-      message,
-      done ? "success" : "info",
-      `${loadedCount} groups loaded`,
-    );
-  }
 }
 
 function sleep(duration: number) {
   return new Promise((resolve) => setTimeout(resolve, duration));
 }
 
-async function sendStatusBannerToTab(
-  tabId: number | undefined,
-  message: string,
-  tone: StatusBannerTone = "info",
-  detail?: string,
-): Promise<void> {
-  if (!tabId) {
-    return;
-  }
-
-  const request: StatusBannerMessage = {
-    type: "STATUS_BANNER",
-    message,
-    tone,
-    detail,
-  };
-
-  try {
-    await chrome.tabs.sendMessage(tabId, request);
-  } catch {
-    // The content script may not be ready yet on freshly navigated pages.
-  }
-}
-
-async function clearStatusBannerInTab(tabId: number | undefined): Promise<void> {
-  if (!tabId) {
-    return;
-  }
-
-  const request: ClearStatusBannerMessage = {
-    type: "CLEAR_STATUS_BANNER",
-  };
-
-  try {
-    await chrome.tabs.sendMessage(tabId, request);
-  } catch {
-    // The page may already be gone or the content script may not be present.
-  }
-}
-
 async function sleepWithPostingCountdown(
-  tabId: number,
   durationSeconds: number,
   groupName: string,
 ): Promise<void> {
   for (let remaining = durationSeconds; remaining > 0; remaining -= 1) {
-    await sendStatusBannerToTab(
-      tabId,
-      "Waiting before next group...",
-      "warning",
-      `${remaining}s remaining after ${groupName}`,
-    );
+    notifyUiPostingStatus({
+      status: "waiting",
+      message: `Waiting ${remaining} seconds before next group...`,
+      current: 0,
+      total: 0,
+      groupName,
+    });
     await sleep(1_000);
   }
 }
@@ -996,12 +861,6 @@ async function runGraphqlPostingQueue(
       failedCount,
       processedCount: startIndex,
     });
-    await sendStatusBannerToTab(
-      postingTabId,
-      "GraphQL posting queue ready.",
-      "success",
-      `${total} ${total === 1 ? "group" : "groups"} selected`,
-    );
 
     for (let index = startIndex; index < request.groups.length; index += 1) {
       const group = request.groups[index];
@@ -1015,7 +874,7 @@ async function runGraphqlPostingQueue(
 
       notifyUiPostingStatus({
         status: "posting",
-        message: `Uploading media for ${group.name}...`,
+        message: `Uploading images for ${group.name}...`,
         current,
         total,
         groupId: group.id,
@@ -1024,13 +883,6 @@ async function runGraphqlPostingQueue(
         failedCount,
         processedCount: index,
       });
-
-      await sendStatusBannerToTab(
-        postingTabId,
-        `Preparing ${group.name}...`,
-        "info",
-        `Group ${current} of ${total}`,
-      );
 
       const photoIds = templates.uploadTemplate
         ? await uploadImagesForGroup(
@@ -1075,7 +927,7 @@ async function runGraphqlPostingQueue(
         successCount += 1;
         notifyUiPostingStatus({
           status: "posted",
-          message: `Posted to ${group.name}.`,
+          message: `Posted successfully to ${group.name}.`,
           current,
           total,
           groupId: group.id,
@@ -1084,12 +936,6 @@ async function runGraphqlPostingQueue(
           failedCount,
           processedCount: index + 1,
         });
-        await sendStatusBannerToTab(
-          postingTabId,
-          `Posted to ${group.name}.`,
-          "success",
-          `${successCount}/${total} posted`,
-        );
       } else {
         failedCount += 1;
 
@@ -1106,14 +952,7 @@ async function runGraphqlPostingQueue(
             processedCount: index + 1,
             error: postResult.error,
           });
-          await sendStatusBannerToTab(
-            postingTabId,
-            "Facebook rate limit detected. Stopping.",
-            "error",
-            postResult.error,
-          );
           await sleep(2_000);
-          await clearStatusBannerInTab(postingTabId);
           return;
         }
 
@@ -1129,12 +968,6 @@ async function runGraphqlPostingQueue(
           processedCount: index + 1,
           error: postResult.error,
         });
-        await sendStatusBannerToTab(
-          postingTabId,
-          `Failed to post to ${group.name}.`,
-          "error",
-          postResult.error,
-        );
       }
 
       if (index < request.groups.length - 1) {
@@ -1150,7 +983,6 @@ async function runGraphqlPostingQueue(
           processedCount: index + 1,
         });
         await sleepWithPostingCountdown(
-          postingTabId,
           request.delaySeconds,
           group.name,
         );
@@ -1166,14 +998,7 @@ async function runGraphqlPostingQueue(
       failedCount,
       processedCount: total,
     });
-    await sendStatusBannerToTab(
-      postingTabId,
-      "Posting queue complete.",
-      "success",
-      `${successCount}/${total} posted`,
-    );
     await sleep(2_000);
-    await clearStatusBannerInTab(postingTabId);
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : "Unknown error";
     debugWarn("Posting queue stopped with error.", { error: errorMessage });
@@ -1187,14 +1012,7 @@ async function runGraphqlPostingQueue(
       processedCount: Math.min(successCount + failedCount, total),
       error: errorMessage,
     });
-    await sendStatusBannerToTab(
-      postingTabId,
-      "Posting stopped.",
-      "error",
-      errorMessage,
-    );
     await sleep(2_000);
-    await clearStatusBannerInTab(postingTabId);
   } finally {
     debugLog("Posting queue finished.", {
       total,
@@ -1231,7 +1049,7 @@ async function ensurePostingTemplates(
 
   notifyUiPostingStatus({
     status: "posting",
-    message: "Capturing Facebook request templates from the first post...",
+    message: "Capturing fresh Facebook request templates from the first post...",
     current: 1,
     total,
     groupId: firstGroup.id,
@@ -1240,13 +1058,6 @@ async function ensurePostingTemplates(
     failedCount: 0,
     processedCount: 0,
   });
-
-  await sendStatusBannerToTab(
-    tabId,
-    "Capturing Facebook request templates...",
-    "warning",
-    "The first selected group will be posted normally so later groups can use GraphQL.",
-  );
 
   beginPostingTemplateCapture(tabId);
 
@@ -2164,7 +1975,17 @@ async function maybeRewriteDescription(description: string): Promise<string> {
     return trimmed;
   }
 
-  const storage = await chrome.storage.local.get([...GEMINI_API_KEY_STORAGE_KEYS]);
+  const storage = await chrome.storage.local.get([
+    ...GEMINI_API_KEY_STORAGE_KEYS,
+    GEMINI_REWRITE_ENABLED_STORAGE_KEY,
+  ]);
+  const rewriteEnabled = storage[GEMINI_REWRITE_ENABLED_STORAGE_KEY] === true;
+
+  if (!rewriteEnabled) {
+    debugLog("Gemini rewrite skipped because the feature is disabled.");
+    return trimmed;
+  }
+
   const apiKey = GEMINI_API_KEY_STORAGE_KEYS.map((key) => storage[key]).find(
     (value): value is string => typeof value === "string" && value.trim().length > 0,
   );

@@ -17065,6 +17065,7 @@ ${underline}`);
     "/ajax/react_composer/attachments/photo/upload"
   ];
   var GEMINI_API_KEY_STORAGE_KEYS = ["geminiApiKey", "GEMINI_API_KEY"];
+  var GEMINI_REWRITE_ENABLED_STORAGE_KEY = "geminiRewriteEnabled";
   var GEMINI_MODEL = "gemini-2.5-flash";
   var GEMINI_TIMEOUT_MS = 3e4;
   var LOG_PREFIX = "[Facebook Groups Bulk Poster]";
@@ -17467,85 +17468,6 @@ ${underline}`);
   async function fetchAllGroupsInPage(config, groupsQueryFriendlyName) {
     try {
       const notifyGroupsStatus2 = (message, loadedCount, done = false) => {
-        const updateStatusBanner = () => {
-          const banner = document.getElementById("fgbp-status-banner");
-          const styleId = "fgbp-status-banner-style";
-          if (!document.getElementById(styleId)) {
-            const style = document.createElement("style");
-            style.id = styleId;
-            style.textContent = `
-            #fgbp-status-banner {
-              position: fixed;
-              top: 12px;
-              left: 12px;
-              z-index: 2147483647;
-              width: max-content;
-              min-width: 240px;
-              max-width: min(720px, calc(100vw - 24px));
-              box-sizing: border-box;
-              display: grid;
-              grid-template-columns: minmax(0, 1fr);
-              gap: 3px;
-              padding: 12px 16px;
-              border-radius: 3px;
-              border: 1px solid rgba(255, 255, 255, 0.16);
-              background: #1E3A8A;
-              color: #ffffff;
-              box-shadow: 0 14px 36px rgba(0, 0, 0, 0.26);
-              font: 13px/1.4 Arial, Helvetica, sans-serif;
-              letter-spacing: 0;
-              backdrop-filter: blur(8px);
-            }
-            #fgbp-status-banner[data-tone="success"] {
-              background: #166534;
-            }
-            #fgbp-status-banner[data-tone="warning"] {
-              background: #B45309;
-            }
-            #fgbp-status-banner[data-tone="error"] {
-              background: #B91C1C;
-            }
-            #fgbp-status-banner strong {
-              display: block;
-              margin: 0;
-              font-size: 14px;
-              font-weight: 700;
-              white-space: normal;
-              overflow-wrap: anywhere;
-            }
-            #fgbp-status-banner span {
-              display: block;
-              color: rgba(255, 255, 255, 0.82);
-              font-size: 12px;
-              overflow-wrap: anywhere;
-            }
-            @media (min-width: 900px) {
-              #fgbp-status-banner {
-                left: 24px;
-                top: 16px;
-                max-width: min(760px, calc(100vw - 48px));
-                padding: 14px 18px;
-              }
-            }
-          `;
-            document.documentElement.append(style);
-          }
-          const nextBanner = banner ?? document.createElement("div");
-          nextBanner.id = "fgbp-status-banner";
-          nextBanner.dataset.tone = done ? "success" : "info";
-          nextBanner.setAttribute("role", "status");
-          nextBanner.setAttribute("aria-live", "polite");
-          nextBanner.replaceChildren();
-          const title = document.createElement("strong");
-          title.textContent = message;
-          const detail = document.createElement("span");
-          detail.textContent = `${loadedCount} groups loaded`;
-          nextBanner.append(title, detail);
-          if (!banner) {
-            document.documentElement.append(nextBanner);
-          }
-        };
-        updateStatusBanner();
         void chrome.runtime.sendMessage({
           type: "GROUP_EXTRACTION_STATUS",
           message,
@@ -17661,53 +17583,19 @@ ${underline}`);
       done
     };
     void chrome.runtime.sendMessage(status);
-    if (captureTabId !== void 0) {
-      void sendStatusBannerToTab(
-        captureTabId,
-        message,
-        done ? "success" : "info",
-        `${loadedCount} groups loaded`
-      );
-    }
   }
   function sleep2(duration) {
     return new Promise((resolve) => setTimeout(resolve, duration));
   }
-  async function sendStatusBannerToTab(tabId, message, tone = "info", detail) {
-    if (!tabId) {
-      return;
-    }
-    const request = {
-      type: "STATUS_BANNER",
-      message,
-      tone,
-      detail
-    };
-    try {
-      await chrome.tabs.sendMessage(tabId, request);
-    } catch {
-    }
-  }
-  async function clearStatusBannerInTab(tabId) {
-    if (!tabId) {
-      return;
-    }
-    const request = {
-      type: "CLEAR_STATUS_BANNER"
-    };
-    try {
-      await chrome.tabs.sendMessage(tabId, request);
-    } catch {
-    }
-  }
-  async function sleepWithPostingCountdown(tabId, durationSeconds, groupName) {
+  async function sleepWithPostingCountdown(durationSeconds, groupName) {
     for (let remaining = durationSeconds; remaining > 0; remaining -= 1) {
-      await sendStatusBannerToTab(
-        tabId,
-        "Waiting before next group...",
-        "warning",
-        `${remaining}s remaining after ${groupName}`
-      );
+      notifyUiPostingStatus({
+        status: "waiting",
+        message: `Waiting ${remaining} seconds before next group...`,
+        current: 0,
+        total: 0,
+        groupName
+      });
       await sleep2(1e3);
     }
   }
@@ -17781,12 +17669,6 @@ ${underline}`);
         failedCount,
         processedCount: startIndex
       });
-      await sendStatusBannerToTab(
-        postingTabId,
-        "GraphQL posting queue ready.",
-        "success",
-        `${total} ${total === 1 ? "group" : "groups"} selected`
-      );
       for (let index = startIndex; index < request.groups.length; index += 1) {
         const group = request.groups[index];
         const current = index + 1;
@@ -17798,7 +17680,7 @@ ${underline}`);
         });
         notifyUiPostingStatus({
           status: "posting",
-          message: `Uploading media for ${group.name}...`,
+          message: `Uploading images for ${group.name}...`,
           current,
           total,
           groupId: group.id,
@@ -17807,12 +17689,6 @@ ${underline}`);
           failedCount,
           processedCount: index
         });
-        await sendStatusBannerToTab(
-          postingTabId,
-          `Preparing ${group.name}...`,
-          "info",
-          `Group ${current} of ${total}`
-        );
         const photoIds = templates.uploadTemplate ? await uploadImagesForGroup(
           postingTabId,
           templates.uploadTemplate,
@@ -17851,7 +17727,7 @@ ${underline}`);
           successCount += 1;
           notifyUiPostingStatus({
             status: "posted",
-            message: `Posted to ${group.name}.`,
+            message: `Posted successfully to ${group.name}.`,
             current,
             total,
             groupId: group.id,
@@ -17860,12 +17736,6 @@ ${underline}`);
             failedCount,
             processedCount: index + 1
           });
-          await sendStatusBannerToTab(
-            postingTabId,
-            `Posted to ${group.name}.`,
-            "success",
-            `${successCount}/${total} posted`
-          );
         } else {
           failedCount += 1;
           if (isRateLimitError(postResult.error)) {
@@ -17881,14 +17751,7 @@ ${underline}`);
               processedCount: index + 1,
               error: postResult.error
             });
-            await sendStatusBannerToTab(
-              postingTabId,
-              "Facebook rate limit detected. Stopping.",
-              "error",
-              postResult.error
-            );
             await sleep2(2e3);
-            await clearStatusBannerInTab(postingTabId);
             return;
           }
           notifyUiPostingStatus({
@@ -17903,12 +17766,6 @@ ${underline}`);
             processedCount: index + 1,
             error: postResult.error
           });
-          await sendStatusBannerToTab(
-            postingTabId,
-            `Failed to post to ${group.name}.`,
-            "error",
-            postResult.error
-          );
         }
         if (index < request.groups.length - 1) {
           notifyUiPostingStatus({
@@ -17923,7 +17780,6 @@ ${underline}`);
             processedCount: index + 1
           });
           await sleepWithPostingCountdown(
-            postingTabId,
             request.delaySeconds,
             group.name
           );
@@ -17938,14 +17794,7 @@ ${underline}`);
         failedCount,
         processedCount: total
       });
-      await sendStatusBannerToTab(
-        postingTabId,
-        "Posting queue complete.",
-        "success",
-        `${successCount}/${total} posted`
-      );
       await sleep2(2e3);
-      await clearStatusBannerInTab(postingTabId);
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : "Unknown error";
       debugWarn("Posting queue stopped with error.", { error: errorMessage });
@@ -17959,14 +17808,7 @@ ${underline}`);
         processedCount: Math.min(successCount + failedCount, total),
         error: errorMessage
       });
-      await sendStatusBannerToTab(
-        postingTabId,
-        "Posting stopped.",
-        "error",
-        errorMessage
-      );
       await sleep2(2e3);
-      await clearStatusBannerInTab(postingTabId);
     } finally {
       debugLog("Posting queue finished.", {
         total,
@@ -17989,7 +17831,7 @@ ${underline}`);
     });
     notifyUiPostingStatus({
       status: "posting",
-      message: "Capturing Facebook request templates from the first post...",
+      message: "Capturing fresh Facebook request templates from the first post...",
       current: 1,
       total,
       groupId: firstGroup.id,
@@ -17998,12 +17840,6 @@ ${underline}`);
       failedCount: 0,
       processedCount: 0
     });
-    await sendStatusBannerToTab(
-      tabId,
-      "Capturing Facebook request templates...",
-      "warning",
-      "The first selected group will be posted normally so later groups can use GraphQL."
-    );
     beginPostingTemplateCapture(tabId);
     const groupUrl = normalizeGroupUrl(firstGroup.id);
     await chrome.tabs.update(tabId, { url: groupUrl, active: true });
@@ -18661,7 +18497,15 @@ ${underline}`);
     if (!trimmed) {
       return trimmed;
     }
-    const storage = await chrome.storage.local.get([...GEMINI_API_KEY_STORAGE_KEYS]);
+    const storage = await chrome.storage.local.get([
+      ...GEMINI_API_KEY_STORAGE_KEYS,
+      GEMINI_REWRITE_ENABLED_STORAGE_KEY
+    ]);
+    const rewriteEnabled = storage[GEMINI_REWRITE_ENABLED_STORAGE_KEY] === true;
+    if (!rewriteEnabled) {
+      debugLog("Gemini rewrite skipped because the feature is disabled.");
+      return trimmed;
+    }
     const apiKey = GEMINI_API_KEY_STORAGE_KEYS.map((key) => storage[key]).find(
       (value) => typeof value === "string" && value.trim().length > 0
     );

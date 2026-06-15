@@ -1,124 +1,17 @@
 import type {
-  ClearStatusBannerMessage,
   CreatePostRequest,
   CreatePostResponse,
-  StatusBannerMessage,
-  StatusBannerTone,
   UiPostImage,
 } from "./config";
 
 const WRITE_SOMETHING_SPAN_SELECTOR = "span.x1lliihq.x6ikm8r.x10wlt62.x1n2onr6";
 const POST_DIALOG_SELECTOR =
   "div.x1n2onr6.x1ja2u2z.x1afcbsf.x78zum5.xdt5ytf.x1a2a7pz.x6ikm8r.x10wlt62.x71s49j.x1jx94hy.xw5cjc7.x1dmpuos.x1vsv7so.xau1kf4.x104qc98.x15o3w11.xogydr4.x1vmz7ll.x1yyrj1m.x193iq5w";
-const STATUS_BANNER_ID = "fgbp-status-banner";
-const STATUS_BANNER_STYLE_ID = "fgbp-status-banner-style";
 
-type ContentRequest =
-  | ClearStatusBannerMessage
-  | CreatePostRequest
-  | StatusBannerMessage;
+type ContentRequest = CreatePostRequest;
 
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
-}
-
-function ensureStatusBanner(): HTMLElement {
-  if (!document.getElementById(STATUS_BANNER_STYLE_ID)) {
-    const style = document.createElement("style");
-    style.id = STATUS_BANNER_STYLE_ID;
-    style.textContent = `
-      #${STATUS_BANNER_ID} {
-        position: fixed;
-        top: 12px;
-        left: 12px;
-        z-index: 2147483647;
-        width: max-content;
-        min-width: 240px;
-        max-width: min(720px, calc(100vw - 24px));
-        box-sizing: border-box;
-        display: grid;
-        grid-template-columns: minmax(0, 1fr);
-        gap: 3px;
-        padding: 12px 16px;
-        border-radius: 3px;
-        border: 1px solid rgba(255, 255, 255, 0.16);
-        background: #1E3A8A;
-        color: #ffffff;
-        box-shadow: 0 14px 36px rgba(0, 0, 0, 0.26);
-        font: 13px/1.4 Arial, Helvetica, sans-serif;
-        letter-spacing: 0;
-        backdrop-filter: blur(8px);
-      }
-      #${STATUS_BANNER_ID}[data-tone="success"] {
-        background: #166534;
-      }
-      #${STATUS_BANNER_ID}[data-tone="warning"] {
-        background: #B45309;
-      }
-      #${STATUS_BANNER_ID}[data-tone="error"] {
-        background: #B91C1C;
-      }
-      #${STATUS_BANNER_ID} strong {
-        display: block;
-        margin: 0;
-        font-size: 14px;
-        font-weight: 700;
-        white-space: normal;
-        overflow-wrap: anywhere;
-      }
-      #${STATUS_BANNER_ID} span {
-        display: block;
-        color: rgba(255, 255, 255, 0.82);
-        font-size: 12px;
-        overflow-wrap: anywhere;
-      }
-            @media (min-width: 900px) {
-              #${STATUS_BANNER_ID} {
-                left: 24px;
-                top: 16px;
-                max-width: min(760px, calc(100vw - 48px));
-                padding: 14px 18px;
-              }
-            }
-    `;
-    document.documentElement.append(style);
-  }
-
-  const existing = document.getElementById(STATUS_BANNER_ID);
-  if (existing) {
-    return existing;
-  }
-
-  const banner = document.createElement("div");
-  banner.id = STATUS_BANNER_ID;
-  banner.setAttribute("role", "status");
-  banner.setAttribute("aria-live", "polite");
-  document.documentElement.append(banner);
-  return banner;
-}
-
-function showStatusBanner(
-  message: string,
-  tone: StatusBannerTone = "info",
-  detail?: string,
-): void {
-  const banner = ensureStatusBanner();
-  banner.dataset.tone = tone;
-  banner.replaceChildren();
-
-  const title = document.createElement("strong");
-  title.textContent = message;
-  banner.append(title);
-
-  if (detail) {
-    const detailElement = document.createElement("span");
-    detailElement.textContent = detail;
-    banner.append(detailElement);
-  }
-}
-
-function clearStatusBanner(): void {
-  document.getElementById(STATUS_BANNER_ID)?.remove();
 }
 
 function findWriteSomethingButton(): HTMLElement | null {
@@ -140,7 +33,6 @@ function findWriteSomethingButton(): HTMLElement | null {
 
 async function waitForDialog(): Promise<Element> {
   // Wait 10 seconds like the Go code does after clicking write something
-  showStatusBanner("Waiting for post dialog...", "info");
   await sleep(10_000);
 
   const dialog = document.querySelector(POST_DIALOG_SELECTOR);
@@ -166,18 +58,12 @@ async function waitForElement<T extends Element>(
 }
 
 async function uiPostImageToFile(image: UiPostImage): Promise<File> {
-  showStatusBanner("Preparing image upload...", "info", image.name);
   const res = await fetch(image.dataUrl);
   const blob = await res.blob();
   return new File([blob], image.name, { type: image.type });
 }
 
 async function insertImages(dialog: Element, files: File[]): Promise<void> {
-  showStatusBanner(
-    "Adding images to post...",
-    "info",
-    `${files.length} ${files.length === 1 ? "image" : "images"}`,
-  );
   const dt = new DataTransfer();
   for (const file of files) {
     dt.items.add(file);
@@ -226,7 +112,6 @@ async function insertImages(dialog: Element, files: File[]): Promise<void> {
       }
 
       console.log("[Facebook Groups Bulk Poster] Clicking Photo/video button");
-      showStatusBanner("Opening Facebook photo picker...", "info");
       photoVideoButton.click();
 
       fileInput = await waitForElement<HTMLInputElement>(
@@ -271,11 +156,9 @@ async function insertImages(dialog: Element, files: File[]): Promise<void> {
   console.log("[Facebook Groups Bulk Poster] Images inserted", {
     count: files.length,
   });
-  showStatusBanner("Images added to post.", "success");
 }
 
 async function insertDescription(dialog: Element, text: string): Promise<void> {
-  showStatusBanner("Adding post text...", "info");
   let textbox = dialog.querySelector<HTMLElement>(
     `div[role="textbox"][contenteditable="true"]`,
   );
@@ -334,11 +217,9 @@ async function insertDescription(dialog: Element, text: string): Promise<void> {
   console.log("[Facebook Groups Bulk Poster] Description inserted", {
     textboxContent: textbox.textContent?.slice(0, 100),
   });
-  showStatusBanner("Post text added.", "success");
 }
 
 async function clickPostButton(dialog: Element): Promise<void> {
-  showStatusBanner("Looking for Post button...", "info");
   let postButton = dialog.querySelector<HTMLElement>(`div[aria-label="Post"]`);
 
   if (postButton) {
@@ -356,7 +237,6 @@ async function clickPostButton(dialog: Element): Promise<void> {
 
   postButton.click();
   console.log("[Facebook Groups Bulk Poster] Post button clicked");
-  showStatusBanner("Submitting post...", "info");
 
   // Wait for dialog to disappear (post submitted) — up to 120 * 2s = 4 minutes
   for (let i = 0; i < 120; i += 1) {
@@ -373,11 +253,6 @@ async function clickPostButton(dialog: Element): Promise<void> {
         console.warn(
           "[Facebook Groups Bulk Poster] Hit posting limit. Please wait and try again later.",
         );
-        showStatusBanner(
-          "Facebook rate limit detected.",
-          "error",
-          "Posting stopped. Please wait and try again later.",
-        );
         throw new Error("Hit posting limit. Please wait and try again later.");
       }
 
@@ -389,21 +264,14 @@ async function clickPostButton(dialog: Element): Promise<void> {
         console.warn(
           "[Facebook Groups Bulk Poster] Temporarily blocked from performing this action.",
         );
-        showStatusBanner(
-          "Facebook temporarily blocked this action.",
-          "error",
-          "Posting stopped. Please wait and try again later.",
-        );
         throw new Error("Temporarily blocked from performing this action.");
       }
 
       console.log("[Facebook Groups Bulk Poster] Posting...");
-      showStatusBanner("Posting in progress...", "info");
       continue;
     }
 
     console.log("[Facebook Groups Bulk Poster] Ad posted successfully");
-    showStatusBanner("Post submitted successfully.", "success");
     return;
   }
 
@@ -414,20 +282,8 @@ chrome.runtime.onMessage.addListener(
   (
     request: ContentRequest,
     _sender,
-    sendResponse: (response: CreatePostResponse | { ok: true }) => void,
+    sendResponse: (response: CreatePostResponse) => void,
   ) => {
-    if (request.type === "STATUS_BANNER") {
-      showStatusBanner(request.message, request.tone, request.detail);
-      sendResponse({ ok: true });
-      return false;
-    }
-
-    if (request.type === "CLEAR_STATUS_BANNER") {
-      clearStatusBanner();
-      sendResponse({ ok: true });
-      return false;
-    }
-
     if (request.type !== "CREATE_POST") {
       return false;
     }
@@ -435,7 +291,6 @@ chrome.runtime.onMessage.addListener(
     const spans = document.querySelectorAll(WRITE_SOMETHING_SPAN_SELECTOR);
     const button = findWriteSomethingButton();
 
-    showStatusBanner("Opening composer...", "info");
     button?.scrollIntoView({ block: "center", inline: "center" });
     button?.focus();
     button?.click();
@@ -446,11 +301,6 @@ chrome.runtime.onMessage.addListener(
     });
 
     if (!button) {
-      showStatusBanner(
-        "Composer trigger not found.",
-        "error",
-        "Facebook did not show the Write something button.",
-      );
       sendResponse({
         ok: false,
         composerFound: false,
@@ -466,7 +316,6 @@ chrome.runtime.onMessage.addListener(
         console.log("[Facebook Groups Bulk Poster] Dialog appeared", {
           dialog,
         });
-        showStatusBanner("Composer dialog opened.", "success");
 
         if (request.images?.length) {
           const files = await Promise.all(
@@ -491,11 +340,6 @@ chrome.runtime.onMessage.addListener(
         });
       })
       .catch((error) => {
-        showStatusBanner(
-          "Post creation failed.",
-          "error",
-          error instanceof Error ? error.message : "Dialog did not appear.",
-        );
         sendResponse({
           ok: false,
           composerFound: true,

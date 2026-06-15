@@ -8,6 +8,10 @@ import type {
   UiPostingStatusMessage,
 } from "./config";
 
+const GEMINI_API_KEY_STORAGE_KEY = "geminiApiKey";
+const GEMINI_REWRITE_ENABLED_STORAGE_KEY = "geminiRewriteEnabled";
+const MIN_SLEEP_SECONDS = 120;
+
 const loadGroupsButton =
   document.querySelector<HTMLButtonElement>("#load-groups-btn");
 const groupsList = document.querySelector<HTMLElement>("#groups-list");
@@ -29,6 +33,18 @@ const imagePreviewList = document.querySelector<HTMLElement>(
 );
 const postSleepInput =
   document.querySelector<HTMLInputElement>("#post-sleep-input");
+const geminiApiKeyInput = document.querySelector<HTMLInputElement>(
+  "#gemini-api-key-input",
+);
+const geminiRewriteToggle = document.querySelector<HTMLInputElement>(
+  "#gemini-rewrite-toggle",
+);
+const geminiStatusMessage = document.querySelector<HTMLElement>(
+  "#gemini-status-message",
+);
+const geminiStatusCount = document.querySelector<HTMLElement>(
+  "#gemini-status-count",
+);
 const createForm = document.querySelector<HTMLFormElement>("#create-form");
 const startPostingButton =
   document.querySelector<HTMLButtonElement>("#start-posting-btn");
@@ -61,6 +77,8 @@ const postingProgressLog = document.querySelector<HTMLOListElement>(
 const selectedImagePreviewUrls: string[] = [];
 let selectedImageFiles: File[] = [];
 let loadedGroups: FacebookGroup[] = [];
+
+void initializeGeminiSettings();
 
 function renderGroups(groups: FacebookGroup[]) {
   if (!groupsList) {
@@ -117,6 +135,27 @@ function updateGroupsStatus(message: string, loadedCount: number) {
   }
 }
 
+function updateGeminiStatus() {
+  const hasKey = (geminiApiKeyInput?.value.trim().length ?? 0) > 0;
+  const rewriteEnabled = Boolean(geminiRewriteToggle?.checked);
+
+  if (geminiStatusMessage) {
+    geminiStatusMessage.textContent = rewriteEnabled
+      ? hasKey
+        ? "Gemini rewrite is enabled."
+        : "Gemini rewrite is enabled, but no API key is saved yet."
+      : "Gemini rewrite is off.";
+  }
+
+  if (geminiStatusCount) {
+    geminiStatusCount.textContent = hasKey
+      ? rewriteEnabled
+        ? "Ready"
+        : "Key saved"
+      : "No key";
+  }
+}
+
 function getSelectedGroupsCount() {
   return document.querySelectorAll<HTMLInputElement>(
     ".group-item__checkbox:checked",
@@ -127,7 +166,8 @@ function updatePostingReadiness() {
   const selectedGroupsCount = getSelectedGroupsCount();
   const hasPostBody = (postBodyInput?.value.trim().length ?? 0) > 0;
   const sleepTime = Number(postSleepInput?.value ?? 0);
-  const hasValidSleepTime = Number.isFinite(sleepTime) && sleepTime >= 300;
+  const hasValidSleepTime =
+    Number.isFinite(sleepTime) && sleepTime >= MIN_SLEEP_SECONDS;
 
   if (groupsSelectionCount) {
     groupsSelectionCount.textContent = `${selectedGroupsCount} ${
@@ -378,11 +418,28 @@ postImagesInput?.addEventListener("change", () => {
 
 postBodyInput?.addEventListener("input", updatePostingReadiness);
 
+geminiApiKeyInput?.addEventListener("input", () => {
+  updateGeminiStatus();
+});
+
+geminiApiKeyInput?.addEventListener("change", () => {
+  void saveGeminiApiKey();
+});
+
+geminiApiKeyInput?.addEventListener("blur", () => {
+  void saveGeminiApiKey();
+});
+
+geminiRewriteToggle?.addEventListener("change", () => {
+  void saveGeminiRewriteEnabled();
+  updateGeminiStatus();
+});
+
 postSleepInput?.addEventListener("change", () => {
   const value = Number(postSleepInput.value);
 
-  if (!Number.isFinite(value) || value < 300) {
-    postSleepInput.value = "300";
+  if (!Number.isFinite(value) || value < MIN_SLEEP_SECONDS) {
+    postSleepInput.value = String(MIN_SLEEP_SECONDS);
   }
 
   updatePostingReadiness();
@@ -414,9 +471,9 @@ startPostingButton?.addEventListener("click", async () => {
     return;
   }
 
-  const sleepTime = Number(postSleepInput?.value ?? 300);
-  if (!Number.isFinite(sleepTime) || sleepTime < 300) {
-    alert("Sleep time must be at least 300 seconds");
+  const sleepTime = Number(postSleepInput?.value ?? MIN_SLEEP_SECONDS);
+  if (!Number.isFinite(sleepTime) || sleepTime < MIN_SLEEP_SECONDS) {
+    alert(`Sleep time must be at least ${MIN_SLEEP_SECONDS} seconds`);
     return;
   }
 
@@ -468,6 +525,7 @@ startPostingButton?.addEventListener("click", async () => {
 });
 
 updatePostingReadiness();
+updateGeminiStatus();
 
 window.addEventListener("beforeunload", clearImagePreviewUrls);
 
@@ -533,5 +591,42 @@ function scrollPostingProgressIntoView() {
   postingProgress?.scrollIntoView({
     behavior: "smooth",
     block: "start",
+  });
+}
+
+async function initializeGeminiSettings() {
+  const storage = await chrome.storage.local.get([
+    GEMINI_API_KEY_STORAGE_KEY,
+    GEMINI_REWRITE_ENABLED_STORAGE_KEY,
+  ]);
+
+  if (geminiApiKeyInput) {
+    geminiApiKeyInput.value =
+      typeof storage[GEMINI_API_KEY_STORAGE_KEY] === "string"
+        ? storage[GEMINI_API_KEY_STORAGE_KEY]
+        : "";
+  }
+
+  if (geminiRewriteToggle) {
+    geminiRewriteToggle.checked =
+      storage[GEMINI_REWRITE_ENABLED_STORAGE_KEY] === true;
+  }
+
+  updateGeminiStatus();
+}
+
+async function saveGeminiApiKey() {
+  const value = geminiApiKeyInput?.value.trim() ?? "";
+  await chrome.storage.local.set({
+    [GEMINI_API_KEY_STORAGE_KEY]: value,
+  });
+  updateGeminiStatus();
+}
+
+async function saveGeminiRewriteEnabled() {
+  await chrome.storage.local.set({
+    [GEMINI_REWRITE_ENABLED_STORAGE_KEY]: Boolean(
+      geminiRewriteToggle?.checked,
+    ),
   });
 }

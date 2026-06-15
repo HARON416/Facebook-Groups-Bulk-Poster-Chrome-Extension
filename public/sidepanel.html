@@ -9,21 +9,40 @@
   <body>
     <main id="app">
       <form id="create-form" class="workflow">
+        <section class="hero-card">
+          <p class="hero-card__eyebrow">Facebook Groups Bulk Poster</p>
+          <h1 class="hero-card__title">Post faster, with cleaner control.</h1>
+          <p class="hero-card__summary">
+            Load your groups, prepare the post, and run the queue from one polished workspace.
+          </p>
+          <div class="hero-card__stats" aria-hidden="true">
+            <span>GraphQL Posting</span>
+            <span>Template Capture</span>
+            <span>Optional Gemini Rewrite</span>
+          </div>
+        </section>
+
         <section class="panel-section">
+          <div class="section-heading">
+            <p class="section-heading__eyebrow">Copy</p>
+            <h2 class="section-heading__title">Post Body</h2>
+          </div>
           <div class="field">
-            <label for="post-body-input">Post Body</label>
             <textarea
               id="post-body-input"
               name="post-body"
               rows="9"
-              placeholder="Write your post..."
+              placeholder="Write the post you want sent to your selected groups..."
             ></textarea>
           </div>
         </section>
 
         <section class="panel-section">
+          <div class="section-heading">
+            <p class="section-heading__eyebrow">Media</p>
+            <h2 class="section-heading__title">Images</h2>
+          </div>
           <div class="field">
-            <label for="post-images-input">Image Selection</label>
             <label id="image-picker" for="post-images-input">
               <span>Choose images</span>
               <small>Multiple images supported</small>
@@ -43,6 +62,10 @@
         </section>
 
         <section class="panel-section">
+          <div class="section-heading">
+            <p class="section-heading__eyebrow">Audience</p>
+            <h2 class="section-heading__title">Groups</h2>
+          </div>
           <button type="button" id="load-groups-btn">Load Groups</button>
           <div id="groups-status" class="status-bar" role="status">
             <span id="groups-status-message">Ready to load groups.</span>
@@ -55,6 +78,10 @@
         </section>
 
         <section class="panel-section">
+          <div class="section-heading">
+            <p class="section-heading__eyebrow">Automation</p>
+            <h2 class="section-heading__title">Queue Settings</h2>
+          </div>
           <div class="field">
             <label for="post-sleep-input">Sleep Time in Seconds Between Posts</label>
             <div class="number-input-row">
@@ -62,11 +89,43 @@
                 type="number"
                 id="post-sleep-input"
                 name="post-sleep"
-                min="300"
+                min="120"
                 step="60"
-                value="300"
+                value="120"
               />
             </div>
+          </div>
+
+          <div class="field">
+            <label for="gemini-api-key-input">Gemini API Key</label>
+            <input
+              type="password"
+              id="gemini-api-key-input"
+              name="gemini-api-key"
+              placeholder="Paste Gemini API key"
+              autocomplete="off"
+              spellcheck="false"
+            />
+            <p class="section-note">
+              Saved locally in this browser profile and used only for description rewriting.
+            </p>
+          </div>
+
+          <label class="toggle-row" for="gemini-rewrite-toggle">
+            <span class="toggle-row__copy">
+              <strong>Enable Gemini Rewrite</strong>
+              <small>Rewrite the post body before posting when a saved key is available.</small>
+            </span>
+            <input
+              type="checkbox"
+              id="gemini-rewrite-toggle"
+              name="gemini-rewrite-toggle"
+            />
+          </label>
+
+          <div id="gemini-status" class="status-bar" role="status">
+            <span id="gemini-status-message">Gemini rewrite is off.</span>
+            <span id="gemini-status-count">No key</span>
           </div>
 
           <button type="submit" id="start-posting-btn" disabled>

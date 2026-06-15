@@ -1,6 +1,9 @@
 "use strict";
 (() => {
   // src/sidepanel.ts
+  var GEMINI_API_KEY_STORAGE_KEY = "geminiApiKey";
+  var GEMINI_REWRITE_ENABLED_STORAGE_KEY = "geminiRewriteEnabled";
+  var MIN_SLEEP_SECONDS = 120;
   var loadGroupsButton = document.querySelector("#load-groups-btn");
   var groupsList = document.querySelector("#groups-list");
   var groupsStatusMessage = document.querySelector(
@@ -18,6 +21,18 @@
     "#image-preview-list"
   );
   var postSleepInput = document.querySelector("#post-sleep-input");
+  var geminiApiKeyInput = document.querySelector(
+    "#gemini-api-key-input"
+  );
+  var geminiRewriteToggle = document.querySelector(
+    "#gemini-rewrite-toggle"
+  );
+  var geminiStatusMessage = document.querySelector(
+    "#gemini-status-message"
+  );
+  var geminiStatusCount = document.querySelector(
+    "#gemini-status-count"
+  );
   var createForm = document.querySelector("#create-form");
   var startPostingButton = document.querySelector("#start-posting-btn");
   var postingProgress = document.querySelector("#posting-progress");
@@ -48,6 +63,7 @@
   var selectedImagePreviewUrls = [];
   var selectedImageFiles = [];
   var loadedGroups = [];
+  void initializeGeminiSettings();
   function renderGroups(groups) {
     if (!groupsList) {
       return;
@@ -91,6 +107,16 @@
       groupsStatusCount.textContent = `${loadedCount} loaded`;
     }
   }
+  function updateGeminiStatus() {
+    const hasKey = (geminiApiKeyInput?.value.trim().length ?? 0) > 0;
+    const rewriteEnabled = Boolean(geminiRewriteToggle?.checked);
+    if (geminiStatusMessage) {
+      geminiStatusMessage.textContent = rewriteEnabled ? hasKey ? "Gemini rewrite is enabled." : "Gemini rewrite is enabled, but no API key is saved yet." : "Gemini rewrite is off.";
+    }
+    if (geminiStatusCount) {
+      geminiStatusCount.textContent = hasKey ? rewriteEnabled ? "Ready" : "Key saved" : "No key";
+    }
+  }
   function getSelectedGroupsCount() {
     return document.querySelectorAll(
       ".group-item__checkbox:checked"
@@ -100,7 +126,7 @@
     const selectedGroupsCount = getSelectedGroupsCount();
     const hasPostBody = (postBodyInput?.value.trim().length ?? 0) > 0;
     const sleepTime = Number(postSleepInput?.value ?? 0);
-    const hasValidSleepTime = Number.isFinite(sleepTime) && sleepTime >= 300;
+    const hasValidSleepTime = Number.isFinite(sleepTime) && sleepTime >= MIN_SLEEP_SECONDS;
     if (groupsSelectionCount) {
       groupsSelectionCount.textContent = `${selectedGroupsCount} ${selectedGroupsCount === 1 ? "group" : "groups"} selected`;
     }
@@ -275,10 +301,23 @@
     renderImagePreviews();
   });
   postBodyInput?.addEventListener("input", updatePostingReadiness);
+  geminiApiKeyInput?.addEventListener("input", () => {
+    updateGeminiStatus();
+  });
+  geminiApiKeyInput?.addEventListener("change", () => {
+    void saveGeminiApiKey();
+  });
+  geminiApiKeyInput?.addEventListener("blur", () => {
+    void saveGeminiApiKey();
+  });
+  geminiRewriteToggle?.addEventListener("change", () => {
+    void saveGeminiRewriteEnabled();
+    updateGeminiStatus();
+  });
   postSleepInput?.addEventListener("change", () => {
     const value = Number(postSleepInput.value);
-    if (!Number.isFinite(value) || value < 300) {
-      postSleepInput.value = "300";
+    if (!Number.isFinite(value) || value < MIN_SLEEP_SECONDS) {
+      postSleepInput.value = String(MIN_SLEEP_SECONDS);
     }
     updatePostingReadiness();
   });
@@ -303,9 +342,9 @@
       alert("Please enter post text");
       return;
     }
-    const sleepTime = Number(postSleepInput?.value ?? 300);
-    if (!Number.isFinite(sleepTime) || sleepTime < 300) {
-      alert("Sleep time must be at least 300 seconds");
+    const sleepTime = Number(postSleepInput?.value ?? MIN_SLEEP_SECONDS);
+    if (!Number.isFinite(sleepTime) || sleepTime < MIN_SLEEP_SECONDS) {
+      alert(`Sleep time must be at least ${MIN_SLEEP_SECONDS} seconds`);
       return;
     }
     const selectedGroups = loadedGroups.filter(
@@ -346,6 +385,7 @@
     }
   });
   updatePostingReadiness();
+  updateGeminiStatus();
   window.addEventListener("beforeunload", clearImagePreviewUrls);
   function fileToUiPostImage(file) {
     return new Promise((resolve, reject) => {
@@ -398,6 +438,33 @@
     postingProgress?.scrollIntoView({
       behavior: "smooth",
       block: "start"
+    });
+  }
+  async function initializeGeminiSettings() {
+    const storage = await chrome.storage.local.get([
+      GEMINI_API_KEY_STORAGE_KEY,
+      GEMINI_REWRITE_ENABLED_STORAGE_KEY
+    ]);
+    if (geminiApiKeyInput) {
+      geminiApiKeyInput.value = typeof storage[GEMINI_API_KEY_STORAGE_KEY] === "string" ? storage[GEMINI_API_KEY_STORAGE_KEY] : "";
+    }
+    if (geminiRewriteToggle) {
+      geminiRewriteToggle.checked = storage[GEMINI_REWRITE_ENABLED_STORAGE_KEY] === true;
+    }
+    updateGeminiStatus();
+  }
+  async function saveGeminiApiKey() {
+    const value = geminiApiKeyInput?.value.trim() ?? "";
+    await chrome.storage.local.set({
+      [GEMINI_API_KEY_STORAGE_KEY]: value
+    });
+    updateGeminiStatus();
+  }
+  async function saveGeminiRewriteEnabled() {
+    await chrome.storage.local.set({
+      [GEMINI_REWRITE_ENABLED_STORAGE_KEY]: Boolean(
+        geminiRewriteToggle?.checked
+      )
     });
   }
 })();
