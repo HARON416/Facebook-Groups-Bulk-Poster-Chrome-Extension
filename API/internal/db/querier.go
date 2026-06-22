@@ -9,7 +9,11 @@ import (
 )
 
 type Querier interface {
+	ConsumeExtensionAuthCode(ctx context.Context, codeHash string) (ExtensionAuthCode, error)
+	CreateExtensionAuthCode(ctx context.Context, arg CreateExtensionAuthCodeParams) (ExtensionAuthCode, error)
 	CreateUser(ctx context.Context, arg CreateUserParams) (User, error)
+	GetUserByEmail(ctx context.Context, email string) (User, error)
+	GetUserByID(ctx context.Context, id int32) (User, error)
 }
 
 var _ Querier = (*Queries)(nil)

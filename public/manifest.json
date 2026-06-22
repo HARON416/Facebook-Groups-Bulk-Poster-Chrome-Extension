@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
   "name": "Facebook Groups Bulk Poster",
-  "version": "1.3.7",
-  "description": "Bulk post to Facebook groups. Load your groups, queue posts, and optionally rewrite descriptions with Gemini.",
+  "version": "1.3.9",
+  "description": "Bulk post to Facebook groups with images, custom delays, live progress, and optional Gemini rewrites.",
   "icons": {
     "48": "images/icon-48.png",
     "128": "images/icon-128.png"
@@ -11,6 +11,7 @@
     "default_title": "Open Facebook Groups Bulk Poster"
   },
   "permissions": [
+    "identity",
     "sidePanel",
     "tabs",
     "cookies",
@@ -22,6 +23,10 @@
     "default_path": "sidepanel.html"
   },
   "host_permissions": [
+    "http://localhost:4000/*",
+    "http://localhost:5173/*",
+    "https://api.facebook-groups-bulk-poster.softwrhq.com/*",
+    "https://facebook-groups-bulk-poster-chrome-extension.softwrhq.com/*",
     "https://www.facebook.com/*",
     "https://web.facebook.com/*",
     "https://upload.facebook.com/*"

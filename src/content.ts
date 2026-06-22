@@ -194,7 +194,7 @@ async function insertDescription(dialog: Element, text: string): Promise<void> {
   );
   const dt = new DataTransfer();
   dt.setData("text/plain", text);
-  dt.setData("text/html", text);
+  dt.setData("text/html", formatTextAsHtmlWithLineBreaks(text));
 
   textbox.dispatchEvent(
     new ClipboardEvent("paste", {
@@ -217,6 +217,19 @@ async function insertDescription(dialog: Element, text: string): Promise<void> {
   console.log("[Facebook Groups Bulk Poster] Description inserted", {
     textboxContent: textbox.textContent?.slice(0, 100),
   });
+}
+
+function formatTextAsHtmlWithLineBreaks(text: string): string {
+  return escapeHtml(text).replace(/\r?\n/g, "<br>");
+}
+
+function escapeHtml(value: string): string {
+  return value
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#39;");
 }
 
 async function clickPostButton(dialog: Element): Promise<void> {

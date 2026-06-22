@@ -149,7 +149,7 @@
     );
     const dt = new DataTransfer();
     dt.setData("text/plain", text);
-    dt.setData("text/html", text);
+    dt.setData("text/html", formatTextAsHtmlWithLineBreaks(text));
     textbox.dispatchEvent(
       new ClipboardEvent("paste", {
         bubbles: true,
@@ -168,6 +168,12 @@
     console.log("[Facebook Groups Bulk Poster] Description inserted", {
       textboxContent: textbox.textContent?.slice(0, 100)
     });
+  }
+  function formatTextAsHtmlWithLineBreaks(text) {
+    return escapeHtml(text).replace(/\r?\n/g, "<br>");
+  }
+  function escapeHtml(value) {
+    return value.replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;").replaceAll('"', "&quot;").replaceAll("'", "&#39;");
   }
   async function clickPostButton(dialog) {
     let postButton = dialog.querySelector(`div[aria-label="Post"]`);

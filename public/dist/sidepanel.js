@@ -1,8 +1,15 @@
 "use strict";
 (() => {
+  // src/auth-config.ts
+  var AUTH_WEB_BASE_URL = "https://facebook-groups-bulk-poster-chrome-extension.softwrhq.com";
+  var AUTH_API_BASE_URL = "https://api.facebook-groups-bulk-poster.softwrhq.com";
+
   // src/sidepanel.ts
   var GEMINI_API_KEY_STORAGE_KEY = "geminiApiKey";
   var GEMINI_REWRITE_ENABLED_STORAGE_KEY = "geminiRewriteEnabled";
+  var AUTH_TOKEN_STORAGE_KEY = "authToken";
+  var AUTH_USER_STORAGE_KEY = "authUser";
+  var AUTH_EXPIRES_AT_STORAGE_KEY = "authExpiresAt";
   var MIN_SLEEP_SECONDS = 120;
   var loadGroupsButton = document.querySelector("#load-groups-btn");
   var groupsList = document.querySelector("#groups-list");
@@ -14,6 +21,13 @@
   );
   var groupsSelectionCount = document.querySelector(
     "#groups-selection-count"
+  );
+  var groupsSearchInput = document.querySelector(
+    "#groups-search-input"
+  );
+  var groupsSelectAll = document.querySelector("#groups-select-all");
+  var groupsSelectAllCheckbox = document.querySelector(
+    "#groups-select-all-checkbox"
   );
   var postBodyInput = document.querySelector("#post-body-input");
   var postImagesInput = document.querySelector("#post-images-input");
@@ -60,42 +74,141 @@
   var postingProgressLog = document.querySelector(
     "#posting-progress-log"
   );
+  var authLoginButton = document.querySelector("#auth-login-btn");
+  var authSignupButton = document.querySelector("#auth-signup-btn");
+  var authLogoutButton = document.querySelector("#auth-logout-btn");
+  var authStatusMessage = document.querySelector(
+    "#auth-status-message"
+  );
+  var authPanelTitle = document.querySelector("#auth-panel-title");
+  var authSessionPill = document.querySelector("#auth-session-pill");
+  var authUserEmail = document.querySelector("#auth-user-email");
   var selectedImagePreviewUrls = [];
   var selectedImageFiles = [];
   var loadedGroups = [];
+  var selectedGroupIds = /* @__PURE__ */ new Set();
+  var groupsSearchQuery = "";
+  var isPostingActive = false;
+  var isStopRequestPending = false;
+  var currentAuthSession;
   void initializeGeminiSettings();
+  void initializeAuth();
   function renderGroups(groups) {
     if (!groupsList) {
       return;
     }
     loadedGroups = groups;
+    selectedGroupIds = new Set(
+      Array.from(selectedGroupIds).filter(
+        (groupId) => groups.some((group) => group.id === groupId)
+      )
+    );
     if (groups.length === 0) {
+      if (groupsSelectAll) {
+        groupsSelectAll.hidden = true;
+      }
+      if (groupsSelectAllCheckbox) {
+        groupsSelectAllCheckbox.checked = false;
+        groupsSelectAllCheckbox.indeterminate = false;
+      }
+      if (groupsSearchInput) {
+        groupsSearchInput.value = "";
+        groupsSearchInput.disabled = true;
+      }
+      groupsSearchQuery = "";
       groupsList.className = "empty-state";
       groupsList.textContent = "No groups found.";
+      updatePostingReadiness();
       return;
     }
-    groupsList.className = "groups-list";
+    if (groupsSelectAll) {
+      groupsSelectAll.hidden = false;
+    }
+    if (groupsSearchInput) {
+      groupsSearchInput.disabled = false;
+    }
+    const normalizedQuery = groupsSearchQuery.trim().toLowerCase();
+    const visibleGroups = normalizedQuery.length ? groups.filter(
+      (group) => `${group.name} ${group.url}`.toLowerCase().includes(normalizedQuery)
+    ) : groups;
+    if (visibleGroups.length === 0) {
+      groupsList.className = "empty-state";
+      groupsList.textContent = `No groups match "${groupsSearchQuery.trim()}".`;
+      updatePostingReadiness();
+      return;
+    }
+    const selectedGroups = visibleGroups.filter(
+      (group) => selectedGroupIds.has(group.id)
+    );
+    const remainingGroups = visibleGroups.filter(
+      (group) => !selectedGroupIds.has(group.id)
+    );
+    const renderGroupItem = (group) => {
+      const item = document.createElement("label");
+      item.className = "group-item";
+      const checkbox = document.createElement("input");
+      checkbox.type = "checkbox";
+      checkbox.value = group.id;
+      checkbox.className = "group-item__checkbox";
+      checkbox.checked = selectedGroupIds.has(group.id);
+      checkbox.addEventListener("change", () => {
+        if (checkbox.checked) {
+          selectedGroupIds.add(group.id);
+        } else {
+          selectedGroupIds.delete(group.id);
+        }
+        renderGroups(loadedGroups);
+      });
+      const content = document.createElement("span");
+      content.className = "group-item__content";
+      const name = document.createElement("span");
+      name.className = "group-item__name";
+      name.textContent = group.name;
+      const url = document.createElement("span");
+      url.className = "group-item__url";
+      url.textContent = group.url;
+      content.append(name, url);
+      item.append(checkbox, content);
+      return item;
+    };
+    const createSection = (title, groupsForSection, emptyMessage) => {
+      const section = document.createElement("section");
+      section.className = "groups-list-section";
+      const header = document.createElement("div");
+      header.className = "groups-list-section__header";
+      const heading = document.createElement("span");
+      heading.className = "groups-list-section__title";
+      heading.textContent = title;
+      const count = document.createElement("span");
+      count.className = "groups-list-section__count";
+      count.textContent = `${groupsForSection.length}`;
+      header.append(heading, count);
+      section.append(header);
+      if (groupsForSection.length === 0) {
+        const emptyState = document.createElement("div");
+        emptyState.className = "empty-state";
+        emptyState.textContent = emptyMessage;
+        section.append(emptyState);
+        return section;
+      }
+      const list = document.createElement("div");
+      list.className = "groups-list";
+      list.append(...groupsForSection.map(renderGroupItem));
+      section.append(list);
+      return section;
+    };
+    groupsList.className = "groups-list-sections";
     groupsList.replaceChildren(
-      ...groups.map((group) => {
-        const item = document.createElement("label");
-        item.className = "group-item";
-        const checkbox = document.createElement("input");
-        checkbox.type = "checkbox";
-        checkbox.value = group.id;
-        checkbox.className = "group-item__checkbox";
-        checkbox.addEventListener("change", updatePostingReadiness);
-        const content = document.createElement("span");
-        content.className = "group-item__content";
-        const name = document.createElement("span");
-        name.className = "group-item__name";
-        name.textContent = group.name;
-        const url = document.createElement("span");
-        url.className = "group-item__url";
-        url.textContent = group.url;
-        content.append(name, url);
-        item.append(checkbox, content);
-        return item;
-      })
+      createSection(
+        "Selected Groups",
+        selectedGroups,
+        normalizedQuery.length ? "No selected groups match this search." : "No groups selected yet."
+      ),
+      createSection(
+        "Other Groups",
+        remainingGroups,
+        normalizedQuery.length ? "No remaining groups match this search." : "No other groups available."
+      )
     );
     updatePostingReadiness();
   }
@@ -118,11 +231,19 @@
     }
   }
   function getSelectedGroupsCount() {
-    return document.querySelectorAll(
-      ".group-item__checkbox:checked"
-    ).length;
+    return selectedGroupIds.size;
+  }
+  function updateGroupsSelectAllState() {
+    if (!groupsSelectAllCheckbox) {
+      return;
+    }
+    const hasGroups = loadedGroups.length > 0;
+    const selectedCount = selectedGroupIds.size;
+    groupsSelectAllCheckbox.checked = hasGroups && selectedCount === loadedGroups.length;
+    groupsSelectAllCheckbox.indeterminate = hasGroups && selectedCount > 0 && selectedCount < loadedGroups.length;
   }
   function updatePostingReadiness() {
+    const isAuthenticated = Boolean(currentAuthSession?.token);
     const selectedGroupsCount = getSelectedGroupsCount();
     const hasPostBody = (postBodyInput?.value.trim().length ?? 0) > 0;
     const sleepTime = Number(postSleepInput?.value ?? 0);
@@ -130,9 +251,33 @@
     if (groupsSelectionCount) {
       groupsSelectionCount.textContent = `${selectedGroupsCount} ${selectedGroupsCount === 1 ? "group" : "groups"} selected`;
     }
-    if (startPostingButton) {
-      startPostingButton.disabled = !(hasPostBody && selectedGroupsCount > 0 && hasValidSleepTime);
+    updateGroupsSelectAllState();
+    updatePostingButtonState(
+      isAuthenticated,
+      hasPostBody,
+      selectedGroupsCount,
+      hasValidSleepTime
+    );
+    if (loadGroupsButton) {
+      loadGroupsButton.disabled = !isAuthenticated;
     }
+  }
+  function updatePostingButtonState(isAuthenticated = Boolean(currentAuthSession?.token), hasPostBody = (postBodyInput?.value.trim().length ?? 0) > 0, selectedGroupsCount = getSelectedGroupsCount(), hasValidSleepTime = (() => {
+    const sleepTime = Number(postSleepInput?.value ?? 0);
+    return Number.isFinite(sleepTime) && sleepTime >= MIN_SLEEP_SECONDS;
+  })()) {
+    if (!startPostingButton) {
+      return;
+    }
+    if (isPostingActive) {
+      startPostingButton.disabled = isStopRequestPending;
+      startPostingButton.textContent = isStopRequestPending ? "Stopping..." : "Stop Posting";
+      startPostingButton.classList.add("start-posting-btn--stop");
+      return;
+    }
+    startPostingButton.classList.remove("start-posting-btn--stop");
+    startPostingButton.disabled = !(isAuthenticated && hasPostBody && selectedGroupsCount > 0 && hasValidSleepTime);
+    startPostingButton.textContent = "START POSTING";
   }
   chrome.runtime.onMessage.addListener(
     (message) => {
@@ -145,6 +290,10 @@
     }
   );
   function updateUiPostingStatus(message) {
+    if (message.status === "posting" || message.status === "waiting" || message.status === "posted" || message.status === "failed") {
+      isPostingActive = true;
+      isStopRequestPending = false;
+    }
     updatePostingProgress(message);
     if (groupsStatusMessage) {
       groupsStatusMessage.textContent = message.error ? `${message.message}: ${message.error}` : message.message;
@@ -152,11 +301,9 @@
     if (groupsStatusCount) {
       groupsStatusCount.textContent = `${message.successCount ?? 0}/${message.total} posted`;
     }
-    if (message.status === "done" || message.status === "rate_limited") {
-      if (startPostingButton) {
-        startPostingButton.disabled = false;
-        startPostingButton.textContent = "START POSTING";
-      }
+    if (message.status === "stopped" || message.status === "done" || message.status === "rate_limited") {
+      isPostingActive = false;
+      isStopRequestPending = false;
       updatePostingReadiness();
     }
   }
@@ -197,22 +344,77 @@
     if (!postingProgressLog) {
       return;
     }
-    const item = document.createElement("li");
+    const existingWaitingItem = message.status === "waiting" ? postingProgressLog.querySelector(
+      `li[data-status="waiting"][data-group-id="${CSS.escape(
+        message.groupId ?? "queue"
+      )}"]`
+    ) : void 0;
+    const item = existingWaitingItem ?? document.createElement("li");
     item.dataset.status = message.status;
-    const count = message.current > 0 && message.total > 0 ? `${message.current}/${message.total} \xB7 ` : "";
-    item.textContent = `${count}${message.message}${message.error ? `: ${message.error}` : ""}`;
-    postingProgressLog.prepend(item);
-    while (postingProgressLog.children.length > 12) {
-      postingProgressLog.lastElementChild?.remove();
+    item.dataset.groupId = message.groupId ?? "queue";
+    const count = message.current > 0 && message.total > 0 ? `${message.current}/${message.total}` : "";
+    const badge = document.createElement("span");
+    badge.className = "posting-progress__log-badge";
+    badge.textContent = getPostingStatusLabel(message.status);
+    const body = document.createElement("span");
+    body.className = "posting-progress__log-body";
+    const text = document.createElement("span");
+    text.className = "posting-progress__log-text";
+    text.textContent = message.message;
+    body.append(text);
+    if (count || message.error) {
+      const meta = document.createElement("span");
+      meta.className = "posting-progress__log-meta";
+      meta.textContent = [count, message.error].filter(Boolean).join(" \xB7 ");
+      body.append(meta);
+    }
+    item.replaceChildren(badge, body);
+    if (!existingWaitingItem) {
+      postingProgressLog.prepend(item);
+    }
+  }
+  function getPostingStatusLabel(status) {
+    switch (status) {
+      case "posted":
+        return "Done";
+      case "failed":
+        return "Fail";
+      case "rate_limited":
+        return "Limit";
+      case "waiting":
+        return "Wait";
+      case "stopped":
+        return "Stop";
+      case "done":
+        return "Done";
+      case "posting":
+        return "Post";
+      default:
+        return "Info";
     }
   }
   loadGroupsButton?.addEventListener("click", async () => {
+    if (!currentAuthSession?.token) {
+      alert("Please sign in before loading groups.");
+      return;
+    }
     if (!groupsList || !loadGroupsButton) {
       return;
     }
     loadGroupsButton.disabled = true;
     loadGroupsButton.textContent = "Loading...";
     updateGroupsStatus("Starting group extraction...", 0);
+    selectedGroupIds.clear();
+    if (groupsSelectAll) {
+      groupsSelectAll.hidden = true;
+    }
+    if (groupsSelectAllCheckbox) {
+      groupsSelectAllCheckbox.checked = false;
+      groupsSelectAllCheckbox.indeterminate = false;
+    }
+    if (groupsSearchInput) {
+      groupsSearchInput.disabled = true;
+    }
     groupsList.className = "empty-state";
     groupsList.textContent = "Opening joined groups and reading groups...";
     try {
@@ -228,6 +430,16 @@
       );
     } catch (error) {
       updateGroupsStatus("Group extraction failed.", 0);
+      if (groupsSelectAll) {
+        groupsSelectAll.hidden = true;
+      }
+      if (groupsSelectAllCheckbox) {
+        groupsSelectAllCheckbox.checked = false;
+        groupsSelectAllCheckbox.indeterminate = false;
+      }
+      if (groupsSearchInput) {
+        groupsSearchInput.disabled = true;
+      }
       groupsList.className = "empty-state";
       groupsList.textContent = error instanceof Error ? error.message : "Unable to load groups.";
     } finally {
@@ -294,13 +506,27 @@
     );
   }
   postImagesInput?.addEventListener("change", () => {
-    selectedImageFiles = Array.from(postImagesInput.files ?? []).filter(
+    const newImageFiles = Array.from(postImagesInput.files ?? []).filter(
       (file) => file.type.startsWith("image/")
     );
+    selectedImageFiles = [...selectedImageFiles, ...newImageFiles];
     syncPostImagesInput();
     renderImagePreviews();
   });
   postBodyInput?.addEventListener("input", updatePostingReadiness);
+  groupsSelectAllCheckbox?.addEventListener("change", () => {
+    const shouldSelectAll = groupsSelectAllCheckbox.checked;
+    if (shouldSelectAll) {
+      selectedGroupIds = new Set(loadedGroups.map((group) => group.id));
+    } else {
+      selectedGroupIds.clear();
+    }
+    renderGroups(loadedGroups);
+  });
+  groupsSearchInput?.addEventListener("input", () => {
+    groupsSearchQuery = groupsSearchInput.value;
+    renderGroups(loadedGroups);
+  });
   geminiApiKeyInput?.addEventListener("input", () => {
     updateGeminiStatus();
   });
@@ -325,20 +551,42 @@
     event.preventDefault();
   });
   startPostingButton?.addEventListener("click", async () => {
+    if (isPostingActive) {
+      if (isStopRequestPending || !startPostingButton) {
+        return;
+      }
+      isStopRequestPending = true;
+      updatePostingButtonState();
+      try {
+        const response = await chrome.runtime.sendMessage({
+          type: "STOP_UI_POSTING"
+        });
+        if (!response?.ok) {
+          throw new Error(response?.error ?? "Unable to stop posting.");
+        }
+      } catch (error) {
+        isStopRequestPending = false;
+        updatePostingButtonState();
+        alert(
+          error instanceof Error ? error.message : "Unable to stop posting."
+        );
+      }
+      return;
+    }
+    if (!currentAuthSession?.token) {
+      alert("Please sign in before posting.");
+      return;
+    }
     if (!startPostingButton) {
       return;
     }
-    const selectedGroupIds = Array.from(
-      document.querySelectorAll(
-        ".group-item__checkbox:checked"
-      )
-    ).map((checkbox) => checkbox.value);
-    if (selectedGroupIds.length === 0) {
+    const selectedGroupIdList = Array.from(selectedGroupIds);
+    if (selectedGroupIdList.length === 0) {
       alert("Please select at least one group");
       return;
     }
-    const postText = postBodyInput?.value.trim() ?? "";
-    if (postText.length === 0) {
+    const postText = postBodyInput?.value ?? "";
+    if (postText.trim().length === 0) {
       alert("Please enter post text");
       return;
     }
@@ -348,14 +596,15 @@
       return;
     }
     const selectedGroups = loadedGroups.filter(
-      (group) => selectedGroupIds.includes(group.id)
+      (group) => selectedGroupIdList.includes(group.id)
     );
     if (selectedGroups.length === 0) {
       alert("Selected groups are no longer loaded. Click Load Groups and try again.");
       return;
     }
-    startPostingButton.disabled = true;
-    startPostingButton.textContent = "Posting...";
+    isPostingActive = true;
+    isStopRequestPending = false;
+    updatePostingButtonState();
     updateGroupsStatus("Preparing GraphQL posting...", 0);
     resetPostingProgress(selectedGroups.length);
     scrollPostingProgressIntoView();
@@ -377,8 +626,9 @@
         throw new Error(response?.error ?? "Unable to start GraphQL posting.");
       }
     } catch (error) {
-      startPostingButton.disabled = false;
-      startPostingButton.textContent = "START POSTING";
+      isPostingActive = false;
+      isStopRequestPending = false;
+      updatePostingReadiness();
       alert(
         error instanceof Error ? error.message : "Unable to start GraphQL posting."
       );
@@ -387,6 +637,15 @@
   updatePostingReadiness();
   updateGeminiStatus();
   window.addEventListener("beforeunload", clearImagePreviewUrls);
+  authLoginButton?.addEventListener("click", () => {
+    void startAuthFlow("login");
+  });
+  authSignupButton?.addEventListener("click", () => {
+    void startAuthFlow("signup");
+  });
+  authLogoutButton?.addEventListener("click", () => {
+    void clearAuthSession();
+  });
   function fileToUiPostImage(file) {
     return new Promise((resolve, reject) => {
       const reader = new FileReader();
@@ -466,5 +725,188 @@
         geminiRewriteToggle?.checked
       )
     });
+  }
+  async function initializeAuth() {
+    const storage = await chrome.storage.local.get([
+      AUTH_TOKEN_STORAGE_KEY,
+      AUTH_USER_STORAGE_KEY,
+      AUTH_EXPIRES_AT_STORAGE_KEY
+    ]);
+    const token = storage[AUTH_TOKEN_STORAGE_KEY];
+    const user = storage[AUTH_USER_STORAGE_KEY];
+    const expiresAt = storage[AUTH_EXPIRES_AT_STORAGE_KEY];
+    if (typeof token !== "string" || typeof expiresAt !== "string" || !user || typeof user !== "object") {
+      clearAuthSessionUiOnly();
+      return;
+    }
+    currentAuthSession = {
+      token,
+      expiresAt,
+      user
+    };
+    const valid = await verifyAuthToken(token);
+    if (!valid) {
+      await clearAuthSession();
+      return;
+    }
+    updateAuthUi();
+  }
+  async function startAuthFlow(mode) {
+    try {
+      setAuthBusyState(true, mode === "login" ? "Opening login..." : "Opening signup...");
+      const state = crypto.randomUUID();
+      const redirectUri = chrome.identity.getRedirectURL("auth");
+      const url = new URL(`${AUTH_WEB_BASE_URL}/${mode}`);
+      url.searchParams.set("redirect_uri", redirectUri);
+      url.searchParams.set("state", state);
+      const finalUrl = await chrome.identity.launchWebAuthFlow({
+        url: url.toString(),
+        interactive: true
+      });
+      if (!finalUrl) {
+        throw new Error("Authentication was cancelled.");
+      }
+      const callback = new URL(finalUrl);
+      if (callback.searchParams.get("state") !== state) {
+        throw new Error("Authentication state mismatch.");
+      }
+      const code = callback.searchParams.get("code");
+      if (!code) {
+        throw new Error("Authentication code was not returned.");
+      }
+      const response = await fetch(`${AUTH_API_BASE_URL}/api/auth/extension/exchange`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({ code })
+      });
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok || !payload.token || !payload.expires_at || !payload.user) {
+        throw new Error(payload.error ?? "Unable to complete extension sign in.");
+      }
+      currentAuthSession = {
+        token: payload.token,
+        expiresAt: payload.expires_at,
+        user: payload.user
+      };
+      await chrome.storage.local.set({
+        [AUTH_TOKEN_STORAGE_KEY]: payload.token,
+        [AUTH_USER_STORAGE_KEY]: payload.user,
+        [AUTH_EXPIRES_AT_STORAGE_KEY]: payload.expires_at
+      });
+      updateAuthUi();
+    } catch (error) {
+      clearAuthSessionUiOnly();
+      if (authStatusMessage) {
+        authStatusMessage.textContent = error instanceof Error ? error.message : "Unable to sign in.";
+      }
+    } finally {
+      setAuthBusyState(false);
+    }
+  }
+  async function verifyAuthToken(token) {
+    try {
+      const response = await fetch(`${AUTH_API_BASE_URL}/api/auth/me`, {
+        headers: {
+          Authorization: `Bearer ${token}`
+        }
+      });
+      return response.ok;
+    } catch {
+      return false;
+    }
+  }
+  function updateAuthUi() {
+    const authenticated = Boolean(currentAuthSession?.token);
+    if (createForm) {
+      createForm.hidden = !authenticated;
+    }
+    if (authSessionPill) {
+      authSessionPill.hidden = !authenticated;
+    }
+    if (authPanelTitle) {
+      authPanelTitle.hidden = authenticated;
+    }
+    if (authUserEmail) {
+      authUserEmail.textContent = currentAuthSession?.user.email ?? "";
+    }
+    if (authLoginButton) {
+      authLoginButton.hidden = authenticated;
+    }
+    if (authSignupButton) {
+      authSignupButton.hidden = authenticated;
+    }
+    if (authLogoutButton) {
+      authLogoutButton.hidden = !authenticated;
+    }
+    if (authStatusMessage) {
+      authStatusMessage.textContent = authenticated ? `Authenticated. Your current token expires on ${formatExpiry(currentAuthSession?.expiresAt)}.` : "Authenticate with your account before loading groups or starting the posting queue.";
+    }
+    updatePostingReadiness();
+  }
+  function setAuthBusyState(isBusy, message) {
+    if (authLoginButton) {
+      authLoginButton.disabled = isBusy;
+    }
+    if (authSignupButton) {
+      authSignupButton.disabled = isBusy;
+    }
+    if (authLogoutButton) {
+      authLogoutButton.disabled = isBusy;
+    }
+    if (message && authStatusMessage) {
+      authStatusMessage.textContent = message;
+    }
+  }
+  async function clearAuthSession() {
+    currentAuthSession = void 0;
+    await chrome.storage.local.remove([
+      AUTH_TOKEN_STORAGE_KEY,
+      AUTH_USER_STORAGE_KEY,
+      AUTH_EXPIRES_AT_STORAGE_KEY
+    ]);
+    clearAuthSessionUiOnly();
+  }
+  function clearAuthSessionUiOnly() {
+    currentAuthSession = void 0;
+    if (createForm) {
+      createForm.hidden = true;
+    }
+    if (authSessionPill) {
+      authSessionPill.hidden = true;
+    }
+    if (authPanelTitle) {
+      authPanelTitle.hidden = false;
+    }
+    if (authUserEmail) {
+      authUserEmail.textContent = "";
+    }
+    if (authLoginButton) {
+      authLoginButton.hidden = false;
+      authLoginButton.disabled = false;
+    }
+    if (authSignupButton) {
+      authSignupButton.hidden = false;
+      authSignupButton.disabled = false;
+    }
+    if (authLogoutButton) {
+      authLogoutButton.hidden = true;
+      authLogoutButton.disabled = false;
+    }
+    if (authStatusMessage) {
+      authStatusMessage.textContent = "Authenticate with your account before loading groups or starting the posting queue.";
+    }
+    updatePostingReadiness();
+  }
+  function formatExpiry(value) {
+    if (!value) {
+      return "soon";
+    }
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) {
+      return "soon";
+    }
+    return date.toLocaleString();
   }
 })();

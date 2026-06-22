@@ -13,7 +13,7 @@ import (
 var Logger = log.NewWithOptions(os.Stderr, log.Options{
 	ReportTimestamp: true,
 	TimeFormat:      time.Kitchen,
-	Prefix:          "KIBETCARS",
+	Prefix:          "FGBP",
 })
 
 var successLogger = newStyledLogger(func(styles *log.Styles) {
@@ -38,7 +38,7 @@ func newStyledLogger(customize func(*log.Styles)) *log.Logger {
 	logger := log.NewWithOptions(os.Stderr, log.Options{
 		ReportTimestamp: true,
 		TimeFormat:      time.Kitchen,
-		Prefix:          "KIBETCARS",
+		Prefix:          "FGBP",
 	})
 
 	styles := log.DefaultStyles()

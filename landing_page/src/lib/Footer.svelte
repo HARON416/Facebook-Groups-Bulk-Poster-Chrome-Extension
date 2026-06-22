@@ -1,5 +1,8 @@
 <section>
-	<p>&copy; 2026 Facebook Groups Bulk Poster. All rights reserved.</p>
+	<p>
+		&copy; 2026 Facebook Groups Bulk Poster. All rights reserved.
+		<a href="/privacy-policy">Privacy Policy</a>
+	</p>
 </section>
 
 <style>
@@ -17,5 +20,16 @@
 		font-size: 1.3rem;
 		font-weight: 500;
 		text-align: center;
+	}
+
+	section a {
+		color: #1f8f4e;
+		font-weight: 700;
+		text-decoration: none;
+		margin-left: 0.8rem;
+	}
+
+	section a:hover {
+		text-decoration: underline;
 	}
 </style>

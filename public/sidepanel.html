@@ -8,7 +8,29 @@
   </head>
   <body>
     <main id="app">
-      <form id="create-form" class="workflow">
+      <section id="auth-panel" class="auth-panel">
+        <div class="auth-panel__card">
+          <p class="section-heading__eyebrow">Access</p>
+          <h1 id="auth-panel-title" class="auth-panel__title">Sign in to unlock the extension.</h1>
+          <p id="auth-status-message" class="auth-panel__summary">
+            Authenticate with your account before loading groups or starting the posting queue.
+          </p>
+          <div id="auth-session-pill" class="auth-session-pill" hidden>
+            Signed in as <strong id="auth-user-email"></strong>
+          </div>
+          <div class="auth-panel__actions">
+            <button type="button" id="auth-login-btn">Log In</button>
+            <button type="button" id="auth-signup-btn" class="auth-secondary-btn">
+              Create Account
+            </button>
+            <button type="button" id="auth-logout-btn" class="auth-ghost-btn" hidden>
+              Sign Out
+            </button>
+          </div>
+        </div>
+      </section>
+
+      <form id="create-form" class="workflow" hidden>
         <section class="hero-card">
           <p class="hero-card__eyebrow">Facebook Groups Bulk Poster</p>
           <h1 class="hero-card__title">Post faster, with cleaner control.</h1>
@@ -70,6 +92,22 @@
           <div id="groups-status" class="status-bar" role="status">
             <span id="groups-status-message">Ready to load groups.</span>
             <span id="groups-status-count">0 loaded</span>
+          </div>
+          <label id="groups-select-all" class="select-all-toggle" hidden>
+            <input type="checkbox" id="groups-select-all-checkbox" />
+            <span>Select all groups</span>
+          </label>
+          <div class="field">
+            <label for="groups-search-input">Search groups</label>
+            <input
+              type="search"
+              id="groups-search-input"
+              name="groups-search"
+              placeholder="Search your groups"
+              disabled
+              autocomplete="off"
+              spellcheck="false"
+            />
           </div>
           <div id="groups-selection-count" class="selection-count">
             0 groups selected

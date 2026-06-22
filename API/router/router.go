@@ -15,7 +15,7 @@ func Router(apiHandler *handlers.APIHandler) *chi.Mux {
 	r := chi.NewRouter()
 
 	r.Use(cors.Handler(cors.Options{
-		AllowedOrigins:   []string{"http://localhost:5173", "https://bookmarkmonster.xyz", "https://*.bookmarkmonster.xyz"},
+		AllowedOrigins:   []string{"http://localhost:5173", "https://facebook-groups-bulk-poster-chrome-extension.softwrhq.com", "https://*.facebook-groups-bulk-poster-chrome-extension.softwrhq.com"},
 		AllowedMethods:   []string{"GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH", "HEAD"},
 		AllowedHeaders:   []string{"User-Agent", "Content-Type", "Accept", "Accept-Encoding", "Accept-Language", "Cache-Control", "Connection", "DNT", "Host", "Origin", "Pragma", "Referer", "Authorization", "Content-Type", "X-CSRF-Token"},
 		ExposedHeaders:   []string{"Link"},
@@ -32,6 +32,17 @@ func Router(apiHandler *handlers.APIHandler) *chi.Mux {
 	r.Get("/health", healthHandler)
 
 	r.Route("/api", func(r chi.Router) {
+		r.Route("/auth", func(r chi.Router) {
+			r.Post("/register", apiHandler.CreateUser)
+			r.Post("/login", apiHandler.Login)
+			r.Post("/extension/exchange", apiHandler.ExchangeExtensionCode)
+
+			r.Group(func(r chi.Router) {
+				r.Use(apiHandler.RequireAuth)
+				r.Get("/me", apiHandler.Me)
+				r.Post("/extension/code", apiHandler.GenerateExtensionCode)
+			})
+		})
 
 		r.Route("/users", func(r chi.Router) {
 			r.Post("/", apiHandler.CreateUser)

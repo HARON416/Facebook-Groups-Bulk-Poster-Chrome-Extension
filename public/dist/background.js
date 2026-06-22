@@ -17078,10 +17078,12 @@ ${underline}`);
   var capturedGroupsRequest;
   var captureTabId;
   var activePosting = false;
+  var stopPostingRequested = false;
   var postingCaptureTabId;
   var capturedUploadTemplate;
   var capturedPostTemplate;
   var loggedUploadCandidateRequestIds = /* @__PURE__ */ new Set();
+  var MANUAL_STOP_MESSAGE = "Posting stopped by user.";
   chrome.runtime.onInstalled.addListener(() => {
     void chrome.sidePanel.setPanelBehavior({ openPanelOnActionClick: true });
   });
@@ -17240,6 +17242,11 @@ ${underline}`);
       }
       if (request.type === "START_UI_POSTING") {
         void runGraphqlPostingQueue(request);
+        sendResponse({ ok: true });
+        return false;
+      }
+      if (request.type === "STOP_UI_POSTING") {
+        stopPostingRequested = true;
         sendResponse({ ok: true });
         return false;
       }
@@ -17650,8 +17657,23 @@ ${underline}`);
   function sleep2(duration) {
     return new Promise((resolve) => setTimeout(resolve, duration));
   }
+  function throwIfPostingStopped() {
+    if (activePosting && stopPostingRequested) {
+      throw new Error(MANUAL_STOP_MESSAGE);
+    }
+  }
+  async function sleepWithStopChecks(durationMs, intervalMs = 250) {
+    let remaining = durationMs;
+    while (remaining > 0) {
+      throwIfPostingStopped();
+      const step = Math.min(intervalMs, remaining);
+      await sleep2(step);
+      remaining -= step;
+    }
+  }
   async function sleepWithPostingCountdown(durationSeconds, statusContext) {
     for (let remaining = durationSeconds; remaining > 0; remaining -= 1) {
+      throwIfPostingStopped();
       notifyUiPostingStatus({
         status: "waiting",
         message: `Waiting ${remaining} seconds before next group...`,
@@ -17663,7 +17685,7 @@ ${underline}`);
         failedCount: statusContext.failedCount,
         processedCount: statusContext.processedCount
       });
-      await sleep2(1e3);
+      await sleepWithStopChecks(1e3);
     }
   }
   async function runGraphqlPostingQueue(request) {
@@ -17686,11 +17708,13 @@ ${underline}`);
       return;
     }
     activePosting = true;
+    stopPostingRequested = false;
     let successCount = 0;
     let failedCount = 0;
     const total = request.groups.length;
     let postingTabId;
     try {
+      throwIfPostingStopped();
       if (total === 0) {
         throw new Error("Select at least one group before posting.");
       }
@@ -17699,20 +17723,15 @@ ${underline}`);
       if (!postingTabId) {
         throw new Error("Unable to find the active tab for posting.");
       }
-      const postBody = await maybeRewriteDescription(request.body);
-      debugLog("Post body prepared.", {
-        originalLength: request.body.length,
-        finalLength: postBody.length,
-        rewritten: postBody !== request.body
-      });
       const templates = await ensurePostingTemplates(
         postingTabId,
         request.groups,
-        postBody,
+        request.body,
         request.images,
         total
       );
       if (templates.firstGroupPosted) {
+        throwIfPostingStopped();
         successCount += 1;
         notifyUiPostingStatus({
           status: "posted",
@@ -17737,6 +17756,7 @@ ${underline}`);
         processedCount: startIndex
       });
       for (let index = startIndex; index < request.groups.length; index += 1) {
+        throwIfPostingStopped();
         const group = request.groups[index];
         const current = index + 1;
         debugLog("Processing group.", {
@@ -17744,6 +17764,28 @@ ${underline}`);
           total,
           groupId: group.id,
           groupName: group.name
+        });
+        notifyUiPostingStatus({
+          status: "posting",
+          message: `Rewriting description for ${group.name}...`,
+          current,
+          total,
+          groupId: group.id,
+          groupName: group.name,
+          successCount,
+          failedCount,
+          processedCount: index
+        });
+        const postBody = await maybeRewriteDescription(request.body);
+        throwIfPostingStopped();
+        debugLog("Post body prepared for group.", {
+          current,
+          total,
+          groupId: group.id,
+          groupName: group.name,
+          originalLength: request.body.length,
+          finalLength: postBody.length,
+          rewritten: postBody !== request.body
         });
         notifyUiPostingStatus({
           status: "posting",
@@ -17761,6 +17803,7 @@ ${underline}`);
           templates.uploadTemplate,
           request.images
         ) : [];
+        throwIfPostingStopped();
         debugLog("Image upload phase complete.", {
           groupId: group.id,
           uploadedPhotoCount: photoIds.length
@@ -17783,6 +17826,7 @@ ${underline}`);
           photoIds,
           group.id
         );
+        throwIfPostingStopped();
         debugLog("GraphQL post result received.", {
           groupId: group.id,
           success: postResult.success,
@@ -17873,9 +17917,9 @@ ${underline}`);
       const errorMessage = error instanceof Error ? error.message : "Unknown error";
       debugWarn("Posting queue stopped with error.", { error: errorMessage });
       notifyUiPostingStatus({
-        status: "done",
-        message: "GraphQL posting stopped.",
-        current: 0,
+        status: errorMessage === MANUAL_STOP_MESSAGE ? "stopped" : "done",
+        message: errorMessage === MANUAL_STOP_MESSAGE ? MANUAL_STOP_MESSAGE : "GraphQL posting stopped.",
+        current: Math.min(successCount + failedCount, total),
         total,
         successCount,
         failedCount,
@@ -17890,9 +17934,10 @@ ${underline}`);
         failedCount
       });
       activePosting = false;
+      stopPostingRequested = false;
     }
   }
-  async function ensurePostingTemplates(tabId, groups, body, images, total) {
+  async function ensurePostingTemplates(tabId, groups, originalBody, images, total) {
     const requiresUploadTemplate = images.length > 0;
     const firstGroup = groups[0];
     if (!firstGroup) {
@@ -17902,6 +17947,27 @@ ${underline}`);
       groupId: firstGroup.id,
       groupName: firstGroup.name,
       requiresUploadTemplate
+    });
+    notifyUiPostingStatus({
+      status: "posting",
+      message: `Rewriting description for ${firstGroup.name}...`,
+      current: 1,
+      total,
+      groupId: firstGroup.id,
+      groupName: firstGroup.name,
+      successCount: 0,
+      failedCount: 0,
+      processedCount: 0
+    });
+    const body = await maybeRewriteDescription(originalBody);
+    debugLog("Post body prepared for first group.", {
+      current: 1,
+      total,
+      groupId: firstGroup.id,
+      groupName: firstGroup.name,
+      originalLength: originalBody.length,
+      finalLength: body.length,
+      rewritten: body !== originalBody
     });
     notifyUiPostingStatus({
       status: "posting",
@@ -17915,10 +17981,11 @@ ${underline}`);
       processedCount: 0
     });
     beginPostingTemplateCapture(tabId);
+    throwIfPostingStopped();
     const groupUrl = normalizeGroupUrl(firstGroup.id);
     await chrome.tabs.update(tabId, { url: groupUrl, active: true });
     await waitForTabComplete(tabId, "/groups/");
-    await sleep2(5e3);
+    await sleepWithStopChecks(5e3);
     const postResult = await createPostInTab(tabId, images, body);
     if (!postResult.ok) {
       stopPostingTemplateCapture();
@@ -17948,6 +18015,7 @@ ${underline}`);
   async function waitForPostingTemplatesInternal(requiresUploadTemplate) {
     const startedAt = Date.now();
     while (Date.now() - startedAt < 3e4) {
+      throwIfPostingStopped();
       if (capturedPostTemplate && (!requiresUploadTemplate || capturedUploadTemplate)) {
         const uploadTemplate = requiresUploadTemplate && capturedUploadTemplate ? finalizeUploadTemplate(capturedUploadTemplate, capturedPostTemplate) : void 0;
         const postTemplate = capturedPostTemplate;
@@ -17958,7 +18026,7 @@ ${underline}`);
         });
         return { uploadTemplate, postTemplate };
       }
-      await sleep2(250);
+      await sleepWithStopChecks(250);
     }
     stopPostingTemplateCapture();
     const missing = [];
@@ -18201,13 +18269,47 @@ ${underline}`);
     }
     return parsePostResponse(payload.responseText);
   }
-  function buildPostVariables(_templateFormData, text, photoIds, groupId) {
+  function buildPostVariables(templateFormData, text, photoIds, groupId) {
     const attachments = photoIds.map((photoId) => ({
       photo: {
         id: photoId
       }
     }));
-    const actorId = extractUserIdFromFormData(_templateFormData) ?? "61553861467726";
+    const templateVariables = cloneJsonRecord(
+      safeParseJson(templateFormData.variables)
+    );
+    if (!templateVariables || !isRecord(templateVariables.input)) {
+      return buildFallbackPostVariables(templateFormData, text, attachments, groupId);
+    }
+    const input = templateVariables.input;
+    const originalText = isRecord(input.message) && typeof input.message.text === "string" ? input.message.text : void 0;
+    const originalGroupId = getTemplateGroupId(input);
+    if (isRecord(input.logging)) {
+      input.logging.composer_session_id = generateSessionId();
+    }
+    if (isRecord(input.message)) {
+      input.message.text = text;
+      if (!Array.isArray(input.message.ranges)) {
+        input.message.ranges = [];
+      }
+    } else {
+      input.message = { ranges: [], text };
+    }
+    input.attachments = attachments;
+    input.audience = {
+      ...isRecord(input.audience) ? input.audience : {},
+      to_id: groupId
+    };
+    input.client_mutation_id = String(Date.now());
+    if (originalText !== text || !isRecord(input.composed_text)) {
+      input.composed_text = buildComposedText(text);
+    }
+    replaceStringValue(templateVariables, originalText, text);
+    replaceStringValue(templateVariables, originalGroupId, groupId);
+    return JSON.stringify(templateVariables);
+  }
+  function buildFallbackPostVariables(templateFormData, text, attachments, groupId) {
+    const actorId = extractUserIdFromFormData(templateFormData) ?? "61553861467726";
     return JSON.stringify({
       input: {
         composer_entry_point: "inline_composer",
@@ -18221,75 +18323,45 @@ ${underline}`);
           ranges: [],
           text
         },
-        with_tags_ids: null,
-        inline_activities: [],
-        text_format_preset_id: "0",
-        group_flair: {
-          flair_id: null
-        },
         attachments,
-        composed_text: {
-          block_data: ["{}"],
-          block_depths: [0],
-          block_types: [0],
-          blocks: [text],
-          entities: ["[]"],
-          entity_map: "{}",
-          inline_styles: ["[]"]
-        },
-        navigation_data: {
-          attribution_id_v2: "CometGroupDiscussionRoot.react,comet.group,via_cold_start,1755966072871,86686,2361831622,,"
-        },
-        tracking: [null],
-        event_share_metadata: {
-          surface: "newsfeed"
-        },
+        composed_text: buildComposedText(text),
         audience: {
           to_id: groupId
         },
         actor_id: actorId,
-        client_mutation_id: "1"
+        client_mutation_id: String(Date.now())
       },
       feedLocation: "GROUP",
-      feedbackSource: 0,
-      focusCommentID: null,
-      gridMediaWidth: null,
-      groupID: null,
-      scale: 1,
-      privacySelectorRenderLocation: "COMET_STREAM",
-      checkPhotosToReelsUpsellEligibility: false,
       renderLocation: "group",
-      useDefaultActor: false,
-      inviteShortLinkKey: null,
-      isFeed: false,
-      isFundraiser: false,
-      isFunFactPost: false,
-      isGroup: true,
-      isEvent: false,
-      isTimeline: false,
-      isSocialLearning: false,
-      isPageNewsFeed: false,
-      isProfileReviews: false,
-      isWorkSharedDraft: false,
-      hashtag: null,
-      canUserManageOffers: false,
-      __relay_internal__pv__CometUFIShareActionMigrationrelayprovider: true,
-      __relay_internal__pv__GHLShouldChangeSponsoredDataFieldNamerelayprovider: true,
-      __relay_internal__pv__GHLShouldChangeAdIdFieldNamerelayprovider: true,
-      __relay_internal__pv__CometUFI_dedicated_comment_routable_dialog_gkrelayprovider: false,
-      __relay_internal__pv__IsWorkUserrelayprovider: false,
-      __relay_internal__pv__CometUFIReactionsEnableShortNamerelayprovider: false,
-      __relay_internal__pv__FBReels_enable_view_dubbed_audio_type_gkrelayprovider: false,
-      __relay_internal__pv__FBReels_deprecate_short_form_video_context_gkrelayprovider: true,
-      __relay_internal__pv__FeedDeepDiveTopicPillThreadViewEnabledrelayprovider: false,
-      __relay_internal__pv__CometImmersivePhotoCanUserDisable3DMotionrelayprovider: false,
-      __relay_internal__pv__WorkCometIsEmployeeGKProviderrelayprovider: false,
-      __relay_internal__pv__IsMergQAPollsrelayprovider: false,
-      __relay_internal__pv__FBReelsMediaFooter_comet_enable_reels_ads_gkrelayprovider: true,
-      __relay_internal__pv__StoriesArmadilloReplyEnabledrelayprovider: true,
-      __relay_internal__pv__FBReelsIFUTileContent_reelsIFUPlayOnHoverrelayprovider: true,
-      __relay_internal__pv__GHLShouldChangeSponsoredAuctionDistanceFieldNamerelayprovider: true
+      isGroup: true
     });
+  }
+  function buildComposedText(text) {
+    const textBlocks = text.split(/\r?\n/);
+    const blocks = (textBlocks.length > 0 ? textBlocks : [text]).map(
+      (block) => block.length > 0 ? block : "\xA0"
+    );
+    return {
+      block_data: blocks.map(() => "{}"),
+      block_depths: blocks.map(() => 0),
+      block_types: blocks.map(() => 0),
+      blocks,
+      entities: blocks.map(() => "[]"),
+      entity_map: "{}",
+      inline_styles: blocks.map(() => "[]")
+    };
+  }
+  function getTemplateGroupId(input) {
+    if (isRecord(input.audience) && typeof input.audience.to_id === "string") {
+      return input.audience.to_id;
+    }
+    if (typeof input.group_id === "string") {
+      return input.group_id;
+    }
+    if (typeof input.groupID === "string") {
+      return input.groupID;
+    }
+    return void 0;
   }
   function parsePostResponse(responseText) {
     const normalized = responseText.trim().replace(/^for\s*\(;;\);\s*/, "");
@@ -18401,6 +18473,37 @@ ${underline}`);
   }
   function isRecord(value) {
     return typeof value === "object" && value !== null && !Array.isArray(value);
+  }
+  function cloneJsonRecord(value) {
+    if (!isRecord(value)) {
+      return void 0;
+    }
+    return JSON.parse(JSON.stringify(value));
+  }
+  function replaceStringValue(value, from, to) {
+    if (!from || from === to) {
+      return;
+    }
+    if (Array.isArray(value)) {
+      for (let index = 0; index < value.length; index += 1) {
+        if (value[index] === from) {
+          value[index] = to;
+        } else {
+          replaceStringValue(value[index], from, to);
+        }
+      }
+      return;
+    }
+    if (!isRecord(value)) {
+      return;
+    }
+    for (const [key, nestedValue] of Object.entries(value)) {
+      if (nestedValue === from) {
+        value[key] = to;
+      } else {
+        replaceStringValue(nestedValue, from, to);
+      }
+    }
   }
   function extractUserIdFromFormData(formData) {
     const userId = formData.__user || formData.av;

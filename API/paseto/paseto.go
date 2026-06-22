@@ -10,14 +10,16 @@ import (
 )
 
 type Payload struct {
+	Purpose  string    `json:"purpose"`
 	UserID   string    `json:"user_id"`
 	Email    string    `json:"email"`
 	IssuedAt time.Time `json:"issued_at"`
 	Expiry   time.Time `json:"expiry"`
 }
 
-func NewPayload(userID int32, email string, issuedAt, expiry time.Time) *Payload {
+func NewPayload(purpose string, userID int32, email string, issuedAt, expiry time.Time) *Payload {
 	return &Payload{
+		Purpose:  purpose,
 		UserID:   strconv.FormatInt(int64(userID), 10),
 		Email:    email,
 		IssuedAt: issuedAt,

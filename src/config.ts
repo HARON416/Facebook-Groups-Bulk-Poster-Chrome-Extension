@@ -49,6 +49,10 @@ export type StartUiPostingRequest = {
   delaySeconds: number;
 };
 
+export type StopUiPostingRequest = {
+  type: "STOP_UI_POSTING";
+};
+
 export type UiPostingStatusMessage = {
   type: "UI_POSTING_STATUS";
   status:
@@ -58,6 +62,7 @@ export type UiPostingStatusMessage = {
     | "posted"
     | "failed"
     | "rate_limited"
+    | "stopped"
     | "done";
   message: string;
   current: number;
@@ -102,4 +107,7 @@ export type ClearStatusBannerMessage = {
   type: "CLEAR_STATUS_BANNER";
 };
 
-export type ExtensionRequest = LoadGroupsRequest | StartUiPostingRequest;
+export type ExtensionRequest =
+  | LoadGroupsRequest
+  | StartUiPostingRequest
+  | StopUiPostingRequest;
