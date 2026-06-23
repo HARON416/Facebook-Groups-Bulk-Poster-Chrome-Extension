@@ -14,6 +14,7 @@ type Config struct {
 	Port                string `mapstructure:"PORT"`
 	PasetoPrivateKeyHex string `mapstructure:"PASETO_PRIVATE_KEY_HEX"`
 	PasetoPublicKeyHex  string `mapstructure:"PASETO_PUBLIC_KEY_HEX"`
+	AdminAPIKey         string `mapstructure:"ADMIN_API_KEY"`
 	ConfigFile          string `mapstructure:"-"`
 }
 
@@ -45,12 +46,13 @@ func LoadConfig(path string) (Config, error) {
 
 func (c Config) Summary() string {
 	return fmt.Sprintf(
-		"config=%s database_url=%t port=%t paseto_private_key=%t paseto_public_key=%t",
+		"config=%s database_url=%t port=%t paseto_private_key=%t paseto_public_key=%t admin_api_key=%t",
 		c.ConfigFile,
 		hasValue(c.DatabaseURL),
 		hasValue(c.Port),
 		hasValue(c.PasetoPrivateKeyHex),
 		hasValue(c.PasetoPublicKeyHex),
+		hasValue(c.AdminAPIKey),
 	)
 }
 

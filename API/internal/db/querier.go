@@ -9,11 +9,13 @@ import (
 )
 
 type Querier interface {
+	ActivateLifetimeExtensionAccess(ctx context.Context, arg ActivateLifetimeExtensionAccessParams) (ActivateLifetimeExtensionAccessRow, error)
 	ConsumeExtensionAuthCode(ctx context.Context, codeHash string) (ExtensionAuthCode, error)
 	CreateExtensionAuthCode(ctx context.Context, arg CreateExtensionAuthCodeParams) (ExtensionAuthCode, error)
 	CreateUser(ctx context.Context, arg CreateUserParams) (User, error)
 	GetUserByEmail(ctx context.Context, email string) (User, error)
 	GetUserByID(ctx context.Context, id int32) (User, error)
+	UpsertExtensionAccess(ctx context.Context, arg UpsertExtensionAccessParams) (UpsertExtensionAccessRow, error)
 }
 
 var _ Querier = (*Queries)(nil)

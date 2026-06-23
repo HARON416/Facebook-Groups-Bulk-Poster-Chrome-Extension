@@ -8,6 +8,18 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+type ExtensionAccess struct {
+	ID             int32              `json:"id"`
+	InstallIDHash  string             `json:"install_id_hash"`
+	ActivationID   string             `json:"activation_id"`
+	TrialExpiresAt pgtype.Timestamptz `json:"trial_expires_at"`
+	LifetimeActive bool               `json:"lifetime_active"`
+	ActivatedAt    pgtype.Timestamptz `json:"activated_at"`
+	AdminNote      pgtype.Text        `json:"admin_note"`
+	LastSeenAt     pgtype.Timestamptz `json:"last_seen_at"`
+	CreatedAt      pgtype.Timestamptz `json:"created_at"`
+}
+
 type ExtensionAuthCode struct {
 	ID        int32              `json:"id"`
 	UserID    int32              `json:"user_id"`

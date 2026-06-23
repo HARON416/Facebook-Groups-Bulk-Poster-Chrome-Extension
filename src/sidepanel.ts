@@ -2,6 +2,8 @@ import type {
   FacebookGroup,
   GroupExtractionStatusMessage,
   LoadGroupsResponse,
+  PauseUiPostingRequest,
+  ResumeUiPostingRequest,
   StopUiPostingRequest,
   StartUiPostingRequest,
   UiPostImage,
@@ -15,7 +17,11 @@ const GEMINI_REWRITE_ENABLED_STORAGE_KEY = "geminiRewriteEnabled";
 const AUTH_TOKEN_STORAGE_KEY = "authToken";
 const AUTH_USER_STORAGE_KEY = "authUser";
 const AUTH_EXPIRES_AT_STORAGE_KEY = "authExpiresAt";
+const EXTENSION_INSTALL_ID_STORAGE_KEY = "extensionInstallId";
+const EXTENSION_ACTIVATION_ID_STORAGE_KEY = "extensionActivationId";
 const MIN_SLEEP_SECONDS = 120;
+const TRIAL_CONTACT_EMAIL = "haronkibetrutoh@gmail.com";
+const TRIAL_CONTACT_WHATSAPP = "254718448461";
 
 const loadGroupsButton =
   document.querySelector<HTMLButtonElement>("#load-groups-btn");
@@ -52,6 +58,9 @@ const geminiApiKeyInput = document.querySelector<HTMLInputElement>(
 const geminiRewriteToggle = document.querySelector<HTMLInputElement>(
   "#gemini-rewrite-toggle",
 );
+const shuffleGroupsToggle = document.querySelector<HTMLInputElement>(
+  "#shuffle-groups-toggle",
+);
 const geminiStatusMessage = document.querySelector<HTMLElement>(
   "#gemini-status-message",
 );
@@ -59,6 +68,8 @@ const geminiStatusCount = document.querySelector<HTMLElement>(
   "#gemini-status-count",
 );
 const createForm = document.querySelector<HTMLFormElement>("#create-form");
+const pausePostingButton =
+  document.querySelector<HTMLButtonElement>("#pause-posting-btn");
 const startPostingButton =
   document.querySelector<HTMLButtonElement>("#start-posting-btn");
 const postingProgress =
@@ -105,8 +116,22 @@ let selectedImageFiles: File[] = [];
 let loadedGroups: FacebookGroup[] = [];
 let selectedGroupIds = new Set<string>();
 let groupsSearchQuery = "";
+let groupsVisible = true;
+let imagePreviewsVisible = false;
 let isPostingActive = false;
+let isPostingPaused = false;
 let isStopRequestPending = false;
+let isPauseResumeRequestPending = false;
+let currentExtensionAccess:
+  | {
+      active: boolean;
+      accessType: "trial" | "lifetime" | "expired";
+      activationId: string;
+      trialExpiresAt: string;
+      lifetimeActive: boolean;
+      activatedAt?: string;
+    }
+  | undefined;
 let currentAuthSession:
   | {
       token: string;
@@ -116,7 +141,7 @@ let currentAuthSession:
   | undefined;
 
 void initializeGeminiSettings();
-void initializeAuth();
+void initializeExtensionAccess();
 
 function renderGroups(groups: FacebookGroup[]) {
   if (!groupsList) {
@@ -131,12 +156,18 @@ function renderGroups(groups: FacebookGroup[]) {
   );
 
   if (groups.length === 0) {
+    groupsVisible = true;
+    groupsList.hidden = false;
     if (groupsSelectAll) {
       groupsSelectAll.hidden = true;
     }
     if (groupsSelectAllCheckbox) {
       groupsSelectAllCheckbox.checked = false;
       groupsSelectAllCheckbox.indeterminate = false;
+    }
+    const groupsSearchField = groupsSearchInput?.closest<HTMLElement>(".field");
+    if (groupsSearchField) {
+      groupsSearchField.hidden = false;
     }
     if (groupsSearchInput) {
       groupsSearchInput.value = "";
@@ -149,11 +180,21 @@ function renderGroups(groups: FacebookGroup[]) {
     return;
   }
 
+  groupsList.hidden = !groupsVisible;
+  const groupsSearchField = groupsSearchInput?.closest<HTMLElement>(".field");
   if (groupsSelectAll) {
-    groupsSelectAll.hidden = false;
+    groupsSelectAll.hidden = !groupsVisible;
+  }
+  if (groupsSearchField) {
+    groupsSearchField.hidden = !groupsVisible;
   }
   if (groupsSearchInput) {
     groupsSearchInput.disabled = false;
+  }
+
+  if (!groupsVisible) {
+    updatePostingReadiness();
+    return;
   }
 
   const normalizedQuery = groupsSearchQuery.trim().toLowerCase();
@@ -325,19 +366,47 @@ function updateGroupsSelectAllState() {
     hasGroups && selectedCount > 0 && selectedCount < loadedGroups.length;
 }
 
+function updateGroupsSelectionSummary() {
+  if (!groupsSelectionCount) {
+    return;
+  }
+
+  const selectedGroupsCount = getSelectedGroupsCount();
+  const selectedLabel = `${selectedGroupsCount} ${
+    selectedGroupsCount === 1 ? "group" : "groups"
+  } selected`;
+
+  if (loadedGroups.length === 0) {
+    groupsSelectionCount.className = "selection-count";
+    groupsSelectionCount.textContent = selectedLabel;
+    return;
+  }
+
+  const summary = document.createElement("span");
+  summary.textContent = `${selectedLabel} from ${loadedGroups.length} loaded`;
+
+  const toggleButton = document.createElement("button");
+  toggleButton.type = "button";
+  toggleButton.className = "groups-summary__toggle";
+  toggleButton.textContent = groupsVisible ? "Hide groups" : "View groups";
+  toggleButton.addEventListener("click", () => {
+    groupsVisible = !groupsVisible;
+    renderGroups(loadedGroups);
+  });
+
+  groupsSelectionCount.className = "selection-count groups-summary";
+  groupsSelectionCount.replaceChildren(summary, toggleButton);
+}
+
 function updatePostingReadiness() {
-  const isAuthenticated = Boolean(currentAuthSession?.token);
+  const isAuthenticated = hasActiveExtensionAccess();
   const selectedGroupsCount = getSelectedGroupsCount();
   const hasPostBody = (postBodyInput?.value.trim().length ?? 0) > 0;
   const sleepTime = Number(postSleepInput?.value ?? 0);
   const hasValidSleepTime =
     Number.isFinite(sleepTime) && sleepTime >= MIN_SLEEP_SECONDS;
 
-  if (groupsSelectionCount) {
-    groupsSelectionCount.textContent = `${selectedGroupsCount} ${
-      selectedGroupsCount === 1 ? "group" : "groups"
-    } selected`;
-  }
+  updateGroupsSelectionSummary();
 
   updateGroupsSelectAllState();
 
@@ -354,7 +423,7 @@ function updatePostingReadiness() {
 }
 
 function updatePostingButtonState(
-  isAuthenticated = Boolean(currentAuthSession?.token),
+  isAuthenticated = hasActiveExtensionAccess(),
   hasPostBody = (postBodyInput?.value.trim().length ?? 0) > 0,
   selectedGroupsCount = getSelectedGroupsCount(),
   hasValidSleepTime = (() => {
@@ -368,10 +437,13 @@ function updatePostingButtonState(
 
   if (isPostingActive) {
     startPostingButton.disabled = isStopRequestPending;
-    startPostingButton.textContent = isStopRequestPending
-      ? "Stopping..."
-      : "Stop Posting";
+    setButtonContent(
+      startPostingButton,
+      isStopRequestPending ? "Stopping..." : "Stop Posting",
+      isStopRequestPending,
+    );
     startPostingButton.classList.add("start-posting-btn--stop");
+    updatePausePostingButtonState();
     return;
   }
 
@@ -382,7 +454,50 @@ function updatePostingButtonState(
     selectedGroupsCount > 0 &&
     hasValidSleepTime
   );
-  startPostingButton.textContent = "START POSTING";
+  setButtonContent(startPostingButton, "START POSTING");
+  updatePausePostingButtonState();
+}
+
+function updatePausePostingButtonState() {
+  if (!pausePostingButton) {
+    return;
+  }
+
+  pausePostingButton.hidden = !isPostingActive;
+  pausePostingButton.disabled = isStopRequestPending || isPauseResumeRequestPending;
+  pausePostingButton.classList.toggle(
+    "pause-posting-btn--resume",
+    isPostingPaused,
+  );
+
+  const label = isPauseResumeRequestPending
+    ? isPostingPaused
+      ? "Resuming..."
+      : "Pausing..."
+    : isPostingPaused
+      ? "Resume Posting"
+      : "Pause Posting";
+  setButtonContent(pausePostingButton, label, isPauseResumeRequestPending);
+}
+
+function setButtonContent(
+  button: HTMLButtonElement,
+  label: string,
+  showLoader = false,
+) {
+  if (!showLoader) {
+    button.textContent = label;
+    return;
+  }
+
+  const loader = document.createElement("span");
+  loader.className = "loader";
+  loader.setAttribute("aria-hidden", "true");
+
+  const text = document.createElement("span");
+  text.textContent = label;
+
+  button.replaceChildren(loader, text);
 }
 
 chrome.runtime.onMessage.addListener(
@@ -401,10 +516,15 @@ function updateUiPostingStatus(message: UiPostingStatusMessage) {
   if (
     message.status === "posting" ||
     message.status === "waiting" ||
+    message.status === "paused" ||
     message.status === "posted" ||
     message.status === "failed"
   ) {
     isPostingActive = true;
+    isPostingPaused = message.status === "paused";
+    if (message.status === "paused") {
+      isPauseResumeRequestPending = false;
+    }
     isStopRequestPending = false;
   }
 
@@ -426,7 +546,9 @@ function updateUiPostingStatus(message: UiPostingStatusMessage) {
     message.status === "rate_limited"
   ) {
     isPostingActive = false;
+    isPostingPaused = false;
     isStopRequestPending = false;
+    isPauseResumeRequestPending = false;
     updatePostingReadiness();
   }
 }
@@ -543,6 +665,8 @@ function getPostingStatusLabel(status: UiPostingStatusMessage["status"]) {
       return "Limit";
     case "waiting":
       return "Wait";
+    case "paused":
+      return "Pause";
     case "stopped":
       return "Stop";
     case "done":
@@ -555,8 +679,8 @@ function getPostingStatusLabel(status: UiPostingStatusMessage["status"]) {
 }
 
 loadGroupsButton?.addEventListener("click", async () => {
-  if (!currentAuthSession?.token) {
-    alert("Please sign in before loading groups.");
+  if (!hasActiveExtensionAccess()) {
+    alert("Your trial has ended. Contact the developer to activate lifetime access.");
     return;
   }
 
@@ -592,6 +716,7 @@ loadGroupsButton?.addEventListener("click", async () => {
     }
 
     const groups = response.groups ?? [];
+    groupsVisible = true;
     renderGroups(groups);
     updateGroupsStatus(
       `Finished loading ${groups.length} groups.`,
@@ -608,6 +733,10 @@ loadGroupsButton?.addEventListener("click", async () => {
     }
     if (groupsSearchInput) {
       groupsSearchInput.disabled = true;
+      const groupsSearchField = groupsSearchInput.closest<HTMLElement>(".field");
+      if (groupsSearchField) {
+        groupsSearchField.hidden = false;
+      }
     }
     groupsList.className = "empty-state";
     groupsList.textContent =
@@ -644,6 +773,9 @@ function removeSelectedImage(indexToRemove: number) {
   selectedImageFiles = selectedImageFiles.filter(
     (_file, index) => index !== indexToRemove,
   );
+  if (selectedImageFiles.length === 0) {
+    imagePreviewsVisible = false;
+  }
   syncPostImagesInput();
   renderImagePreviews();
 }
@@ -663,8 +795,33 @@ function renderImagePreviews() {
     return;
   }
 
-  imagePreviewList.replaceChildren(
-    ...selectedImageFiles.map((file, index) => {
+  const summary = document.createElement("div");
+  summary.className = "image-preview-summary";
+
+  const count = document.createElement("span");
+  count.textContent = `${selectedImageFiles.length} ${
+    selectedImageFiles.length === 1 ? "image" : "images"
+  } selected`;
+
+  const toggleButton = document.createElement("button");
+  toggleButton.type = "button";
+  toggleButton.className = "image-preview-summary__toggle";
+  toggleButton.textContent = imagePreviewsVisible
+    ? "Hide previews"
+    : "View previews";
+  toggleButton.addEventListener("click", () => {
+    imagePreviewsVisible = !imagePreviewsVisible;
+    renderImagePreviews();
+  });
+
+  summary.append(count, toggleButton);
+
+  if (!imagePreviewsVisible) {
+    imagePreviewList.replaceChildren(summary);
+    return;
+  }
+
+  const previews = selectedImageFiles.map((file, index) => {
       const previewUrl = URL.createObjectURL(file);
       selectedImagePreviewUrls.push(previewUrl);
 
@@ -688,8 +845,9 @@ function renderImagePreviews() {
 
       preview.append(image, caption, removeButton);
       return preview;
-    }),
-  );
+    });
+
+  imagePreviewList.replaceChildren(summary, ...previews);
 }
 
 postImagesInput?.addEventListener("change", () => {
@@ -751,6 +909,51 @@ createForm?.addEventListener("submit", (event) => {
   event.preventDefault();
 });
 
+pausePostingButton?.addEventListener("click", async () => {
+  if (!isPostingActive || isPauseResumeRequestPending || isStopRequestPending) {
+    return;
+  }
+
+  isPauseResumeRequestPending = true;
+  updatePausePostingButtonState();
+  updatePostingButtonState();
+
+  try {
+    const request: PauseUiPostingRequest | ResumeUiPostingRequest = {
+      type: isPostingPaused ? "RESUME_UI_POSTING" : "PAUSE_UI_POSTING",
+    };
+    const response = await chrome.runtime.sendMessage<
+      PauseUiPostingRequest | ResumeUiPostingRequest,
+      UiPostingResponse
+    >(request);
+
+    if (!response?.ok) {
+      throw new Error(
+        response?.error ??
+          (isPostingPaused ? "Unable to resume posting." : "Unable to pause posting."),
+      );
+    }
+
+    if (isPostingPaused) {
+      isPostingPaused = false;
+      isPauseResumeRequestPending = false;
+      updatePausePostingButtonState();
+      updatePostingButtonState();
+    }
+  } catch (error) {
+    isPauseResumeRequestPending = false;
+    updatePausePostingButtonState();
+    updatePostingButtonState();
+    alert(
+      error instanceof Error
+        ? error.message
+        : isPostingPaused
+          ? "Unable to resume posting."
+          : "Unable to pause posting.",
+    );
+  }
+});
+
 startPostingButton?.addEventListener("click", async () => {
   if (isPostingActive) {
     if (isStopRequestPending || !startPostingButton) {
@@ -782,8 +985,8 @@ startPostingButton?.addEventListener("click", async () => {
     return;
   }
 
-  if (!currentAuthSession?.token) {
-    alert("Please sign in before posting.");
+  if (!hasActiveExtensionAccess()) {
+    alert("Your trial has ended. Contact the developer to activate lifetime access.");
     return;
   }
 
@@ -819,11 +1022,17 @@ startPostingButton?.addEventListener("click", async () => {
     return;
   }
 
+  const postingGroups = shuffleGroupsToggle?.checked
+    ? shuffleGroups(selectedGroups)
+    : selectedGroups;
+
   isPostingActive = true;
+  isPostingPaused = false;
   isStopRequestPending = false;
+  isPauseResumeRequestPending = false;
   updatePostingButtonState();
   updateGroupsStatus("Preparing GraphQL posting...", 0);
-  resetPostingProgress(selectedGroups.length);
+  resetPostingProgress(postingGroups.length);
   scrollPostingProgressIntoView();
 
   try {
@@ -831,7 +1040,7 @@ startPostingButton?.addEventListener("click", async () => {
     const request: StartUiPostingRequest = {
       type: "START_UI_POSTING",
       body: postText,
-      groups: selectedGroups.map((group) => ({
+      groups: postingGroups.map((group) => ({
         id: group.id,
         name: group.name,
         url: group.url,
@@ -849,7 +1058,9 @@ startPostingButton?.addEventListener("click", async () => {
     }
   } catch (error) {
     isPostingActive = false;
+    isPostingPaused = false;
     isStopRequestPending = false;
+    isPauseResumeRequestPending = false;
     updatePostingReadiness();
     alert(
       error instanceof Error
@@ -865,16 +1076,259 @@ updateGeminiStatus();
 window.addEventListener("beforeunload", clearImagePreviewUrls);
 
 authLoginButton?.addEventListener("click", () => {
-  void startAuthFlow("login");
+  openContactEmail();
 });
 
 authSignupButton?.addEventListener("click", () => {
-  void startAuthFlow("signup");
+  openContactWhatsApp();
 });
 
 authLogoutButton?.addEventListener("click", () => {
-  void clearAuthSession();
+  void initializeExtensionAccess();
 });
+
+function hasActiveExtensionAccess(): boolean {
+  return currentExtensionAccess?.active === true;
+}
+
+async function initializeExtensionAccess() {
+  setAccessBusyState("Checking your trial access...");
+
+  try {
+    const identity = await getOrCreateExtensionIdentity();
+    const response = await fetch(`${AUTH_API_BASE_URL}/api/extension-access/start`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        install_id: identity.installId,
+        activation_id: identity.activationId,
+      }),
+    });
+
+    const payload = (await response.json().catch(() => ({}))) as {
+      error?: string;
+      active?: boolean;
+      access_type?: "trial" | "lifetime" | "expired";
+      activation_id?: string;
+      trial_expires_at?: string;
+      lifetime_active?: boolean;
+      activated_at?: string;
+    };
+
+    if (!response.ok || !payload.activation_id || !payload.trial_expires_at) {
+      throw new Error(payload.error ?? "Unable to check trial access.");
+    }
+
+    currentExtensionAccess = {
+      active: payload.active === true,
+      accessType: payload.access_type ?? "expired",
+      activationId: payload.activation_id,
+      trialExpiresAt: payload.trial_expires_at,
+      lifetimeActive: payload.lifetime_active === true,
+      activatedAt: payload.activated_at,
+    };
+
+    await chrome.storage.local.set({
+      [EXTENSION_ACTIVATION_ID_STORAGE_KEY]: payload.activation_id,
+    });
+
+    updateExtensionAccessUi();
+  } catch (error) {
+    currentExtensionAccess = undefined;
+    showAccessUnavailable(
+      error instanceof Error ? error.message : "Unable to check trial access.",
+    );
+  }
+}
+
+async function getOrCreateExtensionIdentity(): Promise<{
+  installId: string;
+  activationId: string;
+}> {
+  const storage = await chrome.storage.local.get([
+    EXTENSION_INSTALL_ID_STORAGE_KEY,
+    EXTENSION_ACTIVATION_ID_STORAGE_KEY,
+  ]);
+
+  const installId =
+    typeof storage[EXTENSION_INSTALL_ID_STORAGE_KEY] === "string"
+      ? storage[EXTENSION_INSTALL_ID_STORAGE_KEY]
+      : crypto.randomUUID();
+  const activationId =
+    typeof storage[EXTENSION_ACTIVATION_ID_STORAGE_KEY] === "string"
+      ? storage[EXTENSION_ACTIVATION_ID_STORAGE_KEY]
+      : generateActivationId();
+
+  await chrome.storage.local.set({
+    [EXTENSION_INSTALL_ID_STORAGE_KEY]: installId,
+    [EXTENSION_ACTIVATION_ID_STORAGE_KEY]: activationId,
+  });
+
+  return { installId, activationId };
+}
+
+function generateActivationId(): string {
+  const alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+  const bytes = new Uint8Array(8);
+  crypto.getRandomValues(bytes);
+  const code = Array.from(bytes, (byte) => alphabet[byte % alphabet.length]).join("");
+  return `FGBP-${code.slice(0, 4)}-${code.slice(4)}`;
+}
+
+function updateExtensionAccessUi() {
+  const access = currentExtensionAccess;
+  const active = access?.active === true;
+  const activationId = access?.activationId ?? "";
+
+  if (createForm) {
+    createForm.hidden = !active;
+  }
+
+  if (authSessionPill) {
+    authSessionPill.hidden = !activationId;
+  }
+
+  if (authUserEmail) {
+    authUserEmail.textContent = activationId;
+  }
+
+  if (authPanelTitle) {
+    authPanelTitle.hidden = false;
+    authPanelTitle.textContent = active
+      ? access?.accessType === "lifetime"
+        ? "Lifetime access is active."
+        : "Your 7-day trial is active."
+      : "Your trial has ended.";
+  }
+
+  if (authStatusMessage) {
+    authStatusMessage.textContent = getAccessStatusMessage(access);
+  }
+
+  const showContactActions = !active;
+  if (authLoginButton) {
+    authLoginButton.hidden = !showContactActions;
+    authLoginButton.disabled = false;
+    authLoginButton.textContent = "Email Developer";
+  }
+  if (authSignupButton) {
+    authSignupButton.hidden = !showContactActions;
+    authSignupButton.disabled = false;
+    authSignupButton.textContent = "WhatsApp Developer";
+  }
+  if (authLogoutButton) {
+    authLogoutButton.hidden = active;
+    authLogoutButton.disabled = false;
+    authLogoutButton.textContent = "Refresh Access";
+  }
+
+  updatePostingReadiness();
+}
+
+function showAccessUnavailable(message: string) {
+  if (createForm) {
+    createForm.hidden = true;
+  }
+  if (authPanelTitle) {
+    authPanelTitle.hidden = false;
+    authPanelTitle.textContent = "Unable to check access.";
+  }
+  if (authStatusMessage) {
+    authStatusMessage.textContent = `${message} Refresh access or contact the developer if this keeps happening.`;
+  }
+  if (authSessionPill && authUserEmail) {
+    void chrome.storage.local
+      .get(EXTENSION_ACTIVATION_ID_STORAGE_KEY)
+      .then((storage) => {
+        const activationId = storage[EXTENSION_ACTIVATION_ID_STORAGE_KEY];
+        authSessionPill.hidden = typeof activationId !== "string";
+        authUserEmail.textContent = typeof activationId === "string" ? activationId : "";
+      });
+  }
+  if (authLoginButton) {
+    authLoginButton.hidden = false;
+    authLoginButton.disabled = false;
+    authLoginButton.textContent = "Email Developer";
+  }
+  if (authSignupButton) {
+    authSignupButton.hidden = false;
+    authSignupButton.disabled = false;
+    authSignupButton.textContent = "WhatsApp Developer";
+  }
+  if (authLogoutButton) {
+    authLogoutButton.hidden = false;
+    authLogoutButton.disabled = false;
+    authLogoutButton.textContent = "Refresh Access";
+  }
+  updatePostingReadiness();
+}
+
+function setAccessBusyState(message: string) {
+  if (createForm) {
+    createForm.hidden = true;
+  }
+  if (authPanelTitle) {
+    authPanelTitle.hidden = false;
+    authPanelTitle.textContent = "Checking your trial access...";
+  }
+  if (authStatusMessage) {
+    authStatusMessage.textContent = message;
+  }
+  if (authSessionPill) {
+    authSessionPill.hidden = true;
+  }
+  if (authLoginButton) {
+    authLoginButton.hidden = true;
+  }
+  if (authSignupButton) {
+    authSignupButton.hidden = true;
+  }
+  if (authLogoutButton) {
+    authLogoutButton.hidden = true;
+  }
+  updatePostingReadiness();
+}
+
+function getAccessStatusMessage(
+  access: typeof currentExtensionAccess,
+): string {
+  if (!access) {
+    return "Unable to load extension access.";
+  }
+
+  if (access.accessType === "lifetime") {
+    return "Thanks for supporting the extension. Lifetime access is active on this browser profile.";
+  }
+
+  if (access.active) {
+    return `Trial access is active until ${formatExpiry(access.trialExpiresAt)}.`;
+  }
+
+  return `Trial access ended on ${formatExpiry(access.trialExpiresAt)}. Send your Activation ID to ${TRIAL_CONTACT_EMAIL} or WhatsApp +${TRIAL_CONTACT_WHATSAPP} to activate lifetime access.`;
+}
+
+function openContactEmail() {
+  const activationId = currentExtensionAccess?.activationId ?? "";
+  const subject = encodeURIComponent("Facebook Groups Bulk Poster lifetime access");
+  const body = encodeURIComponent(
+    `Hi, I want to activate lifetime access.\n\nActivation ID: ${activationId}`,
+  );
+  void chrome.tabs.create({
+    url: `mailto:${TRIAL_CONTACT_EMAIL}?subject=${subject}&body=${body}`,
+  });
+}
+
+function openContactWhatsApp() {
+  const activationId = currentExtensionAccess?.activationId ?? "";
+  const text = encodeURIComponent(
+    `Hi, I want to activate lifetime access for Facebook Groups Bulk Poster. Activation ID: ${activationId}`,
+  );
+  void chrome.tabs.create({
+    url: `https://wa.me/${TRIAL_CONTACT_WHATSAPP}?text=${text}`,
+  });
+}
 
 function fileToUiPostImage(file: File): Promise<UiPostImage> {
   return new Promise((resolve, reject) => {
@@ -939,6 +1393,20 @@ function scrollPostingProgressIntoView() {
     behavior: "smooth",
     block: "start",
   });
+}
+
+function shuffleGroups<T>(groups: T[]): T[] {
+  const shuffledGroups = [...groups];
+
+  for (let index = shuffledGroups.length - 1; index > 0; index -= 1) {
+    const swapIndex = Math.floor(Math.random() * (index + 1));
+    [shuffledGroups[index], shuffledGroups[swapIndex]] = [
+      shuffledGroups[swapIndex],
+      shuffledGroups[index],
+    ];
+  }
+
+  return shuffledGroups;
 }
 
 async function initializeGeminiSettings() {

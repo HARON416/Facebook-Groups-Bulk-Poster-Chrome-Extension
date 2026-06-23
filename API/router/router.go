@@ -32,6 +32,12 @@ func Router(apiHandler *handlers.APIHandler) *chi.Mux {
 	r.Get("/health", healthHandler)
 
 	r.Route("/api", func(r chi.Router) {
+		r.Post("/extension-access/start", apiHandler.StartExtensionAccess)
+
+		r.Route("/admin", func(r chi.Router) {
+			r.Post("/extension-access/activate-lifetime", apiHandler.ActivateLifetimeExtensionAccess)
+		})
+
 		r.Route("/auth", func(r chi.Router) {
 			r.Post("/register", apiHandler.CreateUser)
 			r.Post("/login", apiHandler.Login)

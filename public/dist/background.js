@@ -17079,6 +17079,7 @@ ${underline}`);
   var captureTabId;
   var activePosting = false;
   var stopPostingRequested = false;
+  var pausePostingRequested = false;
   var postingCaptureTabId;
   var capturedUploadTemplate;
   var capturedPostTemplate;
@@ -17247,6 +17248,16 @@ ${underline}`);
       }
       if (request.type === "STOP_UI_POSTING") {
         stopPostingRequested = true;
+        sendResponse({ ok: true });
+        return false;
+      }
+      if (request.type === "PAUSE_UI_POSTING") {
+        pausePostingRequested = true;
+        sendResponse({ ok: true });
+        return false;
+      }
+      if (request.type === "RESUME_UI_POSTING") {
+        pausePostingRequested = false;
         sendResponse({ ok: true });
         return false;
       }
@@ -17662,10 +17673,34 @@ ${underline}`);
       throw new Error(MANUAL_STOP_MESSAGE);
     }
   }
-  async function sleepWithStopChecks(durationMs, intervalMs = 250) {
+  async function waitWhilePostingPaused(statusContext) {
+    let notified = false;
+    while (activePosting && pausePostingRequested) {
+      throwIfPostingStopped();
+      if (!notified) {
+        notifyUiPostingStatus({
+          status: "paused",
+          message: statusContext.groupName ? `Posting paused before ${statusContext.groupName}.` : "Posting queue paused.",
+          current: statusContext.current,
+          total: statusContext.total,
+          groupId: statusContext.groupId,
+          groupName: statusContext.groupName,
+          successCount: statusContext.successCount,
+          failedCount: statusContext.failedCount,
+          processedCount: statusContext.processedCount
+        });
+        notified = true;
+      }
+      await sleep2(250);
+    }
+  }
+  async function sleepWithStopChecks(durationMs, statusContext, intervalMs = 250) {
     let remaining = durationMs;
     while (remaining > 0) {
       throwIfPostingStopped();
+      if (statusContext) {
+        await waitWhilePostingPaused(statusContext);
+      }
       const step = Math.min(intervalMs, remaining);
       await sleep2(step);
       remaining -= step;
@@ -17674,6 +17709,7 @@ ${underline}`);
   async function sleepWithPostingCountdown(durationSeconds, statusContext) {
     for (let remaining = durationSeconds; remaining > 0; remaining -= 1) {
       throwIfPostingStopped();
+      await waitWhilePostingPaused(statusContext);
       notifyUiPostingStatus({
         status: "waiting",
         message: `Waiting ${remaining} seconds before next group...`,
@@ -17685,7 +17721,7 @@ ${underline}`);
         failedCount: statusContext.failedCount,
         processedCount: statusContext.processedCount
       });
-      await sleepWithStopChecks(1e3);
+      await sleepWithStopChecks(1e3, statusContext);
     }
   }
   async function runGraphqlPostingQueue(request) {
@@ -17709,6 +17745,7 @@ ${underline}`);
     }
     activePosting = true;
     stopPostingRequested = false;
+    pausePostingRequested = false;
     let successCount = 0;
     let failedCount = 0;
     const total = request.groups.length;
@@ -17759,12 +17796,23 @@ ${underline}`);
         throwIfPostingStopped();
         const group = request.groups[index];
         const current = index + 1;
+        const statusContext = {
+          current,
+          total,
+          groupId: group.id,
+          groupName: group.name,
+          successCount,
+          failedCount,
+          processedCount: index
+        };
+        await waitWhilePostingPaused(statusContext);
         debugLog("Processing group.", {
           current,
           total,
           groupId: group.id,
           groupName: group.name
         });
+        await waitWhilePostingPaused(statusContext);
         notifyUiPostingStatus({
           status: "posting",
           message: `Rewriting description for ${group.name}...`,
@@ -17777,7 +17825,9 @@ ${underline}`);
           processedCount: index
         });
         const postBody = await maybeRewriteDescription(request.body);
+        const postBodyWasRewritten = postBody !== request.body;
         throwIfPostingStopped();
+        await waitWhilePostingPaused(statusContext);
         debugLog("Post body prepared for group.", {
           current,
           total,
@@ -17785,8 +17835,9 @@ ${underline}`);
           groupName: group.name,
           originalLength: request.body.length,
           finalLength: postBody.length,
-          rewritten: postBody !== request.body
+          rewritten: postBodyWasRewritten
         });
+        await waitWhilePostingPaused(statusContext);
         notifyUiPostingStatus({
           status: "posting",
           message: `Uploading images for ${group.name}...`,
@@ -17804,10 +17855,12 @@ ${underline}`);
           request.images
         ) : [];
         throwIfPostingStopped();
+        await waitWhilePostingPaused(statusContext);
         debugLog("Image upload phase complete.", {
           groupId: group.id,
           uploadedPhotoCount: photoIds.length
         });
+        await waitWhilePostingPaused(statusContext);
         notifyUiPostingStatus({
           status: "posting",
           message: `Posting to ${group.name}...`,
@@ -17824,9 +17877,11 @@ ${underline}`);
           templates.postTemplate,
           postBody,
           photoIds,
-          group.id
+          group.id,
+          postBodyWasRewritten
         );
         throwIfPostingStopped();
+        await waitWhilePostingPaused(statusContext);
         debugLog("GraphQL post result received.", {
           groupId: group.id,
           success: postResult.success,
@@ -17935,6 +17990,7 @@ ${underline}`);
       });
       activePosting = false;
       stopPostingRequested = false;
+      pausePostingRequested = false;
     }
   }
   async function ensurePostingTemplates(tabId, groups, originalBody, images, total) {
@@ -17985,7 +18041,15 @@ ${underline}`);
     const groupUrl = normalizeGroupUrl(firstGroup.id);
     await chrome.tabs.update(tabId, { url: groupUrl, active: true });
     await waitForTabComplete(tabId, "/groups/");
-    await sleepWithStopChecks(5e3);
+    await sleepWithStopChecks(5e3, {
+      current: 1,
+      total,
+      groupId: firstGroup.id,
+      groupName: firstGroup.name,
+      successCount: 0,
+      failedCount: 0,
+      processedCount: 0
+    });
     const postResult = await createPostInTab(tabId, images, body);
     if (!postResult.ok) {
       stopPostingTemplateCapture();
@@ -18211,13 +18275,14 @@ ${underline}`);
       };
     }
   }
-  async function createGraphqlPost(tabId, postTemplate, text, photoIds, groupId) {
+  async function createGraphqlPost(tabId, postTemplate, text, photoIds, groupId, textWasRewritten) {
     await logPageCookieDiagnostics(tabId, "Before GraphQL replay");
     const variables = buildPostVariables(
       postTemplate.formData,
       text,
       photoIds,
-      groupId
+      groupId,
+      textWasRewritten
     );
     debugLog("Sending GraphQL post request.", {
       groupId,
@@ -18269,7 +18334,7 @@ ${underline}`);
     }
     return parsePostResponse(payload.responseText);
   }
-  function buildPostVariables(templateFormData, text, photoIds, groupId) {
+  function buildPostVariables(templateFormData, text, photoIds, groupId, textWasRewritten) {
     const attachments = photoIds.map((photoId) => ({
       photo: {
         id: photoId
@@ -18279,7 +18344,13 @@ ${underline}`);
       safeParseJson(templateFormData.variables)
     );
     if (!templateVariables || !isRecord(templateVariables.input)) {
-      return buildFallbackPostVariables(templateFormData, text, attachments, groupId);
+      return buildFallbackPostVariables(
+        templateFormData,
+        text,
+        attachments,
+        groupId,
+        textWasRewritten
+      );
     }
     const input = templateVariables.input;
     const originalText = isRecord(input.message) && typeof input.message.text === "string" ? input.message.text : void 0;
@@ -18302,13 +18373,15 @@ ${underline}`);
     };
     input.client_mutation_id = String(Date.now());
     if (originalText !== text || !isRecord(input.composed_text)) {
-      input.composed_text = buildComposedText(text);
+      input.composed_text = buildComposedText(text, {
+        preserveBlankLines: !textWasRewritten
+      });
     }
     replaceStringValue(templateVariables, originalText, text);
     replaceStringValue(templateVariables, originalGroupId, groupId);
     return JSON.stringify(templateVariables);
   }
-  function buildFallbackPostVariables(templateFormData, text, attachments, groupId) {
+  function buildFallbackPostVariables(templateFormData, text, attachments, groupId, textWasRewritten) {
     const actorId = extractUserIdFromFormData(templateFormData) ?? "61553861467726";
     return JSON.stringify({
       input: {
@@ -18324,7 +18397,9 @@ ${underline}`);
           text
         },
         attachments,
-        composed_text: buildComposedText(text),
+        composed_text: buildComposedText(text, {
+          preserveBlankLines: !textWasRewritten
+        }),
         audience: {
           to_id: groupId
         },
@@ -18336,19 +18411,18 @@ ${underline}`);
       isGroup: true
     });
   }
-  function buildComposedText(text) {
+  function buildComposedText(text, { preserveBlankLines }) {
     const textBlocks = text.split(/\r?\n/);
-    const blocks = (textBlocks.length > 0 ? textBlocks : [text]).map(
-      (block) => block.length > 0 ? block : "\xA0"
-    );
+    const blocks = (textBlocks.length > 0 ? textBlocks : [text]).map((block) => block.trimEnd()).filter((block) => preserveBlankLines || block.trim().length > 0).map((block) => block.length > 0 ? block : "\xA0");
+    const normalizedBlocks = blocks.length > 0 ? blocks : [text.trim()];
     return {
-      block_data: blocks.map(() => "{}"),
-      block_depths: blocks.map(() => 0),
-      block_types: blocks.map(() => 0),
-      blocks,
-      entities: blocks.map(() => "[]"),
+      block_data: normalizedBlocks.map(() => "{}"),
+      block_depths: normalizedBlocks.map(() => 0),
+      block_types: normalizedBlocks.map(() => 0),
+      blocks: normalizedBlocks,
+      entities: normalizedBlocks.map(() => "[]"),
       entity_map: "{}",
-      inline_styles: blocks.map(() => "[]")
+      inline_styles: normalizedBlocks.map(() => "[]")
     };
   }
   function getTemplateGroupId(input) {

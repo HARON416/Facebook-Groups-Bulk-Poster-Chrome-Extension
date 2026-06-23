@@ -11,20 +11,20 @@
       <section id="auth-panel" class="auth-panel">
         <div class="auth-panel__card">
           <p class="section-heading__eyebrow">Access</p>
-          <h1 id="auth-panel-title" class="auth-panel__title">Sign in to unlock the extension.</h1>
+          <h1 id="auth-panel-title" class="auth-panel__title">Checking your trial access...</h1>
           <p id="auth-status-message" class="auth-panel__summary">
-            Authenticate with your account before loading groups or starting the posting queue.
+            Preparing your 7-day trial.
           </p>
           <div id="auth-session-pill" class="auth-session-pill" hidden>
-            Signed in as <strong id="auth-user-email"></strong>
+            Activation ID <strong id="auth-user-email"></strong>
           </div>
           <div class="auth-panel__actions">
-            <button type="button" id="auth-login-btn">Log In</button>
-            <button type="button" id="auth-signup-btn" class="auth-secondary-btn">
-              Create Account
+            <button type="button" id="auth-login-btn" hidden>Email Developer</button>
+            <button type="button" id="auth-signup-btn" class="auth-secondary-btn" hidden>
+              WhatsApp Developer
             </button>
             <button type="button" id="auth-logout-btn" class="auth-ghost-btn" hidden>
-              Sign Out
+              Refresh Access
             </button>
           </div>
         </div>
@@ -161,11 +161,26 @@
             />
           </label>
 
+          <label class="toggle-row" for="shuffle-groups-toggle">
+            <span class="toggle-row__copy">
+              <strong>Shuffle Groups Before Posting</strong>
+              <small>Randomize the selected group order when the posting queue starts.</small>
+            </span>
+            <input
+              type="checkbox"
+              id="shuffle-groups-toggle"
+              name="shuffle-groups-toggle"
+            />
+          </label>
+
           <div id="gemini-status" class="status-bar" role="status">
             <span id="gemini-status-message">Gemini rewrite is off.</span>
             <span id="gemini-status-count">No key</span>
           </div>
 
+          <button type="button" id="pause-posting-btn" hidden>
+            Pause Posting
+          </button>
           <button type="submit" id="start-posting-btn" disabled>
             START POSTING
           </button>

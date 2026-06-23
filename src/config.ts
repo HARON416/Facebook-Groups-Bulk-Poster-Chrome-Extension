@@ -53,12 +53,21 @@ export type StopUiPostingRequest = {
   type: "STOP_UI_POSTING";
 };
 
+export type PauseUiPostingRequest = {
+  type: "PAUSE_UI_POSTING";
+};
+
+export type ResumeUiPostingRequest = {
+  type: "RESUME_UI_POSTING";
+};
+
 export type UiPostingStatusMessage = {
   type: "UI_POSTING_STATUS";
   status:
     | "idle"
     | "posting"
     | "waiting"
+    | "paused"
     | "posted"
     | "failed"
     | "rate_limited"
@@ -110,4 +119,6 @@ export type ClearStatusBannerMessage = {
 export type ExtensionRequest =
   | LoadGroupsRequest
   | StartUiPostingRequest
-  | StopUiPostingRequest;
+  | StopUiPostingRequest
+  | PauseUiPostingRequest
+  | ResumeUiPostingRequest;
