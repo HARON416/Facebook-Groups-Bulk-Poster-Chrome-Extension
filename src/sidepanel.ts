@@ -19,9 +19,22 @@ const AUTH_USER_STORAGE_KEY = "authUser";
 const AUTH_EXPIRES_AT_STORAGE_KEY = "authExpiresAt";
 const EXTENSION_INSTALL_ID_STORAGE_KEY = "extensionInstallId";
 const EXTENSION_ACTIVATION_ID_STORAGE_KEY = "extensionActivationId";
+const SIDE_PANEL_SESSION_STORAGE_KEY = "sidePanelSession";
 const MIN_SLEEP_SECONDS = 120;
 const TRIAL_CONTACT_EMAIL = "haronkibetrutoh@gmail.com";
 const TRIAL_CONTACT_WHATSAPP = "254718448461";
+
+type SidePanelSession = {
+  postBody: string;
+  delaySeconds: number;
+  shuffleGroups: boolean;
+  loadedGroups: FacebookGroup[];
+  selectedGroupIds: string[];
+  groupsSearchQuery: string;
+  groupsVisible: boolean;
+  imagePreviewsVisible: boolean;
+  images: UiPostImage[];
+};
 
 const loadGroupsButton =
   document.querySelector<HTMLButtonElement>("#load-groups-btn");
@@ -123,6 +136,8 @@ let isPostingPaused = false;
 let isStopRequestPending = false;
 let isPauseResumeRequestPending = false;
 let pauseRequestedLocally = false;
+let saveSidePanelSessionTimer: number | undefined;
+let isRestoringSidePanelSession = false;
 let currentExtensionAccess:
   | {
       active: boolean;
@@ -142,6 +157,7 @@ let currentAuthSession:
   | undefined;
 
 void initializeGeminiSettings();
+void initializeSidePanelSession();
 void initializeExtensionAccess();
 
 function renderGroups(groups: FacebookGroup[]) {
@@ -236,6 +252,7 @@ function renderGroups(groups: FacebookGroup[]) {
         }
 
         renderGroups(loadedGroups);
+        scheduleSaveSidePanelSession();
       });
 
       const content = document.createElement("span");
@@ -393,6 +410,7 @@ function updateGroupsSelectionSummary() {
   toggleButton.addEventListener("click", () => {
     groupsVisible = !groupsVisible;
     renderGroups(loadedGroups);
+    scheduleSaveSidePanelSession();
   });
 
   groupsSelectionCount.className = "selection-count groups-summary";
@@ -724,6 +742,7 @@ loadGroupsButton?.addEventListener("click", async () => {
     const groups = response.groups ?? [];
     groupsVisible = true;
     renderGroups(groups);
+    scheduleSaveSidePanelSession();
     updateGroupsStatus(
       `Finished loading ${groups.length} groups.`,
       groups.length,
@@ -784,6 +803,7 @@ function removeSelectedImage(indexToRemove: number) {
   }
   syncPostImagesInput();
   renderImagePreviews();
+  scheduleSaveSidePanelSession();
 }
 
 function renderImagePreviews() {
@@ -818,6 +838,7 @@ function renderImagePreviews() {
   toggleButton.addEventListener("click", () => {
     imagePreviewsVisible = !imagePreviewsVisible;
     renderImagePreviews();
+    scheduleSaveSidePanelSession();
   });
 
   summary.append(count, toggleButton);
@@ -863,9 +884,13 @@ postImagesInput?.addEventListener("change", () => {
   selectedImageFiles = [...selectedImageFiles, ...newImageFiles];
   syncPostImagesInput();
   renderImagePreviews();
+  scheduleSaveSidePanelSession();
 });
 
-postBodyInput?.addEventListener("input", updatePostingReadiness);
+postBodyInput?.addEventListener("input", () => {
+  updatePostingReadiness();
+  scheduleSaveSidePanelSession();
+});
 
 groupsSelectAllCheckbox?.addEventListener("change", () => {
   const shouldSelectAll = groupsSelectAllCheckbox.checked;
@@ -877,11 +902,13 @@ groupsSelectAllCheckbox?.addEventListener("change", () => {
   }
 
   renderGroups(loadedGroups);
+  scheduleSaveSidePanelSession();
 });
 
 groupsSearchInput?.addEventListener("input", () => {
   groupsSearchQuery = groupsSearchInput.value;
   renderGroups(loadedGroups);
+  scheduleSaveSidePanelSession();
 });
 
 geminiApiKeyInput?.addEventListener("input", () => {
@@ -909,6 +936,11 @@ postSleepInput?.addEventListener("change", () => {
   }
 
   updatePostingReadiness();
+  scheduleSaveSidePanelSession();
+});
+
+shuffleGroupsToggle?.addEventListener("change", () => {
+  scheduleSaveSidePanelSession();
 });
 
 createForm?.addEventListener("submit", (event) => {
@@ -1091,7 +1123,10 @@ startPostingButton?.addEventListener("click", async () => {
 updatePostingReadiness();
 updateGeminiStatus();
 
-window.addEventListener("beforeunload", clearImagePreviewUrls);
+window.addEventListener("beforeunload", () => {
+  flushSidePanelSessionSave();
+  clearImagePreviewUrls();
+});
 
 authLoginButton?.addEventListener("click", () => {
   openContactEmail();
@@ -1368,6 +1403,167 @@ function fileToUiPostImage(file: File): Promise<UiPostImage> {
     });
     reader.readAsDataURL(file);
   });
+}
+
+async function initializeSidePanelSession() {
+  isRestoringSidePanelSession = true;
+
+  try {
+    const storage = await chrome.storage.local.get([
+      SIDE_PANEL_SESSION_STORAGE_KEY,
+    ]);
+    const session = storage[SIDE_PANEL_SESSION_STORAGE_KEY] as
+      | Partial<SidePanelSession>
+      | undefined;
+
+    if (!session || typeof session !== "object") {
+      renderImagePreviews();
+      return;
+    }
+
+    if (postBodyInput && typeof session.postBody === "string") {
+      postBodyInput.value = session.postBody;
+    }
+
+    if (postSleepInput && typeof session.delaySeconds === "number") {
+      postSleepInput.value = String(
+        Math.max(session.delaySeconds, MIN_SLEEP_SECONDS),
+      );
+    }
+
+    if (shuffleGroupsToggle) {
+      shuffleGroupsToggle.checked = session.shuffleGroups === true;
+    }
+
+    if (groupsSearchInput && typeof session.groupsSearchQuery === "string") {
+      groupsSearchInput.value = session.groupsSearchQuery;
+      groupsSearchQuery = session.groupsSearchQuery;
+    }
+
+    groupsVisible = session.groupsVisible !== false;
+    imagePreviewsVisible = session.imagePreviewsVisible === true;
+
+    if (Array.isArray(session.selectedGroupIds)) {
+      selectedGroupIds = new Set(
+        session.selectedGroupIds.filter(
+          (groupId) => typeof groupId === "string",
+        ),
+      );
+    }
+
+    if (Array.isArray(session.images)) {
+      selectedImageFiles = session.images
+        .filter(isRestorableImage)
+        .map((image) => dataUrlToFile(image.dataUrl, image.name, image.type));
+      syncPostImagesInput();
+    }
+
+    if (
+      Array.isArray(session.loadedGroups) &&
+      session.loadedGroups.length > 0
+    ) {
+      renderGroups(session.loadedGroups.filter(isRestorableGroup));
+      updateGroupsStatus(
+        `Restored ${loadedGroups.length} loaded groups.`,
+        loadedGroups.length,
+      );
+    } else {
+      updatePostingReadiness();
+    }
+
+    renderImagePreviews();
+  } catch (error) {
+    console.warn(
+      "Unable to restore side panel session.",
+      error instanceof Error ? error.message : error,
+    );
+    renderImagePreviews();
+  } finally {
+    isRestoringSidePanelSession = false;
+  }
+}
+
+function isRestorableGroup(value: unknown): value is FacebookGroup {
+  return (
+    typeof value === "object" &&
+    value !== null &&
+    typeof (value as FacebookGroup).id === "string" &&
+    typeof (value as FacebookGroup).name === "string" &&
+    typeof (value as FacebookGroup).url === "string"
+  );
+}
+
+function isRestorableImage(value: unknown): value is UiPostImage {
+  return (
+    typeof value === "object" &&
+    value !== null &&
+    typeof (value as UiPostImage).name === "string" &&
+    typeof (value as UiPostImage).type === "string" &&
+    typeof (value as UiPostImage).dataUrl === "string"
+  );
+}
+
+function dataUrlToFile(dataUrl: string, name: string, type: string): File {
+  const [metadata, base64Data = ""] = dataUrl.split(",");
+  const mimeType = metadata.match(/data:([^;]+)/)?.[1] || type;
+  const binary = atob(base64Data);
+  const bytes = new Uint8Array(binary.length);
+
+  for (let index = 0; index < binary.length; index += 1) {
+    bytes[index] = binary.charCodeAt(index);
+  }
+
+  return new File([bytes], name, { type: mimeType || type });
+}
+
+function scheduleSaveSidePanelSession() {
+  if (isRestoringSidePanelSession) {
+    return;
+  }
+
+  if (saveSidePanelSessionTimer !== undefined) {
+    window.clearTimeout(saveSidePanelSessionTimer);
+  }
+
+  saveSidePanelSessionTimer = window.setTimeout(() => {
+    saveSidePanelSessionTimer = undefined;
+    void saveSidePanelSession();
+  }, 400);
+}
+
+function flushSidePanelSessionSave() {
+  if (saveSidePanelSessionTimer !== undefined) {
+    window.clearTimeout(saveSidePanelSessionTimer);
+    saveSidePanelSessionTimer = undefined;
+  }
+
+  void saveSidePanelSession();
+}
+
+async function saveSidePanelSession() {
+  try {
+    const images = await Promise.all(selectedImageFiles.map(fileToUiPostImage));
+    const session: SidePanelSession = {
+      postBody: postBodyInput?.value ?? "",
+      delaySeconds: Number(postSleepInput?.value ?? MIN_SLEEP_SECONDS),
+      shuffleGroups: Boolean(shuffleGroupsToggle?.checked),
+      loadedGroups,
+      selectedGroupIds: Array.from(selectedGroupIds),
+      groupsSearchQuery,
+      groupsVisible,
+      imagePreviewsVisible,
+      images,
+    };
+
+    await chrome.storage.local.set({
+      [SIDE_PANEL_SESSION_STORAGE_KEY]: session,
+    });
+  } catch (error) {
+    console.warn(
+      "Unable to save side panel session.",
+      error instanceof Error ? error.message : error,
+    );
+  }
 }
 
 function resetPostingProgress(total: number) {
