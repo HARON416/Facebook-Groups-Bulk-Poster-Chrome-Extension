@@ -17080,11 +17080,13 @@ ${underline}`);
   var activePosting = false;
   var stopPostingRequested = false;
   var pausePostingRequested = false;
+  var pauseNotificationSent = false;
   var postingCaptureTabId;
   var capturedUploadTemplate;
   var capturedPostTemplate;
   var loggedUploadCandidateRequestIds = /* @__PURE__ */ new Set();
   var MANUAL_STOP_MESSAGE = "Posting stopped by user.";
+  var FACEBOOK_POST_LIMIT_PATTERN = /we\s+limit\s+how\s+often\s+you\s+can\s+post,\s+comment\s+or\s+do\s+other\s+things\s+in\s+a\s+given\s+amount\s+of\s+time\s+in\s+order\s+to\s+help\s+protect\s+the\s+community\s+from\s+spam\.\s+you\s+can\s+try\s+again\s+later/i;
   chrome.runtime.onInstalled.addListener(() => {
     void chrome.sidePanel.setPanelBehavior({ openPanelOnActionClick: true });
   });
@@ -17253,11 +17255,13 @@ ${underline}`);
       }
       if (request.type === "PAUSE_UI_POSTING") {
         pausePostingRequested = true;
+        pauseNotificationSent = false;
         sendResponse({ ok: true });
         return false;
       }
       if (request.type === "RESUME_UI_POSTING") {
         pausePostingRequested = false;
+        pauseNotificationSent = false;
         sendResponse({ ok: true });
         return false;
       }
@@ -17409,8 +17413,11 @@ ${underline}`);
       notifyGroupsStatus("Opening Facebook joined groups page...", 0);
       await navigateToJoinedGroups(tab.id);
       notifyGroupsStatus("Facebook joined groups page loaded.", 0);
-      notifyGroupsStatus("Scrolling to trigger Facebook groups request...", 0);
-      await scrollJoinedGroupsPage(tab.id);
+      notifyGroupsStatus(
+        "Changing joined groups sort to trigger Facebook groups request...",
+        0
+      );
+      await triggerJoinedGroupsSortRequest(tab.id);
       notifyGroupsStatus("Waiting for fresh Facebook groups request...", 0);
       const capturedRequest = await waitForCapturedGroupsRequest();
       notifyGroupsStatus("Captured groups request. Preparing extraction...", 0);
@@ -17493,17 +17500,107 @@ ${underline}`);
     }
     throw new Error("Facebook page DOM took too long to finish loading.");
   }
-  async function scrollJoinedGroupsPage(tabId) {
+  async function triggerJoinedGroupsSortRequest(tabId) {
     if (!tabId) {
-      throw new Error("Unable to scroll joined groups tab.");
+      throw new Error("Unable to trigger joined groups sort.");
     }
-    for (let index = 0; index < 5; index += 1) {
-      notifyGroupsStatus(`Scrolling joined groups page (${index + 1}/5)...`, 0);
-      await chrome.scripting.executeScript({
-        target: { tabId },
-        func: () => window.scrollBy(0, 500)
-      });
-      await sleep2(2e3);
+    const [result] = await chrome.scripting.executeScript({
+      target: { tabId },
+      func: triggerJoinedGroupsSortRequestInPage
+    });
+    const value = result?.result;
+    if (!value?.ok) {
+      throw new Error(value?.error ?? "Unable to trigger joined groups sort.");
+    }
+  }
+  async function triggerJoinedGroupsSortRequestInPage() {
+    const wait = (duration) => new Promise((resolve) => setTimeout(resolve, duration));
+    const isVisible = (element) => {
+      const rect = element.getBoundingClientRect();
+      const style = window.getComputedStyle(element);
+      return rect.width > 0 && rect.height > 0 && style.visibility !== "hidden" && style.display !== "none";
+    };
+    const clickElement = (element) => {
+      element.dispatchEvent(
+        new MouseEvent("mousedown", {
+          bubbles: true,
+          cancelable: true,
+          view: window
+        })
+      );
+      element.dispatchEvent(
+        new MouseEvent("mouseup", {
+          bubbles: true,
+          cancelable: true,
+          view: window
+        })
+      );
+      element.dispatchEvent(
+        new MouseEvent("click", {
+          bubbles: true,
+          cancelable: true,
+          view: window
+        })
+      );
+    };
+    const waitForElement = async (selector, timeoutMs = 1e4) => {
+      const startedAt = Date.now();
+      while (Date.now() - startedAt < timeoutMs) {
+        const element = Array.from(document.querySelectorAll(selector)).find(
+          isVisible
+        );
+        if (element) {
+          return element;
+        }
+        await wait(250);
+      }
+      return void 0;
+    };
+    try {
+      const menuTriggers = Array.from(
+        document.querySelectorAll('div[aria-haspopup="menu"]')
+      ).filter(isVisible);
+      if (menuTriggers.length === 0) {
+        return {
+          ok: false,
+          error: "Could not find the joined groups sort menu button."
+        };
+      }
+      let sortCard;
+      for (const menuTrigger of menuTriggers) {
+        clickElement(menuTrigger);
+        await wait(3e3);
+        sortCard = await waitForElement(
+          'div[aria-label="Sort joined groups"]',
+          1500
+        );
+        if (sortCard) {
+          break;
+        }
+      }
+      if (!sortCard) {
+        return {
+          ok: false,
+          error: "Could not find the joined groups sort menu."
+        };
+      }
+      const sortOption = Array.from(
+        sortCard.querySelectorAll('div[role="menuitemradio"]')
+      ).find(isVisible);
+      if (!sortOption) {
+        return {
+          ok: false,
+          error: "Could not find a joined groups sort option."
+        };
+      }
+      clickElement(sortOption);
+      await wait(2e3);
+      return { ok: true };
+    } catch (error) {
+      return {
+        ok: false,
+        error: error instanceof Error ? error.message : "Unable to trigger joined groups sort."
+      };
     }
   }
   async function waitForCapturedGroupsRequest() {
@@ -17674,10 +17771,9 @@ ${underline}`);
     }
   }
   async function waitWhilePostingPaused(statusContext) {
-    let notified = false;
     while (activePosting && pausePostingRequested) {
       throwIfPostingStopped();
-      if (!notified) {
+      if (!pauseNotificationSent) {
         notifyUiPostingStatus({
           status: "paused",
           message: statusContext.groupName ? `Posting paused before ${statusContext.groupName}.` : "Posting queue paused.",
@@ -17689,7 +17785,7 @@ ${underline}`);
           failedCount: statusContext.failedCount,
           processedCount: statusContext.processedCount
         });
-        notified = true;
+        pauseNotificationSent = true;
       }
       await sleep2(250);
     }
@@ -17746,9 +17842,11 @@ ${underline}`);
     activePosting = true;
     stopPostingRequested = false;
     pausePostingRequested = false;
+    pauseNotificationSent = false;
     let successCount = 0;
     let failedCount = 0;
     const total = request.groups.length;
+    const hasImages = request.images.length > 0;
     let postingTabId;
     try {
       throwIfPostingStopped();
@@ -17838,26 +17936,45 @@ ${underline}`);
           rewritten: postBodyWasRewritten
         });
         await waitWhilePostingPaused(statusContext);
-        notifyUiPostingStatus({
-          status: "posting",
-          message: `Uploading images for ${group.name}...`,
-          current,
-          total,
-          groupId: group.id,
-          groupName: group.name,
-          successCount,
-          failedCount,
-          processedCount: index
-        });
-        const photoIds = templates.uploadTemplate ? await uploadImagesForGroup(
-          postingTabId,
-          templates.uploadTemplate,
-          request.images
-        ) : [];
+        let photoIds = [];
+        if (hasImages) {
+          notifyUiPostingStatus({
+            status: "posting",
+            message: `Uploading images for ${group.name}...`,
+            current,
+            total,
+            groupId: group.id,
+            groupName: group.name,
+            successCount,
+            failedCount,
+            processedCount: index
+          });
+          if (!templates.uploadTemplate) {
+            throw new Error("Image upload template was not captured.");
+          }
+          photoIds = await uploadImagesForGroup(
+            postingTabId,
+            templates.uploadTemplate,
+            request.images
+          );
+        } else {
+          notifyUiPostingStatus({
+            status: "posting",
+            message: `Preparing text-only post for ${group.name}...`,
+            current,
+            total,
+            groupId: group.id,
+            groupName: group.name,
+            successCount,
+            failedCount,
+            processedCount: index
+          });
+        }
         throwIfPostingStopped();
         await waitWhilePostingPaused(statusContext);
-        debugLog("Image upload phase complete.", {
+        debugLog("Media phase complete.", {
           groupId: group.id,
+          hasImages,
           uploadedPhotoCount: photoIds.length
         });
         await waitWhilePostingPaused(statusContext);
@@ -17991,6 +18108,7 @@ ${underline}`);
       activePosting = false;
       stopPostingRequested = false;
       pausePostingRequested = false;
+      pauseNotificationSent = false;
     }
   }
   async function ensurePostingTemplates(tabId, groups, originalBody, images, total) {
@@ -18335,6 +18453,7 @@ ${underline}`);
     return parsePostResponse(payload.responseText);
   }
   function buildPostVariables(templateFormData, text, photoIds, groupId, textWasRewritten) {
+    const hasImages = photoIds.length > 0;
     const attachments = photoIds.map((photoId) => ({
       photo: {
         id: photoId
@@ -18366,7 +18485,11 @@ ${underline}`);
     } else {
       input.message = { ranges: [], text };
     }
-    input.attachments = attachments;
+    if (hasImages) {
+      input.attachments = attachments;
+    } else {
+      delete input.attachments;
+    }
     input.audience = {
       ...isRecord(input.audience) ? input.audience : {},
       to_id: groupId
@@ -18383,7 +18506,7 @@ ${underline}`);
   }
   function buildFallbackPostVariables(templateFormData, text, attachments, groupId, textWasRewritten) {
     const actorId = extractUserIdFromFormData(templateFormData) ?? "61553861467726";
-    return JSON.stringify({
+    const variables = {
       input: {
         composer_entry_point: "inline_composer",
         composer_source_surface: "group",
@@ -18396,7 +18519,6 @@ ${underline}`);
           ranges: [],
           text
         },
-        attachments,
         composed_text: buildComposedText(text, {
           preserveBlankLines: !textWasRewritten
         }),
@@ -18404,12 +18526,14 @@ ${underline}`);
           to_id: groupId
         },
         actor_id: actorId,
-        client_mutation_id: String(Date.now())
+        client_mutation_id: String(Date.now()),
+        ...attachments.length > 0 ? { attachments } : {}
       },
       feedLocation: "GROUP",
       renderLocation: "group",
       isGroup: true
-    });
+    };
+    return JSON.stringify(variables);
   }
   function buildComposedText(text, { preserveBlankLines }) {
     const textBlocks = text.split(/\r?\n/);
@@ -18543,7 +18667,7 @@ ${underline}`);
     return matches;
   }
   function isRateLimitBody(responseText) {
-    return /We limit how often you|temporarily blocked/i.test(responseText);
+    return FACEBOOK_POST_LIMIT_PATTERN.test(responseText) || /temporarily blocked/i.test(responseText);
   }
   function isRecord(value) {
     return typeof value === "object" && value !== null && !Array.isArray(value);

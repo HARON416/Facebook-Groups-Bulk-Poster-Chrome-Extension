@@ -122,6 +122,7 @@ let isPostingActive = false;
 let isPostingPaused = false;
 let isStopRequestPending = false;
 let isPauseResumeRequestPending = false;
+let pauseRequestedLocally = false;
 let currentExtensionAccess:
   | {
       active: boolean;
@@ -521,8 +522,10 @@ function updateUiPostingStatus(message: UiPostingStatusMessage) {
     message.status === "failed"
   ) {
     isPostingActive = true;
-    isPostingPaused = message.status === "paused";
+    isPostingPaused =
+      message.status === "paused" || pauseRequestedLocally;
     if (message.status === "paused") {
+      pauseRequestedLocally = true;
       isPauseResumeRequestPending = false;
     }
     isStopRequestPending = false;
@@ -549,7 +552,10 @@ function updateUiPostingStatus(message: UiPostingStatusMessage) {
     isPostingPaused = false;
     isStopRequestPending = false;
     isPauseResumeRequestPending = false;
+    pauseRequestedLocally = false;
     updatePostingReadiness();
+  } else {
+    updatePostingButtonState();
   }
 }
 
@@ -611,15 +617,15 @@ function appendPostingProgressLog(message: UiPostingStatusMessage) {
     return;
   }
 
-  const existingWaitingItem =
-    message.status === "waiting"
+  const existingUpdatableItem =
+    message.status === "waiting" || message.status === "paused"
       ? postingProgressLog.querySelector<HTMLLIElement>(
-          `li[data-status="waiting"][data-group-id="${CSS.escape(
+          `li[data-status="${message.status}"][data-group-id="${CSS.escape(
             message.groupId ?? "queue",
           )}"]`,
         )
       : undefined;
-  const item = existingWaitingItem ?? document.createElement("li");
+  const item = existingUpdatableItem ?? document.createElement("li");
   item.dataset.status = message.status;
   item.dataset.groupId = message.groupId ?? "queue";
 
@@ -650,7 +656,7 @@ function appendPostingProgressLog(message: UiPostingStatusMessage) {
 
   item.replaceChildren(badge, body);
 
-  if (!existingWaitingItem) {
+  if (!existingUpdatableItem) {
     postingProgressLog.prepend(item);
   }
 }
@@ -915,12 +921,14 @@ pausePostingButton?.addEventListener("click", async () => {
   }
 
   isPauseResumeRequestPending = true;
+  const shouldResume = isPostingPaused || pauseRequestedLocally;
+  pauseRequestedLocally = !shouldResume;
   updatePausePostingButtonState();
   updatePostingButtonState();
 
   try {
     const request: PauseUiPostingRequest | ResumeUiPostingRequest = {
-      type: isPostingPaused ? "RESUME_UI_POSTING" : "PAUSE_UI_POSTING",
+      type: shouldResume ? "RESUME_UI_POSTING" : "PAUSE_UI_POSTING",
     };
     const response = await chrome.runtime.sendMessage<
       PauseUiPostingRequest | ResumeUiPostingRequest,
@@ -930,24 +938,31 @@ pausePostingButton?.addEventListener("click", async () => {
     if (!response?.ok) {
       throw new Error(
         response?.error ??
-          (isPostingPaused ? "Unable to resume posting." : "Unable to pause posting."),
+          (shouldResume ? "Unable to resume posting." : "Unable to pause posting."),
       );
     }
 
-    if (isPostingPaused) {
+    if (shouldResume) {
+      pauseRequestedLocally = false;
       isPostingPaused = false;
+      isPauseResumeRequestPending = false;
+      updatePausePostingButtonState();
+      updatePostingButtonState();
+    } else {
+      isPostingPaused = true;
       isPauseResumeRequestPending = false;
       updatePausePostingButtonState();
       updatePostingButtonState();
     }
   } catch (error) {
     isPauseResumeRequestPending = false;
+    pauseRequestedLocally = isPostingPaused;
     updatePausePostingButtonState();
     updatePostingButtonState();
     alert(
       error instanceof Error
         ? error.message
-        : isPostingPaused
+        : shouldResume
           ? "Unable to resume posting."
           : "Unable to pause posting.",
     );
@@ -961,6 +976,7 @@ startPostingButton?.addEventListener("click", async () => {
     }
 
     isStopRequestPending = true;
+    pauseRequestedLocally = false;
     updatePostingButtonState();
 
     try {
@@ -1030,6 +1046,7 @@ startPostingButton?.addEventListener("click", async () => {
   isPostingPaused = false;
   isStopRequestPending = false;
   isPauseResumeRequestPending = false;
+  pauseRequestedLocally = false;
   updatePostingButtonState();
   updateGroupsStatus("Preparing GraphQL posting...", 0);
   resetPostingProgress(postingGroups.length);
@@ -1061,6 +1078,7 @@ startPostingButton?.addEventListener("click", async () => {
     isPostingPaused = false;
     isStopRequestPending = false;
     isPauseResumeRequestPending = false;
+    pauseRequestedLocally = false;
     updatePostingReadiness();
     alert(
       error instanceof Error

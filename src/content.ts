@@ -7,6 +7,8 @@ import type {
 const WRITE_SOMETHING_SPAN_SELECTOR = "span.x1lliihq.x6ikm8r.x10wlt62.x1n2onr6";
 const POST_DIALOG_SELECTOR =
   "div.x1n2onr6.x1ja2u2z.x1afcbsf.x78zum5.xdt5ytf.x1a2a7pz.x6ikm8r.x10wlt62.x71s49j.x1jx94hy.xw5cjc7.x1dmpuos.x1vsv7so.xau1kf4.x104qc98.x15o3w11.xogydr4.x1vmz7ll.x1yyrj1m.x193iq5w";
+const FACEBOOK_POST_LIMIT_PATTERN =
+  /we\s+limit\s+how\s+often\s+you\s+can\s+post,\s+comment\s+or\s+do\s+other\s+things\s+in\s+a\s+given\s+amount\s+of\s+time\s+in\s+order\s+to\s+help\s+protect\s+the\s+community\s+from\s+spam\.\s+you\s+can\s+try\s+again\s+later/i;
 
 type ContentRequest = CreatePostRequest;
 
@@ -225,11 +227,11 @@ function formatTextAsHtmlWithLineBreaks(text: string): string {
 
 function escapeHtml(value: string): string {
   return value
-    .replaceAll("&", "&amp;")
-    .replaceAll("<", "&lt;")
-    .replaceAll(">", "&gt;")
-    .replaceAll('"', "&quot;")
-    .replaceAll("'", "&#39;");
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
 }
 
 async function clickPostButton(dialog: Element): Promise<void> {
@@ -262,7 +264,7 @@ async function clickPostButton(dialog: Element): Promise<void> {
     if (dialogStillVisible) {
       const dialogText = dialog.textContent ?? "";
 
-      if (dialogText.includes("We limit")) {
+      if (FACEBOOK_POST_LIMIT_PATTERN.test(dialogText)) {
         console.warn(
           "[Facebook Groups Bulk Poster] Hit posting limit. Please wait and try again later.",
         );

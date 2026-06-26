@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Facebook Groups Bulk Poster",
-  "version": "1.3.9",
+  "version": "1.4.1",
   "description": "Bulk post to Facebook groups with images, custom delays, live progress, and optional Gemini rewrites.",
   "icons": {
     "48": "images/icon-48.png",
