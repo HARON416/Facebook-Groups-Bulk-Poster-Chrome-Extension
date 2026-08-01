@@ -17068,6 +17068,7 @@ ${underline}`);
   var GEMINI_REWRITE_ENABLED_STORAGE_KEY = "geminiRewriteEnabled";
   var GEMINI_MODEL = "gemini-2.5-flash";
   var GEMINI_TIMEOUT_MS = 3e4;
+  var MIN_POSTING_DELAY_SECONDS = 120;
   var LOG_PREFIX = "[Facebook Groups Bulk Poster]";
   var FACEBOOK_HOSTS = /* @__PURE__ */ new Set([
     "www.facebook.com",
@@ -17820,18 +17821,30 @@ ${underline}`);
       await sleepWithStopChecks(1e3, statusContext);
     }
   }
+  function randomIntegerBetween(minimum, maximum) {
+    return Math.floor(Math.random() * (maximum - minimum + 1)) + minimum;
+  }
   async function runGraphqlPostingQueue(request) {
+    const maxPosts = Number.isInteger(request.maxPosts) ? Math.max(request.maxPosts, 1) : request.groups.length;
+    const groups = request.groups.slice(0, maxPosts);
+    const requestedMinimumDelay = Number(request.minimumDelaySeconds);
+    const minimumDelaySeconds = Number.isInteger(requestedMinimumDelay) && requestedMinimumDelay >= MIN_POSTING_DELAY_SECONDS ? requestedMinimumDelay : MIN_POSTING_DELAY_SECONDS;
+    const requestedMaximumDelay = Number(request.maximumDelaySeconds);
+    const maximumDelaySeconds = Number.isInteger(requestedMaximumDelay) && requestedMaximumDelay >= minimumDelaySeconds ? requestedMaximumDelay : minimumDelaySeconds;
     debugLog("Starting posting queue.", {
-      groups: request.groups.length,
+      requestedGroups: request.groups.length,
+      groups: groups.length,
+      maxPosts,
       images: request.images.length,
-      delaySeconds: request.delaySeconds
+      minimumDelaySeconds,
+      maximumDelaySeconds
     });
     if (activePosting) {
       notifyUiPostingStatus({
         status: "failed",
         message: "A posting queue is already running.",
         current: 0,
-        total: request.groups.length,
+        total: groups.length,
         successCount: 0,
         failedCount: 0,
         processedCount: 0,
@@ -17845,7 +17858,7 @@ ${underline}`);
     pauseNotificationSent = false;
     let successCount = 0;
     let failedCount = 0;
-    const total = request.groups.length;
+    const total = groups.length;
     const hasImages = request.images.length > 0;
     let postingTabId;
     try {
@@ -17860,7 +17873,7 @@ ${underline}`);
       }
       const templates = await ensurePostingTemplates(
         postingTabId,
-        request.groups,
+        groups,
         request.body,
         request.images,
         total
@@ -17870,11 +17883,11 @@ ${underline}`);
         successCount += 1;
         notifyUiPostingStatus({
           status: "posted",
-          message: `Posted to ${request.groups[0].name}.`,
+          message: `Posted to ${groups[0].name}.`,
           current: 1,
           total,
-          groupId: request.groups[0].id,
-          groupName: request.groups[0].name,
+          groupId: groups[0].id,
+          groupName: groups[0].name,
           successCount,
           failedCount,
           processedCount: 1
@@ -17890,9 +17903,9 @@ ${underline}`);
         failedCount,
         processedCount: startIndex
       });
-      for (let index = startIndex; index < request.groups.length; index += 1) {
+      for (let index = startIndex; index < groups.length; index += 1) {
         throwIfPostingStopped();
-        const group = request.groups[index];
+        const group = groups[index];
         const current = index + 1;
         const statusContext = {
           current,
@@ -18050,12 +18063,16 @@ ${underline}`);
             error: postResult.error
           });
         }
-        if (index < request.groups.length - 1) {
-          const nextGroup = request.groups[index + 1];
+        if (index < groups.length - 1) {
+          const nextGroup = groups[index + 1];
           const nextCurrent = current + 1;
+          const delaySeconds = randomIntegerBetween(
+            minimumDelaySeconds,
+            maximumDelaySeconds
+          );
           notifyUiPostingStatus({
             status: "waiting",
-            message: `Waiting ${request.delaySeconds} seconds before posting to ${nextGroup.name}...`,
+            message: `Random interval selected: waiting ${delaySeconds} seconds before posting to ${nextGroup.name}...`,
             current: nextCurrent,
             total,
             groupId: nextGroup.id,
@@ -18064,7 +18081,7 @@ ${underline}`);
             failedCount,
             processedCount: index + 1
           });
-          await sleepWithPostingCountdown(request.delaySeconds, {
+          await sleepWithPostingCountdown(delaySeconds, {
             current: nextCurrent,
             total,
             groupId: nextGroup.id,
@@ -18257,6 +18274,17 @@ ${underline}`);
       body,
       images
     };
+    try {
+      await injectPostingContentScript(tabId);
+    } catch (error) {
+      return {
+        ok: false,
+        composerFound: false,
+        composerClicked: false,
+        spanCount: 0,
+        error: error instanceof Error ? error.message : "Unable to load the posting helper on the Facebook page."
+      };
+    }
     for (let attempt = 0; attempt < 20; attempt += 1) {
       try {
         const response = await chrome.tabs.sendMessage(
@@ -18293,6 +18321,37 @@ ${underline}`);
       spanCount: 0,
       error: "Content script did not respond."
     };
+  }
+  async function injectPostingContentScript(tabId) {
+    let lastError;
+    for (let attempt = 0; attempt < 20; attempt += 1) {
+      try {
+        const tab = await chrome.tabs.get(tabId);
+        if (tab.status !== "complete" || !isFacebookUrl(tab.url)) {
+          await sleep2(250);
+          continue;
+        }
+        const [markerResult] = await chrome.scripting.executeScript({
+          target: { tabId },
+          func: (marker) => globalThis[marker] === true,
+          args: ["__facebookGroupsBulkPosterContentScriptLoaded"]
+        });
+        if (markerResult?.result === true) {
+          return;
+        }
+        await chrome.scripting.executeScript({
+          target: { tabId },
+          files: ["dist/content.js"]
+        });
+        return;
+      } catch (error) {
+        lastError = error;
+        await sleep2(250);
+      }
+    }
+    throw new Error(
+      lastError instanceof Error ? `Unable to load the posting helper: ${lastError.message}` : "Unable to load the posting helper on the Facebook page."
+    );
   }
   async function waitForTabComplete(tabId, urlIncludes) {
     const startedAt = Date.now();

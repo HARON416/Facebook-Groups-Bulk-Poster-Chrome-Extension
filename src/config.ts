@@ -46,7 +46,9 @@ export type StartUiPostingRequest = {
   body: string;
   groups: SimpleGroup[];
   images: UiPostImage[];
-  delaySeconds: number;
+  minimumDelaySeconds: number;
+  maximumDelaySeconds: number;
+  maxPosts: number;
 };
 
 export type StopUiPostingRequest = {

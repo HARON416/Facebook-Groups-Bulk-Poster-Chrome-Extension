@@ -8,7 +8,11 @@ const authApiBaseUrl =
   "https://api.facebook-groups-bulk-poster.softwrhq.com";
 
 const sharedConfig = {
-  entryPoints: ["src/content.ts", "src/background.ts", "src/sidepanel.ts"],
+  entryPoints: {
+    content: "src/content.ts",
+    "service-worker": "src/background.ts",
+    sidepanel: "src/sidepanel.ts",
+  },
   bundle: true,
   outdir: "public/dist",
   platform: "browser",

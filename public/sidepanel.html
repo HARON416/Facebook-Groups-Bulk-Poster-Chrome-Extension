@@ -120,18 +120,62 @@
             <p class="section-heading__eyebrow">Automation</p>
             <h2 class="section-heading__title">Queue Settings</h2>
           </div>
+          <div class="interval-card">
+            <div class="interval-card__heading">
+              <strong>Random Posting Interval</strong>
+              <small>A new delay is selected before every post.</small>
+            </div>
+            <div class="number-input-grid">
+              <div class="field">
+                <label for="post-interval-min-input">Minimum seconds</label>
+                <div class="number-input-row">
+                  <input
+                    type="number"
+                    id="post-interval-min-input"
+                    name="post-interval-min"
+                    min="60"
+                    step="1"
+                    value="60"
+                    inputmode="numeric"
+                  />
+                </div>
+              </div>
+              <div class="field">
+                <label for="post-interval-max-input">Maximum seconds</label>
+                <div class="number-input-row">
+                  <input
+                    type="number"
+                    id="post-interval-max-input"
+                    name="post-interval-max"
+                    min="60"
+                    step="1"
+                    value="300"
+                    inputmode="numeric"
+                  />
+                </div>
+              </div>
+            </div>
+            <p class="section-note">
+              Both values must be at least 60 seconds.
+            </p>
+          </div>
+
           <div class="field">
-            <label for="post-sleep-input">Sleep Time in Seconds Between Posts</label>
+            <label for="max-posts-input">Maximum Number of Posts</label>
             <div class="number-input-row">
               <input
                 type="number"
-                id="post-sleep-input"
-                name="post-sleep"
-                min="120"
-                step="60"
-                value="120"
+                id="max-posts-input"
+                name="max-posts"
+                min="1"
+                step="1"
+                value="200"
+                inputmode="numeric"
               />
             </div>
+            <p class="section-note">
+              The queue stops after this many groups, even when more are selected.
+            </p>
           </div>
 
           <div class="field">
@@ -182,7 +226,7 @@
             Pause Posting
           </button>
           <button type="submit" id="start-posting-btn" disabled>
-            START POSTING
+            Start Posting
           </button>
 
           <div id="posting-progress" class="posting-progress" hidden>

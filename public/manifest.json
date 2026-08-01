@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Facebook Groups Bulk Poster",
-  "version": "1.4.1",
+  "version": "1.5.0",
   "description": "Bulk post to Facebook groups with images, custom delays, live progress, and optional Gemini rewrites.",
   "icons": {
     "48": "images/icon-48.png",
@@ -11,7 +11,6 @@
     "default_title": "Open Facebook Groups Bulk Poster"
   },
   "permissions": [
-    "identity",
     "sidePanel",
     "tabs",
     "cookies",
@@ -23,26 +22,12 @@
     "default_path": "sidepanel.html"
   },
   "host_permissions": [
-    "http://localhost:4000/*",
-    "http://localhost:5173/*",
     "https://api.facebook-groups-bulk-poster.softwrhq.com/*",
-    "https://facebook-groups-bulk-poster-chrome-extension.softwrhq.com/*",
     "https://www.facebook.com/*",
     "https://web.facebook.com/*",
     "https://upload.facebook.com/*"
   ],
   "background": {
-    "service_worker": "dist/background.js"
-  },
-  "content_scripts": [
-    {
-      "matches": [
-        "https://www.facebook.com/groups/joins/*",
-        "https://web.facebook.com/groups/joins/*",
-        "https://www.facebook.com/groups/*",
-        "https://web.facebook.com/groups/*"
-      ],
-      "js": ["dist/content.js"]
-    }
-  ]
+    "service_worker": "dist/service-worker.js"
+  }
 }

@@ -12,6 +12,13 @@ const FACEBOOK_POST_LIMIT_PATTERN =
 
 type ContentRequest = CreatePostRequest;
 
+const CONTENT_SCRIPT_MARKER = "__facebookGroupsBulkPosterContentScriptLoaded";
+const contentScriptGlobal = globalThis as typeof globalThis &
+  Record<string, unknown>;
+const isFirstContentScriptLoad =
+  contentScriptGlobal[CONTENT_SCRIPT_MARKER] !== true;
+contentScriptGlobal[CONTENT_SCRIPT_MARKER] = true;
+
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
@@ -293,7 +300,7 @@ async function clickPostButton(dialog: Element): Promise<void> {
   throw new Error("Post did not complete in time.");
 }
 
-chrome.runtime.onMessage.addListener(
+if (isFirstContentScriptLoad) chrome.runtime.onMessage.addListener(
   (
     request: ContentRequest,
     _sender,

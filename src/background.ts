@@ -57,6 +57,7 @@ const GEMINI_API_KEY_STORAGE_KEYS = ["geminiApiKey", "GEMINI_API_KEY"] as const;
 const GEMINI_REWRITE_ENABLED_STORAGE_KEY = "geminiRewriteEnabled";
 const GEMINI_MODEL = "gemini-2.5-flash";
 const GEMINI_TIMEOUT_MS = 30_000;
+const MIN_POSTING_DELAY_SECONDS = 60;
 const LOG_PREFIX = "[Facebook Groups Bulk Poster]";
 const FACEBOOK_HOSTS = new Set([
   "www.facebook.com",
@@ -1097,13 +1098,37 @@ async function sleepWithPostingCountdown(
   }
 }
 
+function randomIntegerBetween(minimum: number, maximum: number): number {
+  return Math.floor(Math.random() * (maximum - minimum + 1)) + minimum;
+}
+
 async function runGraphqlPostingQueue(
   request: StartUiPostingRequest,
 ): Promise<void> {
+  const maxPosts = Number.isInteger(request.maxPosts)
+    ? Math.max(request.maxPosts, 1)
+    : request.groups.length;
+  const groups = request.groups.slice(0, maxPosts);
+  const requestedMinimumDelay = Number(request.minimumDelaySeconds);
+  const minimumDelaySeconds =
+    Number.isInteger(requestedMinimumDelay) &&
+    requestedMinimumDelay >= MIN_POSTING_DELAY_SECONDS
+      ? requestedMinimumDelay
+      : MIN_POSTING_DELAY_SECONDS;
+  const requestedMaximumDelay = Number(request.maximumDelaySeconds);
+  const maximumDelaySeconds =
+    Number.isInteger(requestedMaximumDelay) &&
+    requestedMaximumDelay >= minimumDelaySeconds
+      ? requestedMaximumDelay
+      : minimumDelaySeconds;
+
   debugLog("Starting posting queue.", {
-    groups: request.groups.length,
+    requestedGroups: request.groups.length,
+    groups: groups.length,
+    maxPosts,
     images: request.images.length,
-    delaySeconds: request.delaySeconds,
+    minimumDelaySeconds,
+    maximumDelaySeconds,
   });
 
   if (activePosting) {
@@ -1111,7 +1136,7 @@ async function runGraphqlPostingQueue(
       status: "failed",
       message: "A posting queue is already running.",
       current: 0,
-      total: request.groups.length,
+      total: groups.length,
       successCount: 0,
       failedCount: 0,
       processedCount: 0,
@@ -1126,7 +1151,7 @@ async function runGraphqlPostingQueue(
   pauseNotificationSent = false;
   let successCount = 0;
   let failedCount = 0;
-  const total = request.groups.length;
+  const total = groups.length;
   const hasImages = request.images.length > 0;
   let postingTabId: number | undefined;
 
@@ -1146,7 +1171,7 @@ async function runGraphqlPostingQueue(
 
     const templates = await ensurePostingTemplates(
       postingTabId,
-      request.groups,
+      groups,
       request.body,
       request.images,
       total,
@@ -1157,11 +1182,11 @@ async function runGraphqlPostingQueue(
       successCount += 1;
       notifyUiPostingStatus({
         status: "posted",
-        message: `Posted to ${request.groups[0].name}.`,
+        message: `Posted to ${groups[0].name}.`,
         current: 1,
         total,
-        groupId: request.groups[0].id,
-        groupName: request.groups[0].name,
+        groupId: groups[0].id,
+        groupName: groups[0].name,
         successCount,
         failedCount,
         processedCount: 1,
@@ -1180,9 +1205,9 @@ async function runGraphqlPostingQueue(
       processedCount: startIndex,
     });
 
-    for (let index = startIndex; index < request.groups.length; index += 1) {
+    for (let index = startIndex; index < groups.length; index += 1) {
       throwIfPostingStopped();
-      const group = request.groups[index];
+      const group = groups[index];
       const current = index + 1;
       const statusContext = {
         current,
@@ -1353,13 +1378,17 @@ async function runGraphqlPostingQueue(
         });
       }
 
-      if (index < request.groups.length - 1) {
-        const nextGroup = request.groups[index + 1];
+      if (index < groups.length - 1) {
+        const nextGroup = groups[index + 1];
         const nextCurrent = current + 1;
+        const delaySeconds = randomIntegerBetween(
+          minimumDelaySeconds,
+          maximumDelaySeconds,
+        );
 
         notifyUiPostingStatus({
           status: "waiting",
-          message: `Waiting ${request.delaySeconds} seconds before posting to ${nextGroup.name}...`,
+          message: `Random interval selected: waiting ${delaySeconds} seconds before posting to ${nextGroup.name}...`,
           current: nextCurrent,
           total,
           groupId: nextGroup.id,
@@ -1368,7 +1397,7 @@ async function runGraphqlPostingQueue(
           failedCount,
           processedCount: index + 1,
         });
-        await sleepWithPostingCountdown(request.delaySeconds, {
+        await sleepWithPostingCountdown(delaySeconds, {
           current: nextCurrent,
           total,
           groupId: nextGroup.id,
@@ -1634,6 +1663,21 @@ async function createPostInTab(
     images,
   };
 
+  try {
+    await injectPostingContentScript(tabId);
+  } catch (error) {
+    return {
+      ok: false,
+      composerFound: false,
+      composerClicked: false,
+      spanCount: 0,
+      error:
+        error instanceof Error
+          ? error.message
+          : "Unable to load the posting helper on the Facebook page.",
+    };
+  }
+
   for (let attempt = 0; attempt < 20; attempt += 1) {
     try {
       const response = (await chrome.tabs.sendMessage(
@@ -1677,6 +1721,46 @@ async function createPostInTab(
     spanCount: 0,
     error: "Content script did not respond.",
   };
+}
+
+async function injectPostingContentScript(tabId: number): Promise<void> {
+  let lastError: unknown;
+
+  for (let attempt = 0; attempt < 20; attempt += 1) {
+    try {
+      const tab = await chrome.tabs.get(tabId);
+      if (tab.status !== "complete" || !isFacebookUrl(tab.url)) {
+        await sleep(250);
+        continue;
+      }
+
+      const [markerResult] = await chrome.scripting.executeScript({
+        target: { tabId },
+        func: (marker: string) =>
+          (globalThis as typeof globalThis & Record<string, unknown>)[marker] ===
+          true,
+        args: ["__facebookGroupsBulkPosterContentScriptLoaded"],
+      });
+      if (markerResult?.result === true) {
+        return;
+      }
+
+      await chrome.scripting.executeScript({
+        target: { tabId },
+        files: ["dist/content.js"],
+      });
+      return;
+    } catch (error) {
+      lastError = error;
+      await sleep(250);
+    }
+  }
+
+  throw new Error(
+    lastError instanceof Error
+      ? `Unable to load the posting helper: ${lastError.message}`
+      : "Unable to load the posting helper on the Facebook page.",
+  );
 }
 
 async function waitForTabComplete(

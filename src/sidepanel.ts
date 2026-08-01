@@ -20,13 +20,21 @@ const AUTH_EXPIRES_AT_STORAGE_KEY = "authExpiresAt";
 const EXTENSION_INSTALL_ID_STORAGE_KEY = "extensionInstallId";
 const EXTENSION_ACTIVATION_ID_STORAGE_KEY = "extensionActivationId";
 const SIDE_PANEL_SESSION_STORAGE_KEY = "sidePanelSession";
-const MIN_SLEEP_SECONDS = 120;
+const MIN_SLEEP_SECONDS = 60;
+const PREVIOUS_MIN_SLEEP_SECONDS = 120;
+const DEFAULT_MAX_SLEEP_SECONDS = 300;
+const DEFAULT_MAX_POSTS = 200;
+const MIN_MAX_POSTS = 1;
 const TRIAL_CONTACT_EMAIL = "haronkibetrutoh@gmail.com";
 const TRIAL_CONTACT_WHATSAPP = "254718448461";
 
 type SidePanelSession = {
   postBody: string;
-  delaySeconds: number;
+  minimumDelaySeconds: number;
+  maximumDelaySeconds: number;
+  delaySeconds?: number;
+  intervalSettingsVersion: number;
+  maxPosts: number;
   shuffleGroups: boolean;
   loadedGroups: FacebookGroup[];
   selectedGroupIds: string[];
@@ -63,8 +71,14 @@ const postImagesInput =
 const imagePreviewList = document.querySelector<HTMLElement>(
   "#image-preview-list",
 );
-const postSleepInput =
-  document.querySelector<HTMLInputElement>("#post-sleep-input");
+const postIntervalMinInput = document.querySelector<HTMLInputElement>(
+  "#post-interval-min-input",
+);
+const postIntervalMaxInput = document.querySelector<HTMLInputElement>(
+  "#post-interval-max-input",
+);
+const maxPostsInput =
+  document.querySelector<HTMLInputElement>("#max-posts-input");
 const geminiApiKeyInput = document.querySelector<HTMLInputElement>(
   "#gemini-api-key-input",
 );
@@ -421,9 +435,15 @@ function updatePostingReadiness() {
   const isAuthenticated = hasActiveExtensionAccess();
   const selectedGroupsCount = getSelectedGroupsCount();
   const hasPostBody = (postBodyInput?.value.trim().length ?? 0) > 0;
-  const sleepTime = Number(postSleepInput?.value ?? 0);
-  const hasValidSleepTime =
-    Number.isFinite(sleepTime) && sleepTime >= MIN_SLEEP_SECONDS;
+  const minimumDelaySeconds = Number(postIntervalMinInput?.value ?? 0);
+  const maximumDelaySeconds = Number(postIntervalMaxInput?.value ?? 0);
+  const hasValidSleepTime = isValidPostingInterval(
+    minimumDelaySeconds,
+    maximumDelaySeconds,
+  );
+  const maxPosts = Number(maxPostsInput?.value ?? 0);
+  const hasValidMaxPosts =
+    Number.isInteger(maxPosts) && maxPosts >= MIN_MAX_POSTS;
 
   updateGroupsSelectionSummary();
 
@@ -434,6 +454,7 @@ function updatePostingReadiness() {
     hasPostBody,
     selectedGroupsCount,
     hasValidSleepTime,
+    hasValidMaxPosts,
   );
 
   if (loadGroupsButton) {
@@ -441,13 +462,54 @@ function updatePostingReadiness() {
   }
 }
 
+function isValidPostingInterval(
+  minimumDelaySeconds: number,
+  maximumDelaySeconds: number,
+): boolean {
+  return (
+    Number.isInteger(minimumDelaySeconds) &&
+    minimumDelaySeconds >= MIN_SLEEP_SECONDS &&
+    Number.isInteger(maximumDelaySeconds) &&
+    maximumDelaySeconds >= minimumDelaySeconds
+  );
+}
+
+function normalizePostingInterval() {
+  if (!postIntervalMinInput || !postIntervalMaxInput) {
+    return;
+  }
+
+  const enteredMinimum = Number(postIntervalMinInput.value);
+  const minimumDelaySeconds =
+    Number.isInteger(enteredMinimum) && enteredMinimum >= MIN_SLEEP_SECONDS
+      ? enteredMinimum
+      : MIN_SLEEP_SECONDS;
+  const enteredMaximum = Number(postIntervalMaxInput.value);
+  const maximumDelaySeconds =
+    Number.isInteger(enteredMaximum) &&
+    enteredMaximum >= minimumDelaySeconds
+      ? enteredMaximum
+      : Math.max(DEFAULT_MAX_SLEEP_SECONDS, minimumDelaySeconds);
+
+  postIntervalMinInput.value = String(minimumDelaySeconds);
+  postIntervalMaxInput.value = String(maximumDelaySeconds);
+  updatePostingReadiness();
+  scheduleSaveSidePanelSession();
+}
+
 function updatePostingButtonState(
   isAuthenticated = hasActiveExtensionAccess(),
   hasPostBody = (postBodyInput?.value.trim().length ?? 0) > 0,
   selectedGroupsCount = getSelectedGroupsCount(),
   hasValidSleepTime = (() => {
-    const sleepTime = Number(postSleepInput?.value ?? 0);
-    return Number.isFinite(sleepTime) && sleepTime >= MIN_SLEEP_SECONDS;
+    return isValidPostingInterval(
+      Number(postIntervalMinInput?.value ?? 0),
+      Number(postIntervalMaxInput?.value ?? 0),
+    );
+  })(),
+  hasValidMaxPosts = (() => {
+    const maxPosts = Number(maxPostsInput?.value ?? 0);
+    return Number.isInteger(maxPosts) && maxPosts >= MIN_MAX_POSTS;
   })(),
 ) {
   if (!startPostingButton) {
@@ -471,9 +533,10 @@ function updatePostingButtonState(
     isAuthenticated &&
     hasPostBody &&
     selectedGroupsCount > 0 &&
-    hasValidSleepTime
+    hasValidSleepTime &&
+    hasValidMaxPosts
   );
-  setButtonContent(startPostingButton, "START POSTING");
+  setButtonContent(startPostingButton, "Start Posting");
   updatePausePostingButtonState();
 }
 
@@ -928,11 +991,14 @@ geminiRewriteToggle?.addEventListener("change", () => {
   updateGeminiStatus();
 });
 
-postSleepInput?.addEventListener("change", () => {
-  const value = Number(postSleepInput.value);
+postIntervalMinInput?.addEventListener("change", normalizePostingInterval);
+postIntervalMaxInput?.addEventListener("change", normalizePostingInterval);
 
-  if (!Number.isFinite(value) || value < MIN_SLEEP_SECONDS) {
-    postSleepInput.value = String(MIN_SLEEP_SECONDS);
+maxPostsInput?.addEventListener("change", () => {
+  const value = Number(maxPostsInput.value);
+
+  if (!Number.isInteger(value) || value < MIN_MAX_POSTS) {
+    maxPostsInput.value = String(DEFAULT_MAX_POSTS);
   }
 
   updatePostingReadiness();
@@ -1055,9 +1121,22 @@ startPostingButton?.addEventListener("click", async () => {
     return;
   }
 
-  const sleepTime = Number(postSleepInput?.value ?? MIN_SLEEP_SECONDS);
-  if (!Number.isFinite(sleepTime) || sleepTime < MIN_SLEEP_SECONDS) {
-    alert(`Sleep time must be at least ${MIN_SLEEP_SECONDS} seconds`);
+  const minimumDelaySeconds = Number(
+    postIntervalMinInput?.value ?? MIN_SLEEP_SECONDS,
+  );
+  const maximumDelaySeconds = Number(
+    postIntervalMaxInput?.value ?? DEFAULT_MAX_SLEEP_SECONDS,
+  );
+  if (!isValidPostingInterval(minimumDelaySeconds, maximumDelaySeconds)) {
+    alert(
+      `Posting intervals must be whole numbers of at least ${MIN_SLEEP_SECONDS} seconds, and the maximum cannot be below the minimum`,
+    );
+    return;
+  }
+
+  const maxPosts = Number(maxPostsInput?.value ?? DEFAULT_MAX_POSTS);
+  if (!Number.isInteger(maxPosts) || maxPosts < MIN_MAX_POSTS) {
+    alert("Maximum number of posts must be a whole number of at least 1");
     return;
   }
 
@@ -1070,9 +1149,10 @@ startPostingButton?.addEventListener("click", async () => {
     return;
   }
 
-  const postingGroups = shuffleGroupsToggle?.checked
+  const orderedPostingGroups = shuffleGroupsToggle?.checked
     ? shuffleGroups(selectedGroups)
     : selectedGroups;
+  const postingGroups = orderedPostingGroups.slice(0, maxPosts);
 
   isPostingActive = true;
   isPostingPaused = false;
@@ -1095,7 +1175,9 @@ startPostingButton?.addEventListener("click", async () => {
         url: group.url,
       })),
       images,
-      delaySeconds: sleepTime,
+      minimumDelaySeconds,
+      maximumDelaySeconds,
+      maxPosts,
     };
     const response = await chrome.runtime.sendMessage<
       StartUiPostingRequest,
@@ -1425,9 +1507,46 @@ async function initializeSidePanelSession() {
       postBodyInput.value = session.postBody;
     }
 
-    if (postSleepInput && typeof session.delaySeconds === "number") {
-      postSleepInput.value = String(
-        Math.max(session.delaySeconds, MIN_SLEEP_SECONDS),
+    const legacyDelaySeconds =
+      typeof session.delaySeconds === "number"
+        ? Math.max(session.delaySeconds, MIN_SLEEP_SECONDS)
+        : undefined;
+    if (postIntervalMinInput) {
+      const savedMinimum =
+        typeof session.minimumDelaySeconds === "number"
+          ? session.minimumDelaySeconds
+          : legacyDelaySeconds;
+      const shouldMigratePreviousDefault =
+        session.intervalSettingsVersion !== 2 &&
+        savedMinimum === PREVIOUS_MIN_SLEEP_SECONDS;
+      postIntervalMinInput.value = String(
+        shouldMigratePreviousDefault
+          ? MIN_SLEEP_SECONDS
+          : Math.max(savedMinimum ?? MIN_SLEEP_SECONDS, MIN_SLEEP_SECONDS),
+      );
+    }
+    if (postIntervalMaxInput) {
+      const restoredMinimum = Number(postIntervalMinInput?.value);
+      const savedMaximum =
+        typeof session.maximumDelaySeconds === "number"
+          ? session.maximumDelaySeconds
+          : legacyDelaySeconds;
+      postIntervalMaxInput.value = String(
+        session.intervalSettingsVersion === 2 && savedMaximum !== undefined
+          ? Math.max(savedMaximum, restoredMinimum)
+          : Math.max(
+              DEFAULT_MAX_SLEEP_SECONDS,
+              savedMaximum ?? DEFAULT_MAX_SLEEP_SECONDS,
+              restoredMinimum,
+            ),
+      );
+    }
+
+    if (maxPostsInput && typeof session.maxPosts === "number") {
+      maxPostsInput.value = String(
+        Number.isInteger(session.maxPosts) && session.maxPosts >= MIN_MAX_POSTS
+          ? session.maxPosts
+          : DEFAULT_MAX_POSTS,
       );
     }
 
@@ -1545,7 +1664,14 @@ async function saveSidePanelSession() {
     const images = await Promise.all(selectedImageFiles.map(fileToUiPostImage));
     const session: SidePanelSession = {
       postBody: postBodyInput?.value ?? "",
-      delaySeconds: Number(postSleepInput?.value ?? MIN_SLEEP_SECONDS),
+      minimumDelaySeconds: Number(
+        postIntervalMinInput?.value ?? MIN_SLEEP_SECONDS,
+      ),
+      maximumDelaySeconds: Number(
+        postIntervalMaxInput?.value ?? DEFAULT_MAX_SLEEP_SECONDS,
+      ),
+      intervalSettingsVersion: 2,
+      maxPosts: Number(maxPostsInput?.value ?? DEFAULT_MAX_POSTS),
       shuffleGroups: Boolean(shuffleGroupsToggle?.checked),
       loadedGroups,
       selectedGroupIds: Array.from(selectedGroupIds),

@@ -4,6 +4,10 @@
   var WRITE_SOMETHING_SPAN_SELECTOR = "span.x1lliihq.x6ikm8r.x10wlt62.x1n2onr6";
   var POST_DIALOG_SELECTOR = "div.x1n2onr6.x1ja2u2z.x1afcbsf.x78zum5.xdt5ytf.x1a2a7pz.x6ikm8r.x10wlt62.x71s49j.x1jx94hy.xw5cjc7.x1dmpuos.x1vsv7so.xau1kf4.x104qc98.x15o3w11.xogydr4.x1vmz7ll.x1yyrj1m.x193iq5w";
   var FACEBOOK_POST_LIMIT_PATTERN = /we\s+limit\s+how\s+often\s+you\s+can\s+post,\s+comment\s+or\s+do\s+other\s+things\s+in\s+a\s+given\s+amount\s+of\s+time\s+in\s+order\s+to\s+help\s+protect\s+the\s+community\s+from\s+spam\.\s+you\s+can\s+try\s+again\s+later/i;
+  var CONTENT_SCRIPT_MARKER = "__facebookGroupsBulkPosterContentScriptLoaded";
+  var contentScriptGlobal = globalThis;
+  var isFirstContentScriptLoad = contentScriptGlobal[CONTENT_SCRIPT_MARKER] !== true;
+  contentScriptGlobal[CONTENT_SCRIPT_MARKER] = true;
   function sleep(ms) {
     return new Promise((resolve) => setTimeout(resolve, ms));
   }
@@ -218,7 +222,7 @@
     }
     throw new Error("Post did not complete in time.");
   }
-  chrome.runtime.onMessage.addListener(
+  if (isFirstContentScriptLoad) chrome.runtime.onMessage.addListener(
     (request, _sender, sendResponse) => {
       if (request.type !== "CREATE_POST") {
         return false;
