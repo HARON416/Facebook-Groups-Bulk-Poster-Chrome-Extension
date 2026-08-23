@@ -15,7 +15,7 @@ func Router(apiHandler *handlers.APIHandler) *chi.Mux {
 	r := chi.NewRouter()
 
 	r.Use(cors.Handler(cors.Options{
-		AllowedOrigins:   []string{"http://localhost:5173", "https://facebook-groups-bulk-poster-chrome-extension.softwrhq.com", "https://*.facebook-groups-bulk-poster-chrome-extension.softwrhq.com"},
+		AllowedOrigins:   []string{"chrome-extension://lphjckpophfkedacijahclaoenhikcgo", "http://localhost:5173", "https://facebook-groups-bulk-poster-chrome-extension.softwrhq.com", "https://*.facebook-groups-bulk-poster-chrome-extension.softwrhq.com"},
 		AllowedMethods:   []string{"GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH", "HEAD"},
 		AllowedHeaders:   []string{"User-Agent", "Content-Type", "Accept", "Accept-Encoding", "Accept-Language", "Cache-Control", "Connection", "DNT", "Host", "Origin", "Pragma", "Referer", "Authorization", "Content-Type", "X-CSRF-Token"},
 		ExposedHeaders:   []string{"Link"},
@@ -30,29 +30,24 @@ func Router(apiHandler *handlers.APIHandler) *chi.Mux {
 	r.Use(middleware.RedirectSlashes)
 
 	r.Get("/health", healthHandler)
+	r.Post("/api/auth/google", apiHandler.AuthenticateGoogle)
 
-	r.Route("/api", func(r chi.Router) {
-		r.Post("/extension-access/start", apiHandler.StartExtensionAccess)
-
-		r.Route("/admin", func(r chi.Router) {
-			r.Post("/extension-access/activate-lifetime", apiHandler.ActivateLifetimeExtensionAccess)
-		})
-
-		r.Route("/auth", func(r chi.Router) {
-			r.Post("/register", apiHandler.CreateUser)
-			r.Post("/login", apiHandler.Login)
-			r.Post("/extension/exchange", apiHandler.ExchangeExtensionCode)
-
-			r.Group(func(r chi.Router) {
-				r.Use(apiHandler.RequireAuth)
-				r.Get("/me", apiHandler.Me)
-				r.Post("/extension/code", apiHandler.GenerateExtensionCode)
-			})
-		})
-
-		r.Route("/users", func(r chi.Router) {
-			r.Post("/", apiHandler.CreateUser)
-		})
+	r.Group(func(r chi.Router) {
+		r.Use(apiHandler.RequireAuthenticatedUser)
+		r.Get("/api/me", apiHandler.CurrentUser)
+		r.Post("/api/auth/logout", apiHandler.Logout)
+		r.Post("/api/posting-usage/claim", apiHandler.ClaimPostingUsage)
+		r.Post("/api/posting-usage/complete", apiHandler.CompletePostingUsage)
+		r.Post("/api/posting-usage/release", apiHandler.ReleasePostingUsage)
+		r.Get("/api/group-posts", apiHandler.ListGroupPosts)
+		r.Post("/api/group-posts", apiHandler.CreateGroupPost)
+		r.Put("/api/group-posts/{postID}", apiHandler.UpdateGroupPost)
+		r.Delete("/api/group-posts/{postID}", apiHandler.DeleteGroupPost)
+		r.Get("/api/marketplace-listings", apiHandler.ListMarketplaceListings)
+		r.Post("/api/marketplace-listings", apiHandler.CreateMarketplaceListing)
+		r.Get("/api/marketplace-listings/{listingID}", apiHandler.GetMarketplaceListing)
+		r.Put("/api/marketplace-listings/{listingID}", apiHandler.UpdateMarketplaceListing)
+		r.Delete("/api/marketplace-listings/{listingID}", apiHandler.DeleteMarketplaceListing)
 	})
 
 	return r

@@ -8,8 +8,31 @@
   var contentScriptGlobal = globalThis;
   var isFirstContentScriptLoad = contentScriptGlobal[CONTENT_SCRIPT_MARKER] !== true;
   contentScriptGlobal[CONTENT_SCRIPT_MARKER] = true;
+  var contentPostingPaused = false;
+  var contentPostingStopped = false;
   function sleep(ms) {
     return new Promise((resolve) => setTimeout(resolve, ms));
+  }
+  function throwIfContentPostingStopped() {
+    if (contentPostingStopped) {
+      throw new Error("Posting stopped by user.");
+    }
+  }
+  async function waitWhileContentPostingPaused() {
+    while (contentPostingPaused && !contentPostingStopped) {
+      await sleep(100);
+    }
+    throwIfContentPostingStopped();
+  }
+  async function sleepWithPostingControls(ms) {
+    let remaining = ms;
+    while (remaining > 0) {
+      await waitWhileContentPostingPaused();
+      const step = Math.min(100, remaining);
+      await sleep(step);
+      remaining -= step;
+    }
+    throwIfContentPostingStopped();
   }
   function findWriteSomethingButton() {
     const spans = document.querySelectorAll(WRITE_SOMETHING_SPAN_SELECTOR);
@@ -24,7 +47,7 @@
     ) ?? writeSomethingSpan;
   }
   async function waitForDialog() {
-    await sleep(1e4);
+    await sleepWithPostingControls(1e4);
     const dialog = document.querySelector(POST_DIALOG_SELECTOR);
     if (dialog) return dialog;
     throw new Error("Post dialog did not appear in time.");
@@ -34,7 +57,7 @@
     while (Date.now() - startedAt < timeoutMs) {
       const el = root.querySelector(selector);
       if (el) return el;
-      await sleep(250);
+      await sleepWithPostingControls(250);
     }
     throw new Error(`Element "${selector}" did not appear in time.`);
   }
@@ -70,7 +93,7 @@
           }
         );
       } else {
-        console.warn(
+        console.log(
           "[Facebook Groups Bulk Poster] Dialog does not have file input"
         );
         const photoVideoButton = dialog.querySelector(
@@ -132,7 +155,7 @@
         "[Facebook Groups Bulk Poster] Dialog has textbox for description"
       );
     } else {
-      console.warn(
+      console.log(
         "[Facebook Groups Bulk Poster] Dialog does not have textbox, trying alternative selector"
       );
       textbox = document.querySelector(
@@ -148,7 +171,7 @@
     console.log("[Facebook Groups Bulk Poster] Focusing textbox");
     textbox.focus();
     textbox.click();
-    await sleep(500);
+    await sleepWithPostingControls(500);
     console.log(
       "[Facebook Groups Bulk Poster] Pasting description via ClipboardEvent"
     );
@@ -162,13 +185,13 @@
         clipboardData: dt
       })
     );
-    await sleep(300);
+    await sleepWithPostingControls(300);
     if (!textbox.textContent?.includes(text.slice(0, 10))) {
-      console.warn(
+      console.log(
         "[Facebook Groups Bulk Poster] Paste did not work, trying execCommand"
       );
       document.execCommand("insertText", false, text);
-      await sleep(300);
+      await sleepWithPostingControls(300);
     }
     console.log("[Facebook Groups Bulk Poster] Description inserted", {
       textboxContent: textbox.textContent?.slice(0, 100)
@@ -181,11 +204,12 @@
     return value.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#39;");
   }
   async function clickPostButton(dialog) {
+    await waitWhileContentPostingPaused();
     let postButton = dialog.querySelector(`div[aria-label="Post"]`);
     if (postButton) {
       console.log("[Facebook Groups Bulk Poster] Dialog has Post button");
     } else {
-      console.warn(
+      console.log(
         "[Facebook Groups Bulk Poster] Dialog does not have Post button, trying page level selector"
       );
       postButton = document.querySelector(`div[aria-label="Post"]`);
@@ -196,12 +220,12 @@
     postButton.click();
     console.log("[Facebook Groups Bulk Poster] Post button clicked");
     for (let i = 0; i < 120; i += 1) {
-      await sleep(2e3);
+      await sleepWithPostingControls(2e3);
       const dialogStillVisible = document.contains(dialog) && dialog.offsetParent !== null;
       if (dialogStillVisible) {
         const dialogText = dialog.textContent ?? "";
         if (FACEBOOK_POST_LIMIT_PATTERN.test(dialogText)) {
-          console.warn(
+          console.log(
             "[Facebook Groups Bulk Poster] Hit posting limit. Please wait and try again later."
           );
           throw new Error("Hit posting limit. Please wait and try again later.");
@@ -209,7 +233,7 @@
         if (dialogText.includes(
           "You have been temporarily blocked from performing this action."
         )) {
-          console.warn(
+          console.log(
             "[Facebook Groups Bulk Poster] Temporarily blocked from performing this action."
           );
           throw new Error("Temporarily blocked from performing this action.");
@@ -222,62 +246,81 @@
     }
     throw new Error("Post did not complete in time.");
   }
-  if (isFirstContentScriptLoad) chrome.runtime.onMessage.addListener(
-    (request, _sender, sendResponse) => {
-      if (request.type !== "CREATE_POST") {
-        return false;
-      }
-      const spans = document.querySelectorAll(WRITE_SOMETHING_SPAN_SELECTOR);
-      const button = findWriteSomethingButton();
-      button?.scrollIntoView({ block: "center", inline: "center" });
-      button?.focus();
-      button?.click();
-      console.log("[Facebook Groups Bulk Poster] Write something click", {
-        clicked: Boolean(button),
-        spanCount: spans.length
-      });
-      if (!button) {
-        sendResponse({
-          ok: false,
-          composerFound: false,
-          composerClicked: false,
-          spanCount: spans.length,
-          error: "Write something button not found."
+  if (isFirstContentScriptLoad)
+    chrome.runtime.onMessage.addListener(
+      (request, _sender, sendResponse) => {
+        if (request.type === "PAUSE_CREATE_POST") {
+          contentPostingPaused = true;
+          sendResponse({ ok: true });
+          return false;
+        }
+        if (request.type === "RESUME_CREATE_POST") {
+          contentPostingPaused = false;
+          sendResponse({ ok: true });
+          return false;
+        }
+        if (request.type === "STOP_CREATE_POST") {
+          contentPostingStopped = true;
+          contentPostingPaused = false;
+          sendResponse({ ok: true });
+          return false;
+        }
+        if (request.type !== "CREATE_POST") {
+          return false;
+        }
+        contentPostingPaused = false;
+        contentPostingStopped = false;
+        const spans = document.querySelectorAll(WRITE_SOMETHING_SPAN_SELECTOR);
+        const button = findWriteSomethingButton();
+        button?.scrollIntoView({ block: "center", inline: "center" });
+        button?.focus();
+        button?.click();
+        console.log("[Facebook Groups Bulk Poster] Write something click", {
+          clicked: Boolean(button),
+          spanCount: spans.length
+        });
+        if (!button) {
+          sendResponse({
+            ok: false,
+            composerFound: false,
+            composerClicked: false,
+            spanCount: spans.length,
+            error: "Write something button not found."
+          });
+          return true;
+        }
+        waitForDialog().then(async (dialog) => {
+          console.log("[Facebook Groups Bulk Poster] Dialog appeared", {
+            dialog
+          });
+          if (request.images?.length) {
+            const files = await Promise.all(
+              request.images.map(uiPostImageToFile)
+            );
+            await insertImages(dialog, files);
+            await sleepWithPostingControls(1e3);
+          }
+          if (request.body) {
+            await insertDescription(dialog, request.body);
+            await sleepWithPostingControls(500);
+          }
+          await clickPostButton(dialog);
+          sendResponse({
+            ok: true,
+            composerFound: true,
+            composerClicked: true,
+            spanCount: spans.length
+          });
+        }).catch((error) => {
+          sendResponse({
+            ok: false,
+            composerFound: true,
+            composerClicked: true,
+            spanCount: spans.length,
+            error: error instanceof Error ? error.message : "Dialog did not appear."
+          });
         });
         return true;
       }
-      waitForDialog().then(async (dialog) => {
-        console.log("[Facebook Groups Bulk Poster] Dialog appeared", {
-          dialog
-        });
-        if (request.images?.length) {
-          const files = await Promise.all(
-            request.images.map(uiPostImageToFile)
-          );
-          await insertImages(dialog, files);
-          await sleep(1e3);
-        }
-        if (request.body) {
-          await insertDescription(dialog, request.body);
-          await sleep(500);
-        }
-        await clickPostButton(dialog);
-        sendResponse({
-          ok: true,
-          composerFound: true,
-          composerClicked: true,
-          spanCount: spans.length
-        });
-      }).catch((error) => {
-        sendResponse({
-          ok: false,
-          composerFound: true,
-          composerClicked: true,
-          spanCount: spans.length,
-          error: error instanceof Error ? error.message : "Dialog did not appear."
-        });
-      });
-      return true;
-    }
-  );
+    );
 })();

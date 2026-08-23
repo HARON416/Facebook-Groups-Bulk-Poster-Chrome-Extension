@@ -3,7 +3,9 @@
   "version": "1.0.0",
   "description": "",
   "scripts": {
-    "build": "node scripts/build.mjs",
+    "build": "npm run build:dev",
+    "build:dev": "node scripts/build.mjs",
+    "build:prod": "node scripts/build.mjs --production",
     "watch": "node scripts/build.mjs --watch"
   },
   "keywords": [],
@@ -17,7 +19,6 @@
     "typescript": "^5.9.3"
   },
   "dependencies": {
-    "@google/genai": "^1.42.0",
     "mime": "^4.1.0"
   }
 }

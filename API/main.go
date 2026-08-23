@@ -3,12 +3,14 @@ package main
 import (
 	"context"
 	"net/http"
+	"strings"
 	"time"
 
 	"facebook-groups-bulk-poster-api/handlers"
 	"facebook-groups-bulk-poster-api/internal/db"
 	"facebook-groups-bulk-poster-api/internal/postgres"
 	"facebook-groups-bulk-poster-api/router"
+	"facebook-groups-bulk-poster-api/storage"
 	"facebook-groups-bulk-poster-api/utils"
 )
 
@@ -19,6 +21,10 @@ func main() {
 		return
 	}
 	utils.Infof("loaded %s", config.Summary())
+	if strings.TrimSpace(config.GoogleOAuthClientID) == "" {
+		utils.Errorf("GOOGLE_OAUTH_CLIENT_ID is required")
+		return
+	}
 
 	ctx := context.Background()
 	pool, err := postgres.NewPoolFromConfig(ctx, config)
@@ -28,8 +34,14 @@ func main() {
 	}
 	defer pool.Close()
 
+	objectStorage, err := storage.NewBunnyService(config)
+	if err != nil {
+		utils.Errorf("configure Bunny storage: %v", err)
+		return
+	}
+
 	store := db.New(pool)
-	apiHandler := handlers.NewAPIHandler(store, pool)
+	apiHandler := handlers.NewAPIHandler(store, pool, objectStorage, config)
 
 	r := router.Router(apiHandler)
 

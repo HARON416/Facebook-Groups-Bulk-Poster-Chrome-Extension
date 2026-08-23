@@ -8,30 +8,111 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
-type ExtensionAccess struct {
-	ID             int32              `json:"id"`
-	InstallIDHash  string             `json:"install_id_hash"`
-	ActivationID   string             `json:"activation_id"`
-	TrialExpiresAt pgtype.Timestamptz `json:"trial_expires_at"`
-	LifetimeActive bool               `json:"lifetime_active"`
-	ActivatedAt    pgtype.Timestamptz `json:"activated_at"`
-	AdminNote      pgtype.Text        `json:"admin_note"`
-	LastSeenAt     pgtype.Timestamptz `json:"last_seen_at"`
-	CreatedAt      pgtype.Timestamptz `json:"created_at"`
+type AuthSession struct {
+	ID         pgtype.UUID        `json:"id"`
+	UserID     pgtype.UUID        `json:"user_id"`
+	TokenHash  string             `json:"token_hash"`
+	ExpiresAt  pgtype.Timestamptz `json:"expires_at"`
+	CreatedAt  pgtype.Timestamptz `json:"created_at"`
+	LastUsedAt pgtype.Timestamptz `json:"last_used_at"`
 }
 
-type ExtensionAuthCode struct {
-	ID        int32              `json:"id"`
-	UserID    int32              `json:"user_id"`
-	CodeHash  string             `json:"code_hash"`
-	ExpiresAt pgtype.Timestamptz `json:"expires_at"`
-	UsedAt    pgtype.Timestamptz `json:"used_at"`
+type GroupPost struct {
+	ID        pgtype.UUID        `json:"id"`
+	UserID    pgtype.UUID        `json:"user_id"`
+	Body      string             `json:"body"`
 	CreatedAt pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt pgtype.Timestamptz `json:"updated_at"`
+}
+
+type GroupPostImage struct {
+	ID              pgtype.UUID        `json:"id"`
+	GroupPostID     pgtype.UUID        `json:"group_post_id"`
+	ImageUrl        string             `json:"image_url"`
+	BunnyObjectPath string             `json:"bunny_object_path"`
+	Position        int16              `json:"position"`
+	CreatedAt       pgtype.Timestamptz `json:"created_at"`
+}
+
+type MarketplaceHomeDetail struct {
+	ListingID     pgtype.UUID `json:"listing_id"`
+	ListingType   string      `json:"listing_type"`
+	Title         pgtype.Text `json:"title"`
+	CategoryGroup pgtype.Text `json:"category_group"`
+	Category      pgtype.Text `json:"category"`
+	Condition     pgtype.Text `json:"condition"`
+	RentalType    pgtype.Text `json:"rental_type"`
+	Bedrooms      pgtype.Int4 `json:"bedrooms"`
+	Bathrooms     pgtype.Int4 `json:"bathrooms"`
+}
+
+type MarketplaceItemDetail struct {
+	ListingID     pgtype.UUID `json:"listing_id"`
+	ListingType   string      `json:"listing_type"`
+	Title         pgtype.Text `json:"title"`
+	CategoryGroup pgtype.Text `json:"category_group"`
+	Category      pgtype.Text `json:"category"`
+	Condition     pgtype.Text `json:"condition"`
+}
+
+type MarketplaceListing struct {
+	ID          pgtype.UUID        `json:"id"`
+	UserID      pgtype.UUID        `json:"user_id"`
+	ListingType string             `json:"listing_type"`
+	Price       pgtype.Int8        `json:"price"`
+	Description pgtype.Text        `json:"description"`
+	Location    pgtype.Text        `json:"location"`
+	CreatedAt   pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt   pgtype.Timestamptz `json:"updated_at"`
+}
+
+type MarketplaceListingImage struct {
+	ID              pgtype.UUID        `json:"id"`
+	ListingID       pgtype.UUID        `json:"listing_id"`
+	ImageUrl        string             `json:"image_url"`
+	BunnyObjectPath string             `json:"bunny_object_path"`
+	Position        int16              `json:"position"`
+	CreatedAt       pgtype.Timestamptz `json:"created_at"`
+}
+
+type MarketplaceVehicleDetail struct {
+	ListingID     pgtype.UUID `json:"listing_id"`
+	ListingType   string      `json:"listing_type"`
+	VehicleType   pgtype.Text `json:"vehicle_type"`
+	Year          pgtype.Int2 `json:"year"`
+	Make          pgtype.Text `json:"make"`
+	Model         pgtype.Text `json:"model"`
+	MileageKm     pgtype.Int4 `json:"mileage_km"`
+	BodyStyle     pgtype.Text `json:"body_style"`
+	CleanTitle    bool        `json:"clean_title"`
+	Condition     pgtype.Text `json:"condition"`
+	FuelType      pgtype.Text `json:"fuel_type"`
+	Transmission  string      `json:"transmission"`
+	ExteriorColor pgtype.Text `json:"exterior_color"`
+	InteriorColor pgtype.Text `json:"interior_color"`
+}
+
+type PostingUsageClaim struct {
+	ID          pgtype.UUID        `json:"id"`
+	UserID      pgtype.UUID        `json:"user_id"`
+	Kind        string             `json:"kind"`
+	OperationID pgtype.UUID        `json:"operation_id"`
+	Status      string             `json:"status"`
+	ClaimedAt   pgtype.Timestamptz `json:"claimed_at"`
+	ExpiresAt   pgtype.Timestamptz `json:"expires_at"`
+	SucceededAt pgtype.Timestamptz `json:"succeeded_at"`
+	ReleasedAt  pgtype.Timestamptz `json:"released_at"`
 }
 
 type User struct {
-	ID           int32              `json:"id"`
-	Email        string             `json:"email"`
-	PasswordHash string             `json:"password_hash"`
-	CreatedAt    pgtype.Timestamptz `json:"created_at"`
+	ID            pgtype.UUID        `json:"id"`
+	GoogleSubject string             `json:"google_subject"`
+	Email         string             `json:"email"`
+	EmailVerified bool               `json:"email_verified"`
+	DisplayName   pgtype.Text        `json:"display_name"`
+	AvatarUrl     pgtype.Text        `json:"avatar_url"`
+	AccessTier    string             `json:"access_tier"`
+	Timezone      string             `json:"timezone"`
+	CreatedAt     pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt     pgtype.Timestamptz `json:"updated_at"`
 }

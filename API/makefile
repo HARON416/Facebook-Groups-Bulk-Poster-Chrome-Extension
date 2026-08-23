@@ -32,6 +32,16 @@ migrate-down:
 	fi; \
 	goose -dir $(GOOSE_MIGRATION_DIR) $(GOOSE_DRIVER) "$$db_url" down
 
+migrate-reset:
+	@set -a; \
+	if [ -f "$(ENV_FILE)" ]; then . "./$(ENV_FILE)"; fi; \
+	db_url="$${DATABASE_URL:-$(GOOSE_DBSTRING)}"; \
+	if [ -z "$$db_url" ]; then \
+		echo "DATABASE_URL is required. Set it in your environment or $(ENV_FILE)."; \
+		exit 1; \
+	fi; \
+	goose -dir $(GOOSE_MIGRATION_DIR) $(GOOSE_DRIVER) "$$db_url" reset
+
 migrate-status:
 	@set -a; \
 	if [ -f "$(ENV_FILE)" ]; then . "./$(ENV_FILE)"; fi; \

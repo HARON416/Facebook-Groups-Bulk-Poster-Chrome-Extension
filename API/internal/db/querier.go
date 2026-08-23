@@ -6,16 +6,51 @@ package db
 
 import (
 	"context"
+
+	"github.com/jackc/pgx/v5/pgtype"
 )
 
 type Querier interface {
-	ActivateLifetimeExtensionAccess(ctx context.Context, arg ActivateLifetimeExtensionAccessParams) (ActivateLifetimeExtensionAccessRow, error)
-	ConsumeExtensionAuthCode(ctx context.Context, codeHash string) (ExtensionAuthCode, error)
-	CreateExtensionAuthCode(ctx context.Context, arg CreateExtensionAuthCodeParams) (ExtensionAuthCode, error)
-	CreateUser(ctx context.Context, arg CreateUserParams) (User, error)
-	GetUserByEmail(ctx context.Context, email string) (User, error)
-	GetUserByID(ctx context.Context, id int32) (User, error)
-	UpsertExtensionAccess(ctx context.Context, arg UpsertExtensionAccessParams) (UpsertExtensionAccessRow, error)
+	CountGroupPostsByUser(ctx context.Context, userID pgtype.UUID) (int64, error)
+	CountMarketplaceListingsByUser(ctx context.Context, userID pgtype.UUID) (int64, error)
+	CreateAuthSession(ctx context.Context, arg CreateAuthSessionParams) (AuthSession, error)
+	CreateGroupPost(ctx context.Context, arg CreateGroupPostParams) (GroupPost, error)
+	CreateGroupPostImage(ctx context.Context, arg CreateGroupPostImageParams) (GroupPostImage, error)
+	CreateMarketplaceHomeDetails(ctx context.Context, arg CreateMarketplaceHomeDetailsParams) (MarketplaceHomeDetail, error)
+	CreateMarketplaceItemDetails(ctx context.Context, arg CreateMarketplaceItemDetailsParams) (MarketplaceItemDetail, error)
+	CreateMarketplaceListing(ctx context.Context, arg CreateMarketplaceListingParams) (MarketplaceListing, error)
+	CreateMarketplaceListingImage(ctx context.Context, arg CreateMarketplaceListingImageParams) (MarketplaceListingImage, error)
+	CreateMarketplaceVehicleDetails(ctx context.Context, arg CreateMarketplaceVehicleDetailsParams) (MarketplaceVehicleDetail, error)
+	CreatePostingUsageClaim(ctx context.Context, arg CreatePostingUsageClaimParams) (PostingUsageClaim, error)
+	DeleteAuthSessionByTokenHash(ctx context.Context, tokenHash string) error
+	DeleteExpiredAuthSessions(ctx context.Context) error
+	DeleteGroupPost(ctx context.Context, arg DeleteGroupPostParams) (int64, error)
+	DeleteGroupPostImages(ctx context.Context, groupPostID pgtype.UUID) error
+	DeleteMarketplaceListing(ctx context.Context, arg DeleteMarketplaceListingParams) (int64, error)
+	DeleteMarketplaceListingImages(ctx context.Context, listingID pgtype.UUID) error
+	GetAuthSessionByTokenHash(ctx context.Context, tokenHash string) (AuthSession, error)
+	GetGroupPost(ctx context.Context, arg GetGroupPostParams) (GroupPost, error)
+	GetMarketplaceHomeDetails(ctx context.Context, listingID pgtype.UUID) (MarketplaceHomeDetail, error)
+	GetMarketplaceItemDetails(ctx context.Context, listingID pgtype.UUID) (MarketplaceItemDetail, error)
+	GetMarketplaceListing(ctx context.Context, arg GetMarketplaceListingParams) (MarketplaceListing, error)
+	GetMarketplaceVehicleDetails(ctx context.Context, listingID pgtype.UUID) (MarketplaceVehicleDetail, error)
+	GetPostingUsageClaim(ctx context.Context, arg GetPostingUsageClaimParams) (PostingUsageClaim, error)
+	GetPostingUsageSummary(ctx context.Context, arg GetPostingUsageSummaryParams) (GetPostingUsageSummaryRow, error)
+	GetUserByID(ctx context.Context, id pgtype.UUID) (User, error)
+	ListGroupPostImages(ctx context.Context, groupPostID pgtype.UUID) ([]GroupPostImage, error)
+	ListGroupPosts(ctx context.Context, userID pgtype.UUID) ([]GroupPost, error)
+	ListMarketplaceListingImages(ctx context.Context, listingID pgtype.UUID) ([]MarketplaceListingImage, error)
+	ListMarketplaceListings(ctx context.Context, userID pgtype.UUID) ([]MarketplaceListing, error)
+	LockUserForUsage(ctx context.Context, userID pgtype.UUID) (User, error)
+	MarkPostingUsageClaimSucceeded(ctx context.Context, arg MarkPostingUsageClaimSucceededParams) (PostingUsageClaim, error)
+	ReleasePostingUsageClaim(ctx context.Context, arg ReleasePostingUsageClaimParams) (PostingUsageClaim, error)
+	TouchAuthSession(ctx context.Context, id pgtype.UUID) error
+	UpdateGroupPost(ctx context.Context, arg UpdateGroupPostParams) (GroupPost, error)
+	UpdateMarketplaceHomeDetails(ctx context.Context, arg UpdateMarketplaceHomeDetailsParams) (MarketplaceHomeDetail, error)
+	UpdateMarketplaceItemDetails(ctx context.Context, arg UpdateMarketplaceItemDetailsParams) (MarketplaceItemDetail, error)
+	UpdateMarketplaceListing(ctx context.Context, arg UpdateMarketplaceListingParams) (MarketplaceListing, error)
+	UpdateMarketplaceVehicleDetails(ctx context.Context, arg UpdateMarketplaceVehicleDetailsParams) (MarketplaceVehicleDetail, error)
+	UpsertGoogleUser(ctx context.Context, arg UpsertGoogleUserParams) (User, error)
 }
 
 var _ Querier = (*Queries)(nil)

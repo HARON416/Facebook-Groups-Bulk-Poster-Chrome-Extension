@@ -10,12 +10,14 @@ import (
 )
 
 type Config struct {
-	DatabaseURL         string `mapstructure:"DATABASE_URL"`
-	Port                string `mapstructure:"PORT"`
-	PasetoPrivateKeyHex string `mapstructure:"PASETO_PRIVATE_KEY_HEX"`
-	PasetoPublicKeyHex  string `mapstructure:"PASETO_PUBLIC_KEY_HEX"`
-	AdminAPIKey         string `mapstructure:"ADMIN_API_KEY"`
-	ConfigFile          string `mapstructure:"-"`
+	DatabaseURL           string `mapstructure:"DATABASE_URL"`
+	Port                  string `mapstructure:"PORT"`
+	GoogleOAuthClientID   string `mapstructure:"GOOGLE_OAUTH_CLIENT_ID"`
+	BunnyStorageZone      string `mapstructure:"BUNNY_STORAGE_ZONE"`
+	BunnyStorageEndpoint  string `mapstructure:"BUNNY_STORAGE_ENDPOINT"`
+	BunnyPublicBaseURL    string `mapstructure:"BUNNY_PUBLIC_BASE_URL"`
+	BunnyStorageAccessKey string `mapstructure:"BUNNY_STORAGE_ACCESS_KEY"`
+	ConfigFile            string `mapstructure:"-"`
 }
 
 func LoadConfig(path string) (Config, error) {
@@ -38,6 +40,11 @@ func LoadConfig(path string) (Config, error) {
 	if err := v.Unmarshal(&config); err != nil {
 		return config, err
 	}
+	// Keep the existing deployment variable working while documenting the more
+	// explicit name for new environments.
+	if strings.TrimSpace(config.BunnyStorageAccessKey) == "" {
+		config.BunnyStorageAccessKey = v.GetString("BUNNY_API_KEY")
+	}
 
 	config.ConfigFile = configFile
 
@@ -46,13 +53,15 @@ func LoadConfig(path string) (Config, error) {
 
 func (c Config) Summary() string {
 	return fmt.Sprintf(
-		"config=%s database_url=%t port=%t paseto_private_key=%t paseto_public_key=%t admin_api_key=%t",
+		"config=%s database_url=%t port=%t google_oauth_client_id=%t bunny_storage=%t",
 		c.ConfigFile,
 		hasValue(c.DatabaseURL),
 		hasValue(c.Port),
-		hasValue(c.PasetoPrivateKeyHex),
-		hasValue(c.PasetoPublicKeyHex),
-		hasValue(c.AdminAPIKey),
+		hasValue(c.GoogleOAuthClientID),
+		hasValue(c.BunnyStorageZone) &&
+			hasValue(c.BunnyStorageEndpoint) &&
+			hasValue(c.BunnyPublicBaseURL) &&
+			hasValue(c.BunnyStorageAccessKey),
 	)
 }
 

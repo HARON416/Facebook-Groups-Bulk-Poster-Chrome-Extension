@@ -1,4 +1,3 @@
-import { GoogleGenAI } from "@google/genai";
 import {
   GROUPS_QUERY_FRIENDLY_NAME,
   JOINED_GROUPS_URL,
@@ -7,11 +6,16 @@ import {
   type ExtensionRequest,
   type FacebookGroup,
   type GroupExtractionStatusMessage,
+  type MarketplaceItemPostingResponse,
+  type MarketplaceItemPostingStatusMessage,
+  type MarketplaceCleanupStatusMessage,
   type SimpleGroup,
+  type StartMarketplaceItemPostingRequest,
   type StartUiPostingRequest,
   type UiPostImage,
   type UiPostingStatusMessage,
 } from "./config";
+import { AUTH_API_BASE_URL } from "./auth-config";
 
 type CapturedRequest = {
   url: string;
@@ -46,7 +50,21 @@ type GraphqlPostResult = {
   error?: string;
 };
 
+type GeminiGenerateContentResponse = {
+  candidates?: Array<{
+    content?: {
+      parts?: Array<{ text?: string }>;
+    };
+  }>;
+  error?: { message?: string };
+};
+
 const POST_MUTATION_FRIENDLY_NAME = "ComposerStoryCreateMutation";
+const MARKETPLACE_SELLING_PAGINATION_FRIENDLY_NAME =
+  "MarketplaceYouSellingFastActiveSectionPaginationQuery";
+const MARKETPLACE_DELETE_FRIENDLY_NAME =
+  "useCometMarketplaceForSaleItemDeleteMutation";
+const MARKETPLACE_DELETE_DOC_ID = "30073389588942699";
 const UPLOAD_CANDIDATE_MATCHES = [
   "upload.facebook.com/ajax/react_composer/attachments/photo/upload",
   "www.facebook.com/ajax/react_composer/attachments/photo/upload",
@@ -55,10 +73,91 @@ const UPLOAD_CANDIDATE_MATCHES = [
 ];
 const GEMINI_API_KEY_STORAGE_KEYS = ["geminiApiKey", "GEMINI_API_KEY"] as const;
 const GEMINI_REWRITE_ENABLED_STORAGE_KEY = "geminiRewriteEnabled";
+const GEMINI_CUSTOM_PROMPT_STORAGE_KEY = "geminiCustomPrompt";
+const GEMINI_INCLUDE_HASHTAGS_STORAGE_KEY = "geminiIncludeHashtags";
 const GEMINI_MODEL = "gemini-2.5-flash";
 const GEMINI_TIMEOUT_MS = 30_000;
 const MIN_POSTING_DELAY_SECONDS = 60;
+const AUTH_SESSION_STORAGE_KEY = "googleAuthSession";
 const LOG_PREFIX = "[Facebook Groups Bulk Poster]";
+
+type PostingUsageKind = "group_post" | "marketplace_listing";
+
+class PostingAccessError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "PostingAccessError";
+  }
+}
+
+async function updatePostingUsage(
+  action: "claim" | "complete" | "release",
+  kind: PostingUsageKind,
+  operationId: string,
+) {
+  const storage = await chrome.storage.local.get(AUTH_SESSION_STORAGE_KEY);
+  const session = storage[AUTH_SESSION_STORAGE_KEY] as
+    | { sessionToken?: unknown }
+    | undefined;
+  const sessionToken =
+    typeof session?.sessionToken === "string"
+      ? session.sessionToken.trim()
+      : "";
+  if (!sessionToken) {
+    throw new PostingAccessError("Sign in with Google to continue posting.");
+  }
+
+  const response = await fetch(
+    `${AUTH_API_BASE_URL}/api/posting-usage/${action}`,
+    {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${sessionToken}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ kind, operation_id: operationId }),
+    },
+  );
+  const payload = (await response.json().catch(() => ({}))) as {
+    error?: string;
+    reset_at?: string;
+    access?: import("./config").AccessEntitlements;
+  };
+  if (!response.ok) {
+    const reset = payload.reset_at
+      ? ` The next slot becomes available ${new Date(payload.reset_at).toLocaleString()}.`
+      : "";
+    throw new PostingAccessError(
+      `${payload.error ?? "Unable to verify your posting allowance."}${reset}`,
+    );
+  }
+  if (payload.access) {
+    void chrome.runtime
+      .sendMessage({
+        type: "ACCESS_ENTITLEMENTS_UPDATED",
+        access: payload.access,
+      })
+      .catch(() => undefined);
+  }
+}
+
+async function claimPostingUsage(kind: PostingUsageKind): Promise<string> {
+  const operationId = crypto.randomUUID();
+  await updatePostingUsage("claim", kind, operationId);
+  return operationId;
+}
+
+async function finalizePostingUsage(
+  action: "complete" | "release",
+  kind: PostingUsageKind,
+  operationId: string,
+) {
+  try {
+    await updatePostingUsage(action, kind, operationId);
+  } catch (error) {
+    console.warn(LOG_PREFIX, `Unable to ${action} posting allowance.`, error);
+  }
+}
 const FACEBOOK_HOSTS = new Set([
   "www.facebook.com",
   "web.facebook.com",
@@ -69,14 +168,32 @@ const pendingRequests = new Map<string, PendingRequest>();
 
 let capturedGroupsRequest: CapturedRequest | undefined;
 let captureTabId: number | undefined;
+let marketplaceCleanupCaptureTabId: number | undefined;
+let capturedMarketplaceSellingRequest: CapturedRequest | undefined;
+let marketplaceCleanupActive = false;
+const marketplaceCleanupCompletions = new Map<
+  string,
+  (result: { ok: boolean; deletedCount?: number; error?: string }) => void
+>();
 
 let activePosting = false;
+let activePostingSuccessTarget: number | undefined;
 let stopPostingRequested = false;
 let pausePostingRequested = false;
 let pauseNotificationSent = false;
+let activeGeminiRequestController: AbortController | undefined;
+let latestUiPostingStatus: UiPostingStatusMessage | undefined;
+let activePostingTabId: number | undefined;
 let postingCaptureTabId: number | undefined;
 let capturedUploadTemplate: CapturedRequest | undefined;
 let capturedPostTemplate: CapturedRequest | undefined;
+let activeMarketplaceItemPosting = false;
+let marketplaceStopPostingRequested = false;
+let marketplacePausePostingRequested = false;
+let latestMarketplacePostingStatus:
+  | MarketplaceItemPostingStatusMessage
+  | undefined;
+let activeMarketplacePostingTabId: number | undefined;
 const loggedUploadCandidateRequestIds = new Set<string>();
 const MANUAL_STOP_MESSAGE = "Posting stopped by user.";
 const FACEBOOK_POST_LIMIT_PATTERN =
@@ -119,11 +236,11 @@ function debugLog(message: string, data?: unknown) {
 
 function debugWarn(message: string, data?: unknown) {
   if (data === undefined) {
-    console.warn(`${LOG_PREFIX} ${message}`);
+    console.log(`${LOG_PREFIX} ${message}`);
     return;
   }
 
-  console.warn(`${LOG_PREFIX} ${message}`, data);
+  console.log(`${LOG_PREFIX} ${message}`, data);
 }
 
 function isFacebookUrl(url: string | undefined): boolean {
@@ -214,8 +331,15 @@ chrome.webRequest.onBeforeRequest.addListener(
     const shouldCapturePosting =
       postingCaptureTabId !== undefined &&
       details.tabId === postingCaptureTabId;
+    const shouldCaptureMarketplaceCleanup =
+      marketplaceCleanupCaptureTabId !== undefined &&
+      details.tabId === marketplaceCleanupCaptureTabId;
 
-    if (!shouldCaptureGroups && !shouldCapturePosting) {
+    if (
+      !shouldCaptureGroups &&
+      !shouldCapturePosting &&
+      !shouldCaptureMarketplaceCleanup
+    ) {
       return undefined;
     }
 
@@ -250,8 +374,15 @@ chrome.webRequest.onBeforeSendHeaders.addListener(
     const shouldCapturePosting =
       postingCaptureTabId !== undefined &&
       details.tabId === postingCaptureTabId;
+    const shouldCaptureMarketplaceCleanup =
+      marketplaceCleanupCaptureTabId !== undefined &&
+      details.tabId === marketplaceCleanupCaptureTabId;
 
-    if (!shouldCaptureGroups && !shouldCapturePosting) {
+    if (
+      !shouldCaptureGroups &&
+      !shouldCapturePosting &&
+      !shouldCaptureMarketplaceCleanup
+    ) {
       return undefined;
     }
 
@@ -281,6 +412,33 @@ chrome.runtime.onMessage.addListener(
     _sender,
     sendResponse: (response: any) => void,
   ) => {
+    if (request.type === "MARKETPLACE_CLEANUP_FINISHED") {
+      marketplaceCleanupCompletions.get(request.runId)?.({
+        ok: request.ok,
+        deletedCount: request.deletedCount,
+        error: request.error,
+      });
+      sendResponse({ ok: true });
+      return false;
+    }
+
+    if (request.type === "MARKETPLACE_SELLING_REQUEST_CAPTURED") {
+      if (
+        marketplaceCleanupCaptureTabId !== undefined &&
+        request.request.body
+      ) {
+        capturedMarketplaceSellingRequest = {
+          ...request.request,
+          formData: formDataFromBody(request.request.body, {}),
+        };
+        debugLog("Captured raw Marketplace request from the Facebook page.", {
+          url: request.request.url,
+        });
+      }
+      sendResponse({ ok: true });
+      return false;
+    }
+
     if (request.type === "LOAD_GROUPS") {
       void loadGroups()
         .then((groups) => sendResponse({ ok: true, groups }))
@@ -295,27 +453,186 @@ chrome.runtime.onMessage.addListener(
     }
 
     if (request.type === "START_UI_POSTING") {
+      if (activePosting) {
+        sendResponse({
+          ok: false,
+          error: "A posting queue is already running.",
+        });
+        return false;
+      }
+
       void runGraphqlPostingQueue(request);
       sendResponse({ ok: true });
       return false;
     }
 
+    if (request.type === "START_MARKETPLACE_POSTING") {
+      if (activeMarketplaceItemPosting || activePosting) {
+        sendResponse({
+          ok: false,
+          error: "Another Facebook posting action is already running.",
+        });
+        return false;
+      }
+      activeMarketplaceItemPosting = true;
+      marketplaceStopPostingRequested = false;
+      marketplacePausePostingRequested = false;
+      void runMarketplaceItemPostingQueue(request)
+        .catch((error: unknown) => {
+          notifyMarketplaceItemPostingStatus({
+            status: "done",
+            message: "Marketplace posting queue stopped.",
+            current: 0,
+            total: request.listings.length,
+            successCount: 0,
+            failedCount: request.listings.length,
+            error:
+              error instanceof Error
+                ? error.message
+                : "Unable to run Marketplace posting queue.",
+          });
+        })
+        .finally(() => {
+          activeMarketplaceItemPosting = false;
+          marketplaceStopPostingRequested = false;
+          marketplacePausePostingRequested = false;
+          activeMarketplacePostingTabId = undefined;
+        });
+      sendResponse({ ok: true });
+      return false;
+    }
+
+    if (request.type === "DELETE_OLD_MARKETPLACE_LISTINGS") {
+      if (
+        marketplaceCleanupActive ||
+        activeMarketplaceItemPosting ||
+        activePosting
+      ) {
+        sendResponse({
+          ok: false,
+          error:
+            "Another Facebook posting or cleanup action is already running.",
+        });
+        return false;
+      }
+      if (!Number.isSafeInteger(request.daysOld) || request.daysOld < 0) {
+        sendResponse({
+          ok: false,
+          error: "Days old must be a whole number of 0 or greater.",
+        });
+        return false;
+      }
+      marketplaceCleanupActive = true;
+      void runMarketplaceCleanupInSellingPage(request.daysOld)
+        .catch((error: unknown) => {
+          notifyMarketplaceCleanupStatus({
+            status: "failed",
+            message: "Marketplace cleanup failed.",
+            processed: 0,
+            total: 0,
+            deletedCount: 0,
+            failedCount: 0,
+            error: error instanceof Error ? error.message : String(error),
+          });
+        })
+        .finally(() => {
+          marketplaceCleanupActive = false;
+          marketplaceCleanupCaptureTabId = undefined;
+          capturedMarketplaceSellingRequest = undefined;
+        });
+      sendResponse({ ok: true });
+      return false;
+    }
+
+    if (request.type === "STOP_MARKETPLACE_POSTING") {
+      if (!activeMarketplaceItemPosting) {
+        sendResponse({ ok: false, error: "No Marketplace queue is running." });
+        return false;
+      }
+      marketplaceStopPostingRequested = true;
+      marketplacePausePostingRequested = false;
+      activeGeminiRequestController?.abort();
+      sendMarketplacePostingControl("STOP_MARKETPLACE_POSTING");
+      notifyMarketplacePostingControlStatus(
+        "posting",
+        "Stopping Marketplace posting after the current Facebook action…",
+      );
+      sendResponse({ ok: true });
+      return false;
+    }
+
+    if (request.type === "PAUSE_MARKETPLACE_POSTING") {
+      if (!activeMarketplaceItemPosting) {
+        sendResponse({ ok: false, error: "No Marketplace queue is running." });
+        return false;
+      }
+      marketplacePausePostingRequested = true;
+      sendMarketplacePostingControl("PAUSE_MARKETPLACE_POSTING");
+      notifyMarketplacePostingControlStatus(
+        "paused",
+        "Marketplace posting paused.",
+      );
+      sendResponse({ ok: true });
+      return false;
+    }
+
+    if (request.type === "RESUME_MARKETPLACE_POSTING") {
+      if (!activeMarketplaceItemPosting) {
+        sendResponse({ ok: false, error: "No Marketplace queue is running." });
+        return false;
+      }
+      marketplacePausePostingRequested = false;
+      sendMarketplacePostingControl("RESUME_MARKETPLACE_POSTING");
+      notifyMarketplacePostingControlStatus(
+        "posting",
+        "Marketplace posting resumed.",
+      );
+      sendResponse({ ok: true });
+      return false;
+    }
+
     if (request.type === "STOP_UI_POSTING") {
+      if (!activePosting) {
+        sendResponse({ ok: false, error: "No posting queue is running." });
+        return false;
+      }
+
       stopPostingRequested = true;
+      pausePostingRequested = false;
+      activeGeminiRequestController?.abort();
+      sendContentPostingControl("STOP_CREATE_POST");
+      notifyPostingControlStatus(
+        "posting",
+        "Stopping posting after the current Facebook action finishes...",
+      );
       sendResponse({ ok: true });
       return false;
     }
 
     if (request.type === "PAUSE_UI_POSTING") {
+      if (!activePosting) {
+        sendResponse({ ok: false, error: "No posting queue is running." });
+        return false;
+      }
+
       pausePostingRequested = true;
-      pauseNotificationSent = false;
+      pauseNotificationSent = true;
+      sendContentPostingControl("PAUSE_CREATE_POST");
+      notifyPostingControlStatus("paused", "Posting queue paused.");
       sendResponse({ ok: true });
       return false;
     }
 
     if (request.type === "RESUME_UI_POSTING") {
+      if (!activePosting) {
+        sendResponse({ ok: false, error: "No posting queue is running." });
+        return false;
+      }
+
       pausePostingRequested = false;
       pauseNotificationSent = false;
+      sendContentPostingControl("RESUME_CREATE_POST");
+      notifyPostingControlStatus("posting", "Posting queue resumed.");
       sendResponse({ ok: true });
       return false;
     }
@@ -412,6 +729,26 @@ function maybeCaptureRequest(requestId: string, tabId: number) {
       pending.url,
       pending.headers,
     );
+    pendingRequests.delete(requestId);
+    return;
+  }
+
+  if (
+    tabId === marketplaceCleanupCaptureTabId &&
+    friendlyName === MARKETPLACE_SELLING_PAGINATION_FRIENDLY_NAME &&
+    body.length > 0
+  ) {
+    capturedMarketplaceSellingRequest = {
+      url: pending.url,
+      method: pending.method,
+      body,
+      headers: pending.headers,
+      formData: formDataFromBody(body, formData),
+    };
+    debugLog("Captured Marketplace selling pagination request.", {
+      url: pending.url,
+      friendlyName,
+    });
     pendingRequests.delete(requestId);
     return;
   }
@@ -640,6 +977,1091 @@ async function waitForPageDomReady(
   }
 
   throw new Error("Facebook page DOM took too long to finish loading.");
+}
+
+async function prepareMarketplacePostingPage(
+  listing: StartMarketplaceItemPostingRequest["listings"][number],
+): Promise<number> {
+  const [activeTab] = await chrome.tabs.query({
+    active: true,
+    currentWindow: true,
+  });
+  if (!activeTab?.id || !isFacebookUrl(activeTab.url)) {
+    throw new Error("Open Facebook in the active tab before posting an item.");
+  }
+
+  const tabId = activeTab.id;
+  activeMarketplacePostingTabId = tabId;
+  const createPath =
+    listing.listingType === "vehicle"
+      ? "/marketplace/create/vehicle"
+      : "/marketplace/create/item";
+  await chrome.tabs.update(tabId, {
+    url: `https://www.facebook.com${createPath}`,
+  });
+  await waitForPageDomReady(tabId, createPath);
+  await waitWhileMarketplacePostingPaused();
+  throwIfMarketplacePostingStopped();
+  await sleep(1_500);
+  await chrome.scripting.executeScript({
+    target: { tabId },
+    files: ["dist/marketplace-item.js"],
+  });
+  await waitWhileMarketplacePostingPaused();
+  throwIfMarketplacePostingStopped();
+
+  return tabId;
+}
+
+async function showMarketplaceDescriptionGenerating(tabId: number) {
+  const response = (await chrome.tabs.sendMessage(tabId, {
+    type: "SHOW_MARKETPLACE_DESCRIPTION_GENERATING",
+  })) as MarketplaceItemPostingResponse | undefined;
+  if (!response?.ok) {
+    console.info(
+      LOG_PREFIX,
+      response?.error ??
+        "Facebook's Description field is unavailable; continuing AI rewrite.",
+    );
+  }
+}
+
+async function runMarketplaceItemPosting(
+  listing: StartMarketplaceItemPostingRequest["listings"][number],
+  tabId: number,
+  shareToSuggestedGroups: boolean,
+): Promise<MarketplaceItemPostingResponse> {
+  const response = await withTimeout(
+    chrome.tabs.sendMessage(tabId, {
+      type:
+        listing.listingType === "vehicle"
+          ? "CREATE_MARKETPLACE_VEHICLE_LISTING"
+          : "CREATE_MARKETPLACE_ITEM_LISTING",
+      listing,
+      shareToSuggestedGroups,
+    }),
+    300_000,
+    "Marketplace listing posting timed out.",
+  );
+  const result = response as MarketplaceItemPostingResponse | undefined;
+  if (!result?.ok) {
+    throw new Error(result?.error ?? "Unable to publish Marketplace item.");
+  }
+  return result;
+}
+
+async function runMarketplaceItemPostingQueue(
+  request: StartMarketplaceItemPostingRequest,
+): Promise<void> {
+  const listings = request.listings;
+  const total = listings.length;
+  if (total === 0) {
+    throw new Error("Select at least one Marketplace item before posting.");
+  }
+
+  const minimumDelaySeconds = Math.max(
+    MIN_POSTING_DELAY_SECONDS,
+    Math.floor(request.minimumDelaySeconds),
+  );
+  const maximumDelaySeconds = Math.max(
+    minimumDelaySeconds,
+    Math.floor(request.maximumDelaySeconds),
+  );
+  let successCount = 0;
+  let failedCount = 0;
+
+  for (let index = 0; index < total; index += 1) {
+    await waitWhileMarketplacePostingPaused();
+    if (marketplaceStopPostingRequested) {
+      notifyMarketplaceItemPostingStatus({
+        status: "stopped",
+        message: "Marketplace posting stopped by user.",
+        current: index,
+        total,
+        successCount,
+        failedCount,
+      });
+      return;
+    }
+    const listing = listings[index];
+    const listingTitle = marketplacePostingListingTitle(listing);
+    const current = index + 1;
+    notifyMarketplaceItemPostingStatus({
+      status: "preparing",
+      message: `Preparing “${listingTitle}”…`,
+      current,
+      total,
+      listingId: listing.id,
+      listingTitle,
+      successCount,
+      failedCount,
+    });
+
+    let postingUsageOperationId: string | undefined;
+    try {
+      await waitWhileMarketplacePostingPaused();
+      throwIfMarketplacePostingStopped();
+      const tabId = await prepareMarketplacePostingPage(listing);
+      if (request.rewriteDescriptions) {
+        notifyMarketplaceItemPostingStatus({
+          status: "preparing",
+          message: `Generating description with Gemini AI for “${listingTitle}”…`,
+          current,
+          total,
+          listingId: listing.id,
+          listingTitle,
+          successCount,
+          failedCount,
+        });
+        await showMarketplaceDescriptionGenerating(tabId);
+      }
+      const description = await rewriteDescriptionWithGemini(
+        listing.description,
+        {
+          enabled: request.rewriteDescriptions,
+          apiKey: request.geminiApiKey,
+          customPrompt: request.customPrompt,
+          includeHashtags: request.includeHashtags,
+          destination: `Facebook Marketplace ${listing.listingType}`,
+        },
+      );
+      notifyMarketplaceItemPostingStatus({
+        status: "posting",
+        message: `Posting “${listingTitle}” (${current}/${total})…`,
+        current,
+        total,
+        listingId: listing.id,
+        listingTitle,
+        successCount,
+        failedCount,
+      });
+      await waitWhileMarketplacePostingPaused();
+      throwIfMarketplacePostingStopped();
+      postingUsageOperationId = await claimPostingUsage("marketplace_listing");
+      await runMarketplaceItemPosting(
+        { ...listing, description },
+        tabId,
+        request.shareToSuggestedGroups,
+      );
+      await finalizePostingUsage(
+        "complete",
+        "marketplace_listing",
+        postingUsageOperationId,
+      );
+      postingUsageOperationId = undefined;
+      throwIfMarketplacePostingStopped();
+      successCount += 1;
+      notifyMarketplaceItemPostingStatus({
+        status: "posted",
+        message: `Posted “${listingTitle}” (${current}/${total}).`,
+        current,
+        total,
+        listingId: listing.id,
+        listingTitle,
+        successCount,
+        failedCount,
+      });
+    } catch (error) {
+      if (postingUsageOperationId) {
+        await finalizePostingUsage(
+          "release",
+          "marketplace_listing",
+          postingUsageOperationId,
+        );
+      }
+      if (marketplaceStopPostingRequested) {
+        notifyMarketplaceItemPostingStatus({
+          status: "stopped",
+          message: "Marketplace posting stopped by user.",
+          current,
+          total,
+          listingId: listing.id,
+          listingTitle,
+          successCount,
+          failedCount,
+        });
+        return;
+      }
+      if (error instanceof PostingAccessError) {
+        notifyMarketplaceItemPostingStatus({
+          status: "done",
+          message: "Marketplace posting stopped by your account limit.",
+          current,
+          total,
+          listingId: listing.id,
+          listingTitle,
+          successCount,
+          failedCount,
+          error: error.message,
+        });
+        return;
+      }
+      failedCount += 1;
+      notifyMarketplaceItemPostingStatus({
+        status: "failed",
+        message: `Failed to post “${listingTitle}” (${current}/${total}).`,
+        current,
+        total,
+        listingId: listing.id,
+        listingTitle,
+        successCount,
+        failedCount,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
+
+    if (current < total) {
+      const waitSeconds = randomIntegerBetween(
+        minimumDelaySeconds,
+        maximumDelaySeconds,
+      );
+      for (let remaining = waitSeconds; remaining > 0; remaining -= 1) {
+        await waitWhileMarketplacePostingPaused();
+        if (marketplaceStopPostingRequested) {
+          notifyMarketplaceItemPostingStatus({
+            status: "stopped",
+            message: "Marketplace posting stopped by user.",
+            current,
+            total,
+            listingId: listing.id,
+            listingTitle,
+            successCount,
+            failedCount,
+          });
+          return;
+        }
+        notifyMarketplaceItemPostingStatus({
+          status: "waiting",
+          message: `Next post in ${formatPostingCountdown(remaining)}`,
+          current,
+          total,
+          listingId: listing.id,
+          listingTitle,
+          successCount,
+          failedCount,
+          waitSeconds: remaining,
+        });
+        await sleep(1_000);
+      }
+    }
+  }
+
+  notifyMarketplaceItemPostingStatus({
+    status: "done",
+    message: `Marketplace queue complete: ${successCount} posted, ${failedCount} failed.`,
+    current: total,
+    total,
+    successCount,
+    failedCount,
+  });
+}
+
+function throwIfMarketplacePostingStopped() {
+  if (marketplaceStopPostingRequested) {
+    throw new Error("Marketplace posting stopped by user.");
+  }
+}
+
+async function waitWhileMarketplacePostingPaused() {
+  while (marketplacePausePostingRequested && !marketplaceStopPostingRequested) {
+    await sleep(250);
+  }
+}
+
+function marketplacePostingListingTitle(
+  listing: StartMarketplaceItemPostingRequest["listings"][number],
+) {
+  return listing.listingType === "item"
+    ? listing.title
+    : [listing.year, listing.make, listing.model].filter(Boolean).join(" ");
+}
+
+type RemoteMarketplaceListing = {
+  id: string;
+  title: string;
+  creationTime: number;
+};
+
+function notifyMarketplaceCleanupStatus(
+  partial: Omit<MarketplaceCleanupStatusMessage, "type">,
+) {
+  void chrome.runtime.sendMessage({
+    type: "MARKETPLACE_CLEANUP_STATUS",
+    ...partial,
+  } satisfies MarketplaceCleanupStatusMessage);
+}
+
+function installMarketplaceCaptureBridge() {
+  const eventName = "__bulk_poster_marketplace_graphql_captured__";
+  const globalState = globalThis as typeof globalThis & {
+    __bulkPosterMarketplaceCaptureBridge?: boolean;
+  };
+  if (globalState.__bulkPosterMarketplaceCaptureBridge) return;
+  globalState.__bulkPosterMarketplaceCaptureBridge = true;
+  window.addEventListener(eventName, (event) => {
+    const detail = (event as CustomEvent<string>).detail;
+    if (!detail) return;
+    try {
+      const request = JSON.parse(detail) as {
+        url: string;
+        method: string;
+        headers: Record<string, string>;
+        body: string;
+      };
+      void chrome.runtime.sendMessage({
+        type: "MARKETPLACE_SELLING_REQUEST_CAPTURED",
+        request,
+      });
+    } catch {
+      // Ignore malformed page events and keep waiting for the next request.
+    }
+  });
+}
+
+function installMarketplaceGraphqlCaptureInPage() {
+  const targetFriendlyName =
+    "MarketplaceYouSellingFastActiveSectionPaginationQuery";
+  const eventName = "__bulk_poster_marketplace_graphql_captured__";
+  const pageWindow = window as typeof window & {
+    __bulkPosterRestoreMarketplaceCapture?: () => void;
+  };
+  pageWindow.__bulkPosterRestoreMarketplaceCapture?.();
+
+  const originalFetch = window.fetch;
+  const originalXhrOpen = XMLHttpRequest.prototype.open;
+  const originalXhrSetRequestHeader = XMLHttpRequest.prototype.setRequestHeader;
+  const originalXhrSend = XMLHttpRequest.prototype.send;
+  let restored = false;
+
+  const headersToObject = (headersLike: HeadersInit | undefined) => {
+    const headers: Record<string, string> = {};
+    try {
+      new Headers(headersLike ?? {}).forEach((value, key) => {
+        headers[key.toLowerCase()] = value;
+      });
+    } catch {
+      // Facebook may pass an opaque headers object; the body remains usable.
+    }
+    return headers;
+  };
+  const bodyToText = async (
+    bodyLike: BodyInit | null | undefined,
+    request: Request | null,
+  ) => {
+    if (typeof bodyLike === "string") return bodyLike;
+    if (bodyLike instanceof URLSearchParams) return bodyLike.toString();
+    if (bodyLike instanceof FormData)
+      return new URLSearchParams(
+        Array.from(bodyLike.entries()).map(([key, value]) => [
+          key,
+          String(value),
+        ]),
+      ).toString();
+    if (request) {
+      try {
+        return await request.clone().text();
+      } catch {
+        return "";
+      }
+    }
+    return "";
+  };
+  const restore = () => {
+    if (restored) return;
+    restored = true;
+    window.fetch = originalFetch;
+    XMLHttpRequest.prototype.open = originalXhrOpen;
+    XMLHttpRequest.prototype.setRequestHeader = originalXhrSetRequestHeader;
+    XMLHttpRequest.prototype.send = originalXhrSend;
+    delete pageWindow.__bulkPosterRestoreMarketplaceCapture;
+  };
+  pageWindow.__bulkPosterRestoreMarketplaceCapture = restore;
+  const restoreTimeout = window.setTimeout(restore, 60_000);
+  const isTargetRequest = (
+    url: string,
+    headers: Record<string, string>,
+    bodyText: string,
+  ) => {
+    if (!url.includes("/api/graphql")) return false;
+    if (headers["x-fb-friendly-name"] === targetFriendlyName) return true;
+    const body = new URLSearchParams(bodyText);
+    return (
+      body.get("fb_api_req_friendly_name") === targetFriendlyName ||
+      bodyText.includes(targetFriendlyName)
+    );
+  };
+  const capture = (request: {
+    url: string;
+    method: string;
+    headers: Record<string, string>;
+    body: string;
+  }) => {
+    window.clearTimeout(restoreTimeout);
+    restore();
+    window.dispatchEvent(
+      new CustomEvent(eventName, { detail: JSON.stringify(request) }),
+    );
+  };
+
+  window.fetch = async function (...args) {
+    const [input, init = {}] = args;
+    const request = input instanceof Request ? input : null;
+    const url = request?.url ?? String(input ?? "");
+    const headers = {
+      ...headersToObject(request?.headers),
+      ...headersToObject(init.headers),
+    };
+    const body = await bodyToText(init.body, request);
+    const response = await originalFetch.apply(this, args);
+    if (isTargetRequest(url, headers, body)) {
+      capture({
+        url,
+        method: init.method ?? request?.method ?? "GET",
+        headers,
+        body,
+      });
+    }
+    return response;
+  };
+
+  XMLHttpRequest.prototype.open = function (
+    this: XMLHttpRequest,
+    method: string,
+    url: string | URL,
+    async?: boolean,
+    username?: string | null,
+    password?: string | null,
+  ) {
+    (
+      this as XMLHttpRequest & { __bulkPosterCapture?: any }
+    ).__bulkPosterCapture = {
+      method,
+      url: String(url),
+      headers: {},
+    };
+    if (async === undefined) {
+      return (originalXhrOpen as Function).call(this, method, url);
+    }
+    return (originalXhrOpen as Function).call(
+      this,
+      method,
+      url,
+      async,
+      username,
+      password,
+    );
+  } as typeof XMLHttpRequest.prototype.open;
+  XMLHttpRequest.prototype.setRequestHeader = function (name, value) {
+    const request = (this as XMLHttpRequest & { __bulkPosterCapture?: any })
+      .__bulkPosterCapture;
+    if (request) request.headers[name.toLowerCase()] = value;
+    return originalXhrSetRequestHeader.call(this, name, value);
+  };
+  XMLHttpRequest.prototype.send = function (bodyLike) {
+    const request = (this as XMLHttpRequest & { __bulkPosterCapture?: any })
+      .__bulkPosterCapture;
+    const body =
+      typeof bodyLike === "string"
+        ? bodyLike
+        : bodyLike instanceof URLSearchParams
+          ? bodyLike.toString()
+          : "";
+    if (request && isTargetRequest(request.url, request.headers, body)) {
+      capture({ ...request, body });
+    }
+    return originalXhrSend.call(this, bodyLike);
+  };
+}
+
+async function runMarketplaceCleanupInSellingPage(daysOld: number) {
+  const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+  if (!tab?.id || !isFacebookUrl(tab.url)) {
+    throw new Error("Open Facebook in the active tab before cleanup.");
+  }
+  const sellingUrl =
+    "https://www.facebook.com/marketplace/you/selling?action=delete";
+  notifyMarketplaceCleanupStatus({
+    status: "preparing",
+    message: "Opening your Facebook Marketplace selling listings…",
+    processed: 0,
+    total: 0,
+    deletedCount: 0,
+    failedCount: 0,
+  });
+  capturedMarketplaceSellingRequest = undefined;
+  marketplaceCleanupCaptureTabId = tab.id;
+  await navigateTabAndWaitForComplete(
+    tab.id,
+    sellingUrl,
+    "/marketplace/you/selling",
+  );
+
+  const capturedDuringLoad = Boolean(capturedMarketplaceSellingRequest);
+  const needsFallback = !capturedMarketplaceSellingRequest;
+
+  if (needsFallback) {
+    notifyMarketplaceCleanupStatus({
+      status: "scanning",
+      message: "Scrolling Marketplace to capture the active listings request…",
+      processed: 0,
+      total: 0,
+      deletedCount: 0,
+      failedCount: 0,
+    });
+    await scrollForMarketplaceCleanupRequest(tab.id);
+  }
+
+  debugLog("Marketplace cleanup capture completed.", {
+    capturedDuringLoad,
+    captured: Boolean(capturedMarketplaceSellingRequest),
+  });
+  marketplaceCleanupCaptureTabId = undefined;
+  const activeSession = capturedMarketplaceSellingRequest
+    ? marketplaceSessionFromCapturedRequest(capturedMarketplaceSellingRequest)
+    : undefined;
+  const refreshedTab = await chrome.tabs.get(tab.id);
+  const refreshedUrl = new URL(refreshedTab.url ?? "");
+  if (
+    refreshedUrl.pathname !== "/marketplace/you/selling" ||
+    refreshedUrl.searchParams.get("action") !== "delete"
+  ) {
+    throw new Error(`Marketplace cleanup only works on ${sellingUrl}`);
+  }
+  await chrome.scripting.executeScript({
+    target: { tabId: tab.id },
+    files: ["dist/marketplace-cleanup.js"],
+  });
+  if (!activeSession) {
+    await chrome.scripting.executeScript({
+      target: { tabId: tab.id },
+      world: "MAIN",
+      files: ["marketplace-graphql-capture.js"],
+    });
+  }
+  const runId = crypto.randomUUID();
+  const completion = new Promise<{
+    ok: boolean;
+    deletedCount?: number;
+    error?: string;
+  }>((resolve) => {
+    marketplaceCleanupCompletions.set(runId, resolve);
+  });
+  try {
+    const response = (await chrome.tabs.sendMessage(tab.id, {
+      type: "RUN_MARKETPLACE_CLEANUP_IN_PAGE",
+      runId,
+      daysOld,
+      activeSession,
+    })) as MarketplaceItemPostingResponse | undefined;
+    if (!response?.ok) {
+      throw new Error(
+        response?.error ?? "Marketplace cleanup did not start in the page.",
+      );
+    }
+    const result = await withTimeout(
+      completion,
+      20 * 60 * 1_000,
+      "Marketplace cleanup timed out.",
+    );
+    if (!result.ok) {
+      throw new Error(result.error ?? "Marketplace cleanup failed.");
+    }
+    if ((result.deletedCount ?? 0) > 0) {
+      await chrome.tabs.reload(tab.id);
+    }
+  } finally {
+    marketplaceCleanupCompletions.delete(runId);
+  }
+}
+
+async function scrollForMarketplaceCleanupRequest(
+  tabId: number,
+): Promise<void> {
+  let stableBottomPasses = 0;
+  let previousHeight = -1;
+
+  while (true) {
+    if (capturedMarketplaceSellingRequest) return;
+
+    const [scrollResult] = await chrome.scripting.executeScript({
+      target: { tabId },
+      func: () => {
+        const scrollingElement =
+          document.scrollingElement ?? document.documentElement;
+        const height = scrollingElement.scrollHeight;
+        window.scrollTo({ top: height, behavior: "auto" });
+        return { height };
+      },
+    });
+
+    await sleep(1_500);
+
+    const [metricsResult] = await chrome.scripting.executeScript({
+      target: { tabId },
+      func: () => {
+        const scrollingElement =
+          document.scrollingElement ?? document.documentElement;
+        return {
+          top: scrollingElement.scrollTop,
+          height: scrollingElement.scrollHeight,
+          viewportHeight: scrollingElement.clientHeight,
+        };
+      },
+    });
+    const metrics = metricsResult?.result;
+    if (!metrics) continue;
+
+    const atBottom = metrics.top + metrics.viewportHeight >= metrics.height - 4;
+    const heightDidNotGrow =
+      previousHeight === metrics.height ||
+      scrollResult?.result?.height === metrics.height;
+    stableBottomPasses =
+      atBottom && heightDidNotGrow ? stableBottomPasses + 1 : 0;
+    previousHeight = metrics.height;
+
+    // Facebook can render a section before issuing its pagination request, so
+    // allow several settled passes at the final scroll position before deciding
+    // that the selected section did not expose a reusable GraphQL request.
+    if (stableBottomPasses >= 5) return;
+  }
+}
+
+function marketplaceSessionFromCapturedRequest(request: CapturedRequest) {
+  const body = new URLSearchParams(request.body);
+  const value = (name: string) =>
+    body.get(name) ?? request.formData[name] ?? "";
+  return {
+    url: request.url,
+    method: request.method,
+    headers: request.headers,
+    body: request.body,
+    cookie: request.headers.cookie ?? "",
+    fbDtsg: value("fb_dtsg"),
+    lsd: value("lsd"),
+    userId: value("__user") || value("av"),
+    aaid: value("__aaid"),
+    rev: value("__rev"),
+    hsi: value("__hsi"),
+    hs: value("__hs"),
+    s: value("__s"),
+    jazoest: value("jazoest"),
+    docId: value("doc_id"),
+  };
+}
+
+async function deleteOldMarketplaceListings(daysOld: number) {
+  notifyMarketplaceCleanupStatus({
+    status: "preparing",
+    message: "Opening your Facebook Marketplace selling listings…",
+    processed: 0,
+    total: 0,
+    deletedCount: 0,
+    failedCount: 0,
+  });
+  const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+  if (!tab?.id || !isFacebookUrl(tab.url)) {
+    throw new Error("Open Facebook in the active tab before cleanup.");
+  }
+
+  capturedMarketplaceSellingRequest = undefined;
+  marketplaceCleanupCaptureTabId = tab.id;
+  await chrome.tabs.update(tab.id, {
+    url: "https://www.facebook.com/marketplace/you/selling",
+  });
+  await waitForTabComplete(tab.id, "/marketplace/you/selling");
+  notifyMarketplaceCleanupStatus({
+    status: "scanning",
+    message: "Loading Marketplace listings and capturing pagination…",
+    processed: 0,
+    total: 0,
+    deletedCount: 0,
+    failedCount: 0,
+  });
+
+  await chrome.scripting.executeScript({
+    target: { tabId: tab.id },
+    func: installMarketplaceCaptureBridge,
+  });
+  await chrome.scripting.executeScript({
+    target: { tabId: tab.id },
+    world: "MAIN",
+    func: installMarketplaceGraphqlCaptureInPage,
+  });
+
+  await chrome.scripting.executeScript({
+    target: { tabId: tab.id },
+    func: () => {
+      const globalState = globalThis as typeof globalThis & {
+        __marketplaceCleanupScrollTimer?: number;
+      };
+      if (globalState.__marketplaceCleanupScrollTimer) {
+        clearInterval(globalState.__marketplaceCleanupScrollTimer);
+      }
+      globalState.__marketplaceCleanupScrollTimer = window.setInterval(() => {
+        window.scrollBy({ top: 900, behavior: "smooth" });
+      }, 1_500);
+    },
+  });
+
+  let capturedRequest: CapturedRequest;
+  try {
+    const captured = await waitForMarketplaceSellingRequest();
+    if (!captured) {
+      notifyMarketplaceCleanupStatus({
+        status: "warning",
+        message:
+          "Not enough listings to trigger Facebook pagination. Cleanup was not performed.",
+        processed: 0,
+        total: 0,
+        deletedCount: 0,
+        failedCount: 0,
+        error:
+          "Facebook only provides the required pagination request when more listings are available to load.",
+      });
+      return;
+    }
+    capturedRequest = captured;
+  } finally {
+    marketplaceCleanupCaptureTabId = undefined;
+    await chrome.scripting
+      .executeScript({
+        target: { tabId: tab.id },
+        func: () => {
+          const globalState = globalThis as typeof globalThis & {
+            __marketplaceCleanupScrollTimer?: number;
+          };
+          if (globalState.__marketplaceCleanupScrollTimer) {
+            clearInterval(globalState.__marketplaceCleanupScrollTimer);
+            delete globalState.__marketplaceCleanupScrollTimer;
+          }
+        },
+      })
+      .catch(() => undefined);
+  }
+
+  const listings = await fetchAllMarketplaceSellingListings(capturedRequest);
+  const cutoff = Date.now() - daysOld * 24 * 60 * 60 * 1_000;
+  const oldListings = listings.filter((listing) => {
+    const timestampMs =
+      listing.creationTime < 1_000_000_000_000
+        ? listing.creationTime * 1_000
+        : listing.creationTime;
+    return timestampMs < cutoff;
+  });
+
+  if (oldListings.length === 0) {
+    notifyMarketplaceCleanupStatus({
+      status: "done",
+      message: `No Marketplace listings older than ${daysOld} ${daysOld === 1 ? "day" : "days"} were found.`,
+      processed: 0,
+      total: 0,
+      deletedCount: 0,
+      failedCount: 0,
+    });
+    return;
+  }
+
+  let deletedCount = 0;
+  let failedCount = 0;
+  for (let index = 0; index < oldListings.length; index += 1) {
+    const listing = oldListings[index];
+    if (!listing) continue;
+    const processed = index + 1;
+    notifyMarketplaceCleanupStatus({
+      status: "deleting",
+      message: `Deleting “${listing.title || "Untitled listing"}” (${processed}/${oldListings.length})…`,
+      processed: index,
+      total: oldListings.length,
+      deletedCount,
+      failedCount,
+      listingId: listing.id,
+      listingTitle: listing.title,
+    });
+    try {
+      await deleteRemoteMarketplaceListing(capturedRequest, listing.id);
+      deletedCount += 1;
+      notifyMarketplaceCleanupStatus({
+        status: "deleted",
+        message: `Deleted “${listing.title || "Untitled listing"}”.`,
+        processed,
+        total: oldListings.length,
+        deletedCount,
+        failedCount,
+        listingId: listing.id,
+        listingTitle: listing.title,
+      });
+      await sleep(500);
+    } catch (error) {
+      failedCount += 1;
+      notifyMarketplaceCleanupStatus({
+        status: "failed",
+        message: `Failed to delete “${listing.title || "Untitled listing"}”.`,
+        processed,
+        total: oldListings.length,
+        deletedCount,
+        failedCount,
+        listingId: listing.id,
+        listingTitle: listing.title,
+        error: error instanceof Error ? error.message : String(error),
+      });
+      await sleep(750);
+    }
+  }
+
+  notifyMarketplaceCleanupStatus({
+    status: "done",
+    message: `Marketplace cleanup complete: ${deletedCount} deleted, ${failedCount} failed.`,
+    processed: oldListings.length,
+    total: oldListings.length,
+    deletedCount,
+    failedCount,
+  });
+}
+
+async function waitForMarketplaceSellingRequest() {
+  const startedAt = Date.now();
+  while (Date.now() - startedAt < 20_000) {
+    if (capturedMarketplaceSellingRequest) {
+      return capturedMarketplaceSellingRequest;
+    }
+    await sleep(250);
+  }
+  return undefined;
+}
+
+function marketplaceReplayHeaders(request: CapturedRequest): HeadersInit {
+  const body = new URLSearchParams(request.body);
+  return {
+    accept: request.headers.accept ?? "*/*",
+    "content-type": "application/x-www-form-urlencoded",
+    "x-asbd-id": request.headers["x-asbd-id"] ?? "359341",
+    "x-fb-friendly-name": MARKETPLACE_SELLING_PAGINATION_FRIENDLY_NAME,
+    "x-fb-lsd":
+      request.headers["x-fb-lsd"] ??
+      body.get("lsd") ??
+      request.formData.lsd ??
+      "",
+  };
+}
+
+function parseFacebookGraphqlResponses(text: string): any[] {
+  return text
+    .split("\n")
+    .map((line) => line.trim().replace(/^for \(;;\);/, ""))
+    .filter(Boolean)
+    .map((line) => JSON.parse(line));
+}
+
+function findMarketplaceListingConnections(value: unknown): any[] {
+  const connections: any[] = [];
+  const connectionSet = new Set<object>();
+  const visited = new Set<object>();
+  const addConnection = (connection: object) => {
+    if (!connectionSet.has(connection)) {
+      connectionSet.add(connection);
+      connections.push(connection);
+    }
+  };
+
+  const visit = (candidate: unknown) => {
+    if (!candidate || typeof candidate !== "object") return;
+    if (visited.has(candidate)) return;
+    visited.add(candidate);
+
+    if (Array.isArray(candidate)) {
+      candidate.forEach(visit);
+      return;
+    }
+
+    const record = candidate as Record<string, unknown>;
+    const namedConnection = record.marketplace_listing_sets;
+    if (
+      namedConnection &&
+      typeof namedConnection === "object" &&
+      Array.isArray((namedConnection as { edges?: unknown[] }).edges)
+    ) {
+      addConnection(namedConnection);
+    }
+
+    if (
+      Array.isArray(record.edges) &&
+      record.edges.some(
+        (edge: any) => edge?.node?.first_listing?.id !== undefined,
+      )
+    ) {
+      addConnection(record);
+    }
+
+    Object.values(record).forEach(visit);
+  };
+
+  visit(value);
+  return connections;
+}
+
+async function fetchAllMarketplaceSellingListings(request: CapturedRequest) {
+  const listings = new Map<string, RemoteMarketplaceListing>();
+  const originalBody = new URLSearchParams(request.body);
+  const originalVariables = JSON.parse(
+    originalBody.get("variables") ?? "{}",
+  ) as Record<string, unknown>;
+  const capturedCount = Number(originalVariables.count);
+  const count = Number.isFinite(capturedCount) ? capturedCount : 10;
+  let cursor: string | null = null;
+
+  for (let page = 1; page <= 1_000; page += 1) {
+    const body = new URLSearchParams(request.body);
+    const variables: Record<string, unknown> = {
+      ...originalVariables,
+      count,
+      order:
+        typeof originalVariables.order === "string"
+          ? originalVariables.order
+          : "CREATION_TIMESTAMP_DESC",
+    };
+    if (cursor) variables.cursor = cursor;
+    else delete variables.cursor;
+    body.set("variables", JSON.stringify(variables));
+    body.set("__spin_t", String(Math.floor(Date.now() / 1_000)));
+
+    const response = await fetch(request.url, {
+      method: "POST",
+      credentials: "include",
+      headers: marketplaceReplayHeaders(request),
+      body: body.toString(),
+    });
+    if (!response.ok) {
+      throw new Error(
+        `Facebook listings request failed with HTTP ${response.status}.`,
+      );
+    }
+    const responseText = await response.text();
+    const payloads = parseFacebookGraphqlResponses(responseText);
+    const errors = payloads.flatMap((payload) =>
+      Array.isArray(payload?.errors) ? payload.errors : [],
+    );
+    if (errors.length > 0) {
+      throw new Error(
+        errors[0]?.message ?? "Facebook rejected the listings request.",
+      );
+    }
+    const connections = payloads.flatMap(findMarketplaceListingConnections);
+    if (connections.length === 0) {
+      const dataKeys = payloads.flatMap((payload) =>
+        payload?.data && typeof payload.data === "object"
+          ? Object.keys(payload.data)
+          : [],
+      );
+      throw new Error(
+        `Facebook returned an unrecognized Marketplace listings response${dataKeys.length > 0 ? ` (data: ${dataKeys.join(", ")})` : ""}.`,
+      );
+    }
+    const edges = connections.flatMap((connection) =>
+      Array.isArray(connection?.edges) ? connection.edges : [],
+    );
+    for (const edge of edges) {
+      const listing = edge?.node?.first_listing;
+      if (!listing?.id) continue;
+      listings.set(listing.id, {
+        id: listing.id,
+        title: listing.marketplace_listing_title ?? "Untitled listing",
+        creationTime: Number(listing.creation_time ?? 0),
+      });
+    }
+    notifyMarketplaceCleanupStatus({
+      status: "scanning",
+      message: `Scanned Marketplace page ${page}: ${listings.size} listings found…`,
+      processed: listings.size,
+      total: 0,
+      deletedCount: 0,
+      failedCount: 0,
+    });
+    const nextCursor = edges[edges.length - 1]?.cursor ?? null;
+    const hasMore = edges.length === count;
+    if (!hasMore || !nextCursor || nextCursor === cursor) break;
+    cursor = nextCursor;
+    await sleep(500);
+  }
+  return Array.from(listings.values());
+}
+
+async function deleteRemoteMarketplaceListing(
+  request: CapturedRequest,
+  listingId: string,
+) {
+  const source = new URLSearchParams(request.body);
+  const userId = source.get("av") ?? source.get("__user") ?? "";
+  if (!userId)
+    throw new Error("Facebook user ID was missing from the captured request.");
+  const variables = {
+    input: {
+      actor_id: userId,
+      client_mutation_id: "1",
+      batch_delete_variants: true,
+      for_sale_item_id: listingId,
+      referral_surface: null,
+      surface: "MARKETPLACE_PAGE_SELLING",
+    },
+  };
+  const body = new URLSearchParams({
+    av: userId,
+    __aaid: source.get("__aaid") ?? "0",
+    __user: userId,
+    __a: "1",
+    __req: "1",
+    __hs: source.get("__hs") ?? "",
+    dpr: source.get("dpr") ?? "1",
+    __ccg: "EXCELLENT",
+    __rev: source.get("__rev") ?? "",
+    __s: source.get("__s") ?? "",
+    __hsi: source.get("__hsi") ?? "",
+    __crn: "comet.fbweb.MarketplaceSellingUIMRoute",
+    fb_api_caller_class: "RelayModern",
+    fb_api_req_friendly_name: MARKETPLACE_DELETE_FRIENDLY_NAME,
+    server_timestamps: "true",
+    variables: JSON.stringify(variables),
+    doc_id: MARKETPLACE_DELETE_DOC_ID,
+    fb_dtsg: source.get("fb_dtsg") ?? "",
+    jazoest: source.get("jazoest") ?? "",
+    lsd: source.get("lsd") ?? "",
+    __spin_r: source.get("__spin_r") ?? source.get("__rev") ?? "",
+    __spin_b: source.get("__spin_b") ?? "trunk",
+    __spin_t: String(Math.floor(Date.now() / 1_000)),
+  });
+  const response = await fetch("https://www.facebook.com/api/graphql/", {
+    method: "POST",
+    credentials: "include",
+    headers: {
+      accept: "*/*",
+      "content-type": "application/x-www-form-urlencoded",
+      "x-asbd-id": request.headers["x-asbd-id"] ?? "359341",
+      "x-fb-friendly-name": MARKETPLACE_DELETE_FRIENDLY_NAME,
+      "x-fb-lsd": source.get("lsd") ?? "",
+    },
+    body: body.toString(),
+  });
+  if (!response.ok) {
+    throw new Error(
+      `Facebook delete request failed with HTTP ${response.status}.`,
+    );
+  }
+  const payloads = parseFacebookGraphqlResponses(await response.text());
+  const errors = payloads.flatMap((payload) =>
+    Array.isArray(payload?.errors) ? payload.errors : [],
+  );
+  if (errors.length > 0) {
+    throw new Error(
+      errors[0]?.message ?? "Facebook rejected the delete request.",
+    );
+  }
+  const confirmed = payloads.some(
+    (payload) =>
+      payload?.data?.commerce_for_sale_item_delete?.deleted_for_sale_item_id ===
+      listingId,
+  );
+  if (!confirmed) {
+    throw new Error("Facebook did not confirm deletion of this listing.");
+  }
 }
 
 async function triggerJoinedGroupsSortRequest(tabId: number | undefined) {
@@ -1040,6 +2462,8 @@ async function waitWhilePostingPaused(statusContext: {
 
     await sleep(250);
   }
+
+  throwIfPostingStopped();
 }
 
 async function sleepWithStopChecks(
@@ -1085,7 +2509,7 @@ async function sleepWithPostingCountdown(
     await waitWhilePostingPaused(statusContext);
     notifyUiPostingStatus({
       status: "waiting",
-      message: `Waiting ${remaining} seconds before next group...`,
+      message: `Next post in ${formatPostingCountdown(remaining)}`,
       current: statusContext.current,
       total: statusContext.total,
       groupId: statusContext.groupId,
@@ -1098,6 +2522,19 @@ async function sleepWithPostingCountdown(
   }
 }
 
+function formatPostingCountdown(durationSeconds: number): string {
+  const totalSeconds = Math.max(0, Math.floor(durationSeconds));
+  const hours = Math.floor(totalSeconds / 3_600);
+  const minutes = Math.floor((totalSeconds % 3_600) / 60);
+  const seconds = totalSeconds % 60;
+  const minuteText = String(minutes).padStart(2, "0");
+  const secondText = String(seconds).padStart(2, "0");
+
+  return hours > 0
+    ? `${hours}:${minuteText}:${secondText}`
+    : `${minuteText}:${secondText}`;
+}
+
 function randomIntegerBetween(minimum: number, maximum: number): number {
   return Math.floor(Math.random() * (maximum - minimum + 1)) + minimum;
 }
@@ -1108,7 +2545,20 @@ async function runGraphqlPostingQueue(
   const maxPosts = Number.isInteger(request.maxPosts)
     ? Math.max(request.maxPosts, 1)
     : request.groups.length;
-  const groups = request.groups.slice(0, maxPosts);
+  const groups = request.groups;
+  const requestedPosts = request.posts.filter(
+    (post) => post.body.trim().length > 0 && post.images.length > 0,
+  );
+  const firstPostWithImagesIndex = requestedPosts.findIndex(
+    (post) => post.images.length > 0,
+  );
+  const posts =
+    firstPostWithImagesIndex > 0
+      ? [
+          ...requestedPosts.slice(firstPostWithImagesIndex),
+          ...requestedPosts.slice(0, firstPostWithImagesIndex),
+        ]
+      : requestedPosts;
   const requestedMinimumDelay = Number(request.minimumDelaySeconds);
   const minimumDelaySeconds =
     Number.isInteger(requestedMinimumDelay) &&
@@ -1126,9 +2576,11 @@ async function runGraphqlPostingQueue(
     requestedGroups: request.groups.length,
     groups: groups.length,
     maxPosts,
-    images: request.images.length,
+    posts: posts.length,
+    images: posts.reduce((count, post) => count + post.images.length, 0),
     minimumDelaySeconds,
     maximumDelaySeconds,
+    rotationStartedWithImagePost: firstPostWithImagesIndex > 0,
   });
 
   if (activePosting) {
@@ -1146,13 +2598,14 @@ async function runGraphqlPostingQueue(
   }
 
   activePosting = true;
+  activePostingSuccessTarget = maxPosts;
+  latestUiPostingStatus = undefined;
   stopPostingRequested = false;
   pausePostingRequested = false;
   pauseNotificationSent = false;
   let successCount = 0;
   let failedCount = 0;
   const total = groups.length;
-  const hasImages = request.images.length > 0;
   let postingTabId: number | undefined;
 
   try {
@@ -1161,6 +2614,9 @@ async function runGraphqlPostingQueue(
     if (total === 0) {
       throw new Error("Select at least one group before posting.");
     }
+    if (posts.length === 0) {
+      throw new Error("Select at least one prepared post before posting.");
+    }
 
     const postingTab = await getActiveTabForPosting();
     postingTabId = postingTab.id;
@@ -1168,17 +2624,33 @@ async function runGraphqlPostingQueue(
     if (!postingTabId) {
       throw new Error("Unable to find the active tab for posting.");
     }
+    activePostingTabId = postingTabId;
 
-    const templates = await ensurePostingTemplates(
-      postingTabId,
-      groups,
-      request.body,
-      request.images,
-      total,
-    );
+    const firstPostingUsageOperationId = await claimPostingUsage("group_post");
+    let templates: Awaited<ReturnType<typeof ensurePostingTemplates>>;
+    try {
+      templates = await ensurePostingTemplates(
+        postingTabId,
+        groups,
+        posts[0].body,
+        posts[0].images,
+        total,
+      );
+    } catch (error) {
+      await finalizePostingUsage(
+        "release",
+        "group_post",
+        firstPostingUsageOperationId,
+      );
+      throw error;
+    }
 
     if (templates.firstGroupPosted) {
-      throwIfPostingStopped();
+      await finalizePostingUsage(
+        "complete",
+        "group_post",
+        firstPostingUsageOperationId,
+      );
       successCount += 1;
       notifyUiPostingStatus({
         status: "posted",
@@ -1191,6 +2663,27 @@ async function runGraphqlPostingQueue(
         failedCount,
         processedCount: 1,
       });
+      throwIfPostingStopped();
+
+      if (successCount >= maxPosts) {
+        notifyUiPostingStatus({
+          status: "done",
+          message: `Maximum of ${maxPosts} successful posts reached. Queue stopped.`,
+          current: 1,
+          total,
+          successCount,
+          failedCount,
+          processedCount: 1,
+          successTarget: maxPosts,
+        });
+        return;
+      }
+    } else {
+      await finalizePostingUsage(
+        "release",
+        "group_post",
+        firstPostingUsageOperationId,
+      );
     }
 
     const startIndex = templates.firstGroupPosted ? 1 : 0;
@@ -1205,10 +2698,38 @@ async function runGraphqlPostingQueue(
       processedCount: startIndex,
     });
 
-    for (let index = startIndex; index < groups.length; index += 1) {
+    if (templates.firstGroupPosted) {
+      const nextGroupIndex = startIndex % groups.length;
+      const nextGroup = groups[nextGroupIndex];
+      const delaySeconds = randomIntegerBetween(
+        minimumDelaySeconds,
+        maximumDelaySeconds,
+      );
+
+      await sleepWithPostingCountdown(delaySeconds, {
+        current: nextGroupIndex + 1,
+        total,
+        groupId: nextGroup.id,
+        groupName: nextGroup.name,
+        successCount,
+        failedCount,
+        processedCount: startIndex,
+      });
+    }
+
+    for (
+      let attemptIndex = startIndex;
+      successCount < maxPosts;
+      attemptIndex += 1
+    ) {
       throwIfPostingStopped();
-      const group = groups[index];
-      const current = index + 1;
+      const groupIndex = attemptIndex % groups.length;
+      const cycleNumber = Math.floor(attemptIndex / groups.length) + 1;
+      const group = groups[groupIndex];
+      const preparedPost = posts[attemptIndex % posts.length];
+      const preparedPostNumber = (attemptIndex % posts.length) + 1;
+      const hasImages = preparedPost.images.length > 0;
+      const current = groupIndex + 1;
       const statusContext = {
         current,
         total,
@@ -1216,31 +2737,35 @@ async function runGraphqlPostingQueue(
         groupName: group.name,
         successCount,
         failedCount,
-        processedCount: index,
+        processedCount: attemptIndex,
       };
       await waitWhilePostingPaused(statusContext);
       debugLog("Processing group.", {
+        attempt: attemptIndex + 1,
+        cycle: cycleNumber,
         current,
         total,
         groupId: group.id,
         groupName: group.name,
+        preparedPostId: preparedPost.id,
+        preparedPostNumber,
       });
 
       await waitWhilePostingPaused(statusContext);
       notifyUiPostingStatus({
         status: "posting",
-        message: `Rewriting description for ${group.name}...`,
+        message: `Preparing post ${preparedPostNumber}/${posts.length} for ${group.name}...`,
         current,
         total,
         groupId: group.id,
         groupName: group.name,
         successCount,
         failedCount,
-        processedCount: index,
+        processedCount: attemptIndex,
       });
 
-      const postBody = await maybeRewriteDescription(request.body);
-      const postBodyWasRewritten = postBody !== request.body;
+      const postBody = await maybeRewriteDescription(preparedPost.body);
+      const postBodyWasRewritten = postBody !== preparedPost.body;
       throwIfPostingStopped();
       await waitWhilePostingPaused(statusContext);
       debugLog("Post body prepared for group.", {
@@ -1248,7 +2773,7 @@ async function runGraphqlPostingQueue(
         total,
         groupId: group.id,
         groupName: group.name,
-        originalLength: request.body.length,
+        originalLength: preparedPost.body.length,
         finalLength: postBody.length,
         rewritten: postBodyWasRewritten,
       });
@@ -1259,14 +2784,14 @@ async function runGraphqlPostingQueue(
       if (hasImages) {
         notifyUiPostingStatus({
           status: "posting",
-          message: `Uploading images for ${group.name}...`,
+          message: `Uploading images from post ${preparedPostNumber}/${posts.length} for ${group.name}...`,
           current,
           total,
           groupId: group.id,
           groupName: group.name,
           successCount,
           failedCount,
-          processedCount: index,
+          processedCount: attemptIndex,
         });
 
         if (!templates.uploadTemplate) {
@@ -1276,19 +2801,19 @@ async function runGraphqlPostingQueue(
         photoIds = await uploadImagesForGroup(
           postingTabId,
           templates.uploadTemplate,
-          request.images,
+          preparedPost.images,
         );
       } else {
         notifyUiPostingStatus({
           status: "posting",
-          message: `Preparing text-only post for ${group.name}...`,
+          message: `Preparing text-only post ${preparedPostNumber}/${posts.length} for ${group.name}...`,
           current,
           total,
           groupId: group.id,
           groupName: group.name,
           successCount,
           failedCount,
-          processedCount: index,
+          processedCount: attemptIndex,
         });
       }
 
@@ -1303,26 +2828,35 @@ async function runGraphqlPostingQueue(
       await waitWhilePostingPaused(statusContext);
       notifyUiPostingStatus({
         status: "posting",
-        message: `Posting to ${group.name}...`,
+        message: `Posting prepared post ${preparedPostNumber}/${posts.length} to ${group.name}...`,
         current,
         total,
         groupId: group.id,
         groupName: group.name,
         successCount,
         failedCount,
-        processedCount: index,
+        processedCount: attemptIndex,
       });
 
-      const postResult = await createGraphqlPost(
-        postingTabId,
-        templates.postTemplate,
-        postBody,
-        photoIds,
-        group.id,
-        postBodyWasRewritten,
-      );
-      throwIfPostingStopped();
-      await waitWhilePostingPaused(statusContext);
+      const postingUsageOperationId = await claimPostingUsage("group_post");
+      let postResult: GraphqlPostResult;
+      try {
+        postResult = await createGraphqlPost(
+          postingTabId,
+          templates.postTemplate,
+          postBody,
+          photoIds,
+          group.id,
+          postBodyWasRewritten,
+        );
+      } catch (error) {
+        await finalizePostingUsage(
+          "release",
+          "group_post",
+          postingUsageOperationId,
+        );
+        throw error;
+      }
       debugLog("GraphQL post result received.", {
         groupId: group.id,
         success: postResult.success,
@@ -1332,6 +2866,11 @@ async function runGraphqlPostingQueue(
       });
 
       if (postResult.success) {
+        await finalizePostingUsage(
+          "complete",
+          "group_post",
+          postingUsageOperationId,
+        );
         successCount += 1;
         notifyUiPostingStatus({
           status: "posted",
@@ -1342,9 +2881,28 @@ async function runGraphqlPostingQueue(
           groupName: group.name,
           successCount,
           failedCount,
-          processedCount: index + 1,
+          processedCount: attemptIndex + 1,
         });
+
+        if (successCount >= maxPosts) {
+          notifyUiPostingStatus({
+            status: "done",
+            message: `Maximum of ${maxPosts} successful posts reached. Queue stopped.`,
+            current,
+            total,
+            successCount,
+            failedCount,
+            processedCount: attemptIndex + 1,
+            successTarget: maxPosts,
+          });
+          return;
+        }
       } else {
+        await finalizePostingUsage(
+          "release",
+          "group_post",
+          postingUsageOperationId,
+        );
         failedCount += 1;
 
         if (isRateLimitError(postResult.error)) {
@@ -1357,10 +2915,9 @@ async function runGraphqlPostingQueue(
             groupName: group.name,
             successCount,
             failedCount,
-            processedCount: index + 1,
+            processedCount: attemptIndex + 1,
             error: postResult.error,
           });
-          await sleep(2_000);
           return;
         }
 
@@ -1373,59 +2930,36 @@ async function runGraphqlPostingQueue(
           groupName: group.name,
           successCount,
           failedCount,
-          processedCount: index + 1,
+          processedCount: attemptIndex + 1,
           error: postResult.error,
         });
       }
 
-      if (index < groups.length - 1) {
-        const nextGroup = groups[index + 1];
-        const nextCurrent = current + 1;
-        const delaySeconds = randomIntegerBetween(
-          minimumDelaySeconds,
-          maximumDelaySeconds,
-        );
+      const nextAttemptIndex = attemptIndex + 1;
+      const nextGroupIndex = nextAttemptIndex % groups.length;
+      const nextGroup = groups[nextGroupIndex];
+      const nextCurrent = nextGroupIndex + 1;
+      const delaySeconds = randomIntegerBetween(
+        minimumDelaySeconds,
+        maximumDelaySeconds,
+      );
 
-        notifyUiPostingStatus({
-          status: "waiting",
-          message: `Random interval selected: waiting ${delaySeconds} seconds before posting to ${nextGroup.name}...`,
-          current: nextCurrent,
-          total,
-          groupId: nextGroup.id,
-          groupName: nextGroup.name,
-          successCount,
-          failedCount,
-          processedCount: index + 1,
-        });
-        await sleepWithPostingCountdown(delaySeconds, {
-          current: nextCurrent,
-          total,
-          groupId: nextGroup.id,
-          groupName: nextGroup.name,
-          successCount,
-          failedCount,
-          processedCount: index + 1,
-        });
-      }
+      await sleepWithPostingCountdown(delaySeconds, {
+        current: nextCurrent,
+        total,
+        groupId: nextGroup.id,
+        groupName: nextGroup.name,
+        successCount,
+        failedCount,
+        processedCount: nextAttemptIndex,
+      });
     }
-
-    notifyUiPostingStatus({
-      status: "done",
-      message: `Finished posting ${successCount}/${total}.`,
-      current: total,
-      total,
-      successCount,
-      failedCount,
-      processedCount: total,
-    });
-    await sleep(2_000);
   } catch (error) {
     const errorMessage =
       error instanceof Error ? error.message : "Unknown error";
     debugWarn("Posting queue stopped with error.", { error: errorMessage });
     notifyUiPostingStatus({
-      status:
-        errorMessage === MANUAL_STOP_MESSAGE ? "stopped" : "done",
+      status: errorMessage === MANUAL_STOP_MESSAGE ? "stopped" : "done",
       message:
         errorMessage === MANUAL_STOP_MESSAGE
           ? MANUAL_STOP_MESSAGE
@@ -1437,7 +2971,6 @@ async function runGraphqlPostingQueue(
       processedCount: Math.min(successCount + failedCount, total),
       error: errorMessage,
     });
-    await sleep(2_000);
   } finally {
     debugLog("Posting queue finished.", {
       total,
@@ -1445,9 +2978,11 @@ async function runGraphqlPostingQueue(
       failedCount,
     });
     activePosting = false;
+    activePostingSuccessTarget = undefined;
     stopPostingRequested = false;
     pausePostingRequested = false;
     pauseNotificationSent = false;
+    activePostingTabId = undefined;
   }
 }
 
@@ -1488,6 +3023,7 @@ async function ensurePostingTemplates(
   });
 
   const body = await maybeRewriteDescription(originalBody);
+  throwIfPostingStopped();
   debugLog("Post body prepared for first group.", {
     current: 1,
     total,
@@ -1528,6 +3064,7 @@ async function ensurePostingTemplates(
   });
 
   const postResult = await createPostInTab(tabId, images, body);
+  throwIfPostingStopped();
   if (!postResult.ok) {
     stopPostingTemplateCapture();
     throw new Error(postResult.error ?? "Unable to create the first post.");
@@ -1710,7 +3247,7 @@ async function createPostInTab(
         };
       }
 
-      await sleep(250);
+      await sleepWithStopChecks(250);
     }
   }
 
@@ -1730,15 +3267,16 @@ async function injectPostingContentScript(tabId: number): Promise<void> {
     try {
       const tab = await chrome.tabs.get(tabId);
       if (tab.status !== "complete" || !isFacebookUrl(tab.url)) {
-        await sleep(250);
+        await sleepWithStopChecks(250);
         continue;
       }
 
       const [markerResult] = await chrome.scripting.executeScript({
         target: { tabId },
         func: (marker: string) =>
-          (globalThis as typeof globalThis & Record<string, unknown>)[marker] ===
-          true,
+          (globalThis as typeof globalThis & Record<string, unknown>)[
+            marker
+          ] === true,
         args: ["__facebookGroupsBulkPosterContentScriptLoaded"],
       });
       if (markerResult?.result === true) {
@@ -1752,7 +3290,7 @@ async function injectPostingContentScript(tabId: number): Promise<void> {
       return;
     } catch (error) {
       lastError = error;
-      await sleep(250);
+      await sleepWithStopChecks(250);
     }
   }
 
@@ -1767,18 +3305,52 @@ async function waitForTabComplete(
   tabId: number,
   urlIncludes: string,
 ): Promise<void> {
-  const startedAt = Date.now();
-
-  while (Date.now() - startedAt < 45_000) {
+  while (true) {
+    throwIfPostingStopped();
     const tab = await chrome.tabs.get(tabId);
     if (tab.status === "complete" && tab.url?.includes(urlIncludes)) {
       return;
     }
 
-    await sleep(250);
+    await sleepWithStopChecks(250);
   }
+}
 
-  throw new Error("Facebook group page took too long to load.");
+async function navigateTabAndWaitForComplete(
+  tabId: number,
+  url: string,
+  urlIncludes: string,
+): Promise<void> {
+  type TabUpdatedListener = Parameters<
+    typeof chrome.tabs.onUpdated.addListener
+  >[0];
+  let listener: TabUpdatedListener | undefined;
+  const navigationComplete = new Promise<void>((resolve) => {
+    listener = (updatedTabId, changeInfo, updatedTab) => {
+      if (
+        updatedTabId === tabId &&
+        changeInfo.status === "complete" &&
+        updatedTab.url?.includes(urlIncludes)
+      ) {
+        chrome.tabs.onUpdated.removeListener(listener!);
+        resolve();
+      }
+    };
+    chrome.tabs.onUpdated.addListener(listener);
+  });
+
+  try {
+    const currentTab = await chrome.tabs.get(tabId);
+    if (currentTab.url === url) {
+      await chrome.tabs.reload(tabId);
+    } else {
+      await chrome.tabs.update(tabId, { url });
+    }
+    await navigationComplete;
+  } catch (error) {
+    if (listener) chrome.tabs.onUpdated.removeListener(listener);
+    throw error;
+  }
 }
 
 async function uploadImagesForGroup(
@@ -2583,33 +4155,82 @@ async function createGraphqlPostInPage(
 }
 
 async function maybeRewriteDescription(description: string): Promise<string> {
-  const trimmed = description.trim();
-  if (!trimmed) {
-    return trimmed;
-  }
-
   const storage = await chrome.storage.local.get([
     ...GEMINI_API_KEY_STORAGE_KEYS,
     GEMINI_REWRITE_ENABLED_STORAGE_KEY,
+    GEMINI_CUSTOM_PROMPT_STORAGE_KEY,
+    GEMINI_INCLUDE_HASHTAGS_STORAGE_KEY,
   ]);
-  const rewriteEnabled = storage[GEMINI_REWRITE_ENABLED_STORAGE_KEY] === true;
-
-  if (!rewriteEnabled) {
-    debugLog("Gemini rewrite skipped because the feature is disabled.");
-    return trimmed;
-  }
-
   const apiKey = GEMINI_API_KEY_STORAGE_KEYS.map((key) => storage[key]).find(
     (value): value is string =>
       typeof value === "string" && value.trim().length > 0,
   );
 
+  const customPromptValue = storage[GEMINI_CUSTOM_PROMPT_STORAGE_KEY];
+  return rewriteDescriptionWithGemini(description, {
+    enabled: storage[GEMINI_REWRITE_ENABLED_STORAGE_KEY] === true,
+    apiKey: apiKey ?? "",
+    customPrompt:
+      typeof customPromptValue === "string" ? customPromptValue.trim() : "",
+    includeHashtags: storage[GEMINI_INCLUDE_HASHTAGS_STORAGE_KEY] !== false,
+    destination: "Facebook Group",
+  });
+}
+
+async function rewriteDescriptionWithGemini(
+  description: string,
+  settings: {
+    enabled: boolean;
+    apiKey: string;
+    customPrompt: string;
+    includeHashtags: boolean;
+    destination: string;
+  },
+): Promise<string> {
+  const trimmed = description.trim();
+  if (!trimmed) {
+    return trimmed;
+  }
+  if (!settings.enabled) {
+    debugLog("Gemini rewrite skipped because the feature is disabled.");
+    return trimmed;
+  }
+  const apiKey = settings.apiKey.trim();
   if (!apiKey) {
     debugLog("Gemini rewrite skipped because no API key was found.");
     return trimmed;
   }
 
-  const prompt = `Rewrite this Facebook Group product description to be concise, clear, natural, and persuasive.
+  const customPrompt = settings.customPrompt.trim();
+  const includeHashtags = settings.includeHashtags;
+  const hashtagRules = includeHashtags
+    ? "- Include exactly 6 relevant hashtags based on the original description.\n- Put all 6 hashtags together at the very bottom of the finished description, even if the custom instructions omit or forbid hashtags."
+    : "- Do not include hashtags in the finished description, even if the original or custom instructions contain them.";
+  const phoneNumberRules = `- Treat every phone number as immutable verbatim text and copy every occurrence exactly as it appears in the original description.
+- Preserve the exact Unicode characters and formatting of each phone number, including ordinary digits, mathematical or styled digits, keycap emoji digits, leading zeros, country-code prefixes, spaces, punctuation, and separators.
+- Never convert a styled or emoji phone number into ordinary digits, and never convert an ordinary-digit phone number into styled text or emojis. For example, 0️⃣7️⃣1️⃣8️⃣4️⃣4️⃣8️⃣4️⃣6️⃣1️⃣ must remain exactly 0️⃣7️⃣1️⃣8️⃣4️⃣4️⃣8️⃣4️⃣6️⃣1️⃣.
+- These phone-number preservation rules are mandatory and override any conflicting custom rewrite instruction.`;
+  const prompt = customPrompt
+    ? `Rewrite the ${settings.destination} description using the custom instructions below.
+
+Mandatory accuracy rules:
+- Use the original description as the only source of facts.
+- Preserve all important details and contact information exactly as provided.
+- Do not invent, assume, or change facts, specifications, prices, terms, locations, or contact information.
+${phoneNumberRules}
+${hashtagRules}
+- Return only the finished rewritten description, without explanations or notes.
+
+The custom instructions control all other style and formatting choices, including structure, tone, emojis, and bullets.
+
+Custom rewrite instructions:
+${customPrompt}
+
+Any placeholder in the custom instructions asking for the original advertisement refers to the actual original description supplied below. Do not reproduce placeholder text in the result.
+
+Original description:
+${trimmed}`
+    : `Rewrite this ${settings.destination} description to be concise, clear, natural, and persuasive.
 
 Rules:
 - Return only the rewritten description.
@@ -2619,9 +4240,8 @@ Rules:
 - Use a few appropriate, persuasive emojis where they make the listing feel more engaging.
 - Do not use Markdown formatting, asterisks, bullet symbols, or decorative separator symbols.
 - Keep emojis natural and relevant; do not overuse them.
-- If the phone number is present, keep it exactly as written.
-- Include exactly 6 relevant hashtags based on the product and description context.
-- Put all 6 hashtags together at the very bottom of the description.
+${phoneNumberRules}
+${hashtagRules}
 
 Description:
 ${trimmed}`;
@@ -2630,23 +4250,52 @@ ${trimmed}`;
     debugLog("Sending Gemini rewrite request.", {
       model: GEMINI_MODEL,
       inputLength: trimmed.length,
+      customPromptLength: customPrompt.length,
     });
-    const ai = new GoogleGenAI({ apiKey });
+    const requestController = new AbortController();
+    activeGeminiRequestController = requestController;
     const response = await withTimeout(
-      ai.models.generateContent({
-        model: GEMINI_MODEL,
-        contents: prompt,
-        config: {
-          thinkingConfig: {
-            thinkingBudget: 0,
+      (async (): Promise<GeminiGenerateContentResponse> => {
+        const apiResponse = await fetch(
+          `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent`,
+          {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              "x-goog-api-key": apiKey,
+            },
+            signal: requestController.signal,
+            body: JSON.stringify({
+              contents: [{ parts: [{ text: prompt }] }],
+              generationConfig: {
+                thinkingConfig: {
+                  thinkingBudget: 0,
+                },
+              },
+            }),
           },
-        },
-      }),
+        );
+        const payload =
+          (await apiResponse.json()) as GeminiGenerateContentResponse;
+
+        if (!apiResponse.ok) {
+          throw new Error(
+            payload.error?.message ??
+              `Gemini request failed with status ${apiResponse.status}.`,
+          );
+        }
+
+        return payload;
+      })(),
       GEMINI_TIMEOUT_MS,
       "Gemini rewrite timed out.",
     );
 
-    const rewritten = String(response.text ?? "").trim();
+    const rewritten =
+      response.candidates?.[0]?.content?.parts
+        ?.map((part) => part.text ?? "")
+        .join("")
+        .trim() ?? "";
     debugLog("Gemini rewrite completed.", {
       outputLength: rewritten.length,
       changed: rewritten !== trimmed,
@@ -2655,6 +4304,8 @@ ${trimmed}`;
   } catch (error) {
     debugWarn("Gemini rewrite failed.", error);
     return trimmed;
+  } finally {
+    activeGeminiRequestController = undefined;
   }
 }
 
@@ -2687,10 +4338,86 @@ function notifyUiPostingStatus(
 ): void {
   const status: UiPostingStatusMessage = {
     type: "UI_POSTING_STATUS",
+    successTarget: activePostingSuccessTarget,
     ...partial,
   };
 
+  latestUiPostingStatus = status;
   void chrome.runtime.sendMessage(status);
+}
+
+function notifyMarketplaceItemPostingStatus(
+  partial: Omit<MarketplaceItemPostingStatusMessage, "type">,
+): void {
+  const status = {
+    type: "MARKETPLACE_ITEM_POSTING_STATUS",
+    ...partial,
+  } satisfies MarketplaceItemPostingStatusMessage;
+  latestMarketplacePostingStatus = status;
+  void chrome.runtime.sendMessage(status);
+}
+
+function notifyMarketplacePostingControlStatus(
+  status: "posting" | "paused" | "stopped",
+  message: string,
+): void {
+  const latest = latestMarketplacePostingStatus;
+  notifyMarketplaceItemPostingStatus({
+    status,
+    message,
+    current: latest?.current ?? 0,
+    total: latest?.total ?? 0,
+    listingId: latest?.listingId,
+    listingTitle: latest?.listingTitle,
+    successCount: latest?.successCount ?? 0,
+    failedCount: latest?.failedCount ?? 0,
+  });
+}
+
+function sendMarketplacePostingControl(
+  type:
+    | "PAUSE_MARKETPLACE_POSTING"
+    | "RESUME_MARKETPLACE_POSTING"
+    | "STOP_MARKETPLACE_POSTING",
+): void {
+  if (activeMarketplacePostingTabId === undefined) {
+    return;
+  }
+  void chrome.tabs
+    .sendMessage(activeMarketplacePostingTabId, { type })
+    .catch(() => {
+      // The Marketplace content helper is installed after page navigation.
+    });
+}
+
+function notifyPostingControlStatus(
+  status: "posting" | "paused",
+  message: string,
+): void {
+  const latest = latestUiPostingStatus;
+  notifyUiPostingStatus({
+    status,
+    message,
+    current: latest?.current ?? 0,
+    total: latest?.total ?? 0,
+    groupId: latest?.groupId,
+    groupName: latest?.groupName,
+    successCount: latest?.successCount ?? 0,
+    failedCount: latest?.failedCount ?? 0,
+    processedCount: latest?.processedCount ?? 0,
+  });
+}
+
+function sendContentPostingControl(
+  type: "PAUSE_CREATE_POST" | "RESUME_CREATE_POST" | "STOP_CREATE_POST",
+): void {
+  if (activePostingTabId === undefined) {
+    return;
+  }
+
+  void chrome.tabs.sendMessage(activePostingTabId, { type }).catch(() => {
+    // The content helper is only present while the first post is being created.
+  });
 }
 
 class JsonObjectDecoder {

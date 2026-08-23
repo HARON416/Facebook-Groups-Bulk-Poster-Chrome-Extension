@@ -7,82 +7,152 @@ package db
 
 import (
 	"context"
+
+	"github.com/jackc/pgx/v5/pgtype"
 )
 
-const createUser = `-- name: CreateUser :one
-INSERT INTO users (
-    email,
-    password_hash
-) VALUES (
-    $1,
-    $2
-)
-RETURNING
-    id,
-    email,
-    password_hash,
-    created_at
+const createAuthSession = `-- name: CreateAuthSession :one
+INSERT INTO auth_sessions (user_id, token_hash, expires_at)
+VALUES ($1, $2, $3)
+RETURNING id, user_id, token_hash, expires_at, created_at, last_used_at
 `
 
-type CreateUserParams struct {
-	Email        string `json:"email"`
-	PasswordHash string `json:"password_hash"`
+type CreateAuthSessionParams struct {
+	UserID    pgtype.UUID        `json:"user_id"`
+	TokenHash string             `json:"token_hash"`
+	ExpiresAt pgtype.Timestamptz `json:"expires_at"`
 }
 
-func (q *Queries) CreateUser(ctx context.Context, arg CreateUserParams) (User, error) {
-	row := q.db.QueryRow(ctx, createUser, arg.Email, arg.PasswordHash)
-	var i User
+func (q *Queries) CreateAuthSession(ctx context.Context, arg CreateAuthSessionParams) (AuthSession, error) {
+	row := q.db.QueryRow(ctx, createAuthSession, arg.UserID, arg.TokenHash, arg.ExpiresAt)
+	var i AuthSession
 	err := row.Scan(
 		&i.ID,
-		&i.Email,
-		&i.PasswordHash,
+		&i.UserID,
+		&i.TokenHash,
+		&i.ExpiresAt,
 		&i.CreatedAt,
+		&i.LastUsedAt,
 	)
 	return i, err
 }
 
-const getUserByEmail = `-- name: GetUserByEmail :one
-SELECT
-    id,
-    email,
-    password_hash,
-    created_at
-FROM users
-WHERE email = $1
-LIMIT 1
+const deleteAuthSessionByTokenHash = `-- name: DeleteAuthSessionByTokenHash :exec
+DELETE FROM auth_sessions WHERE token_hash = $1
 `
 
-func (q *Queries) GetUserByEmail(ctx context.Context, email string) (User, error) {
-	row := q.db.QueryRow(ctx, getUserByEmail, email)
-	var i User
+func (q *Queries) DeleteAuthSessionByTokenHash(ctx context.Context, tokenHash string) error {
+	_, err := q.db.Exec(ctx, deleteAuthSessionByTokenHash, tokenHash)
+	return err
+}
+
+const deleteExpiredAuthSessions = `-- name: DeleteExpiredAuthSessions :exec
+DELETE FROM auth_sessions WHERE expires_at <= CURRENT_TIMESTAMP
+`
+
+func (q *Queries) DeleteExpiredAuthSessions(ctx context.Context) error {
+	_, err := q.db.Exec(ctx, deleteExpiredAuthSessions)
+	return err
+}
+
+const getAuthSessionByTokenHash = `-- name: GetAuthSessionByTokenHash :one
+SELECT id, user_id, token_hash, expires_at, created_at, last_used_at FROM auth_sessions
+WHERE token_hash = $1 AND expires_at > CURRENT_TIMESTAMP
+`
+
+func (q *Queries) GetAuthSessionByTokenHash(ctx context.Context, tokenHash string) (AuthSession, error) {
+	row := q.db.QueryRow(ctx, getAuthSessionByTokenHash, tokenHash)
+	var i AuthSession
 	err := row.Scan(
 		&i.ID,
-		&i.Email,
-		&i.PasswordHash,
+		&i.UserID,
+		&i.TokenHash,
+		&i.ExpiresAt,
 		&i.CreatedAt,
+		&i.LastUsedAt,
 	)
 	return i, err
 }
 
 const getUserByID = `-- name: GetUserByID :one
-SELECT
-    id,
-    email,
-    password_hash,
-    created_at
-FROM users
-WHERE id = $1
-LIMIT 1
+SELECT id, google_subject, email, email_verified, display_name, avatar_url, access_tier, timezone, created_at, updated_at FROM users WHERE id = $1
 `
 
-func (q *Queries) GetUserByID(ctx context.Context, id int32) (User, error) {
+func (q *Queries) GetUserByID(ctx context.Context, id pgtype.UUID) (User, error) {
 	row := q.db.QueryRow(ctx, getUserByID, id)
 	var i User
 	err := row.Scan(
 		&i.ID,
+		&i.GoogleSubject,
 		&i.Email,
-		&i.PasswordHash,
+		&i.EmailVerified,
+		&i.DisplayName,
+		&i.AvatarUrl,
+		&i.AccessTier,
+		&i.Timezone,
 		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const touchAuthSession = `-- name: TouchAuthSession :exec
+UPDATE auth_sessions
+SET last_used_at = CURRENT_TIMESTAMP
+WHERE id = $1
+`
+
+func (q *Queries) TouchAuthSession(ctx context.Context, id pgtype.UUID) error {
+	_, err := q.db.Exec(ctx, touchAuthSession, id)
+	return err
+}
+
+const upsertGoogleUser = `-- name: UpsertGoogleUser :one
+INSERT INTO users (
+    google_subject, email, email_verified, display_name, avatar_url, timezone
+) VALUES ($1, $2, $3, $4, $5, $6)
+ON CONFLICT (google_subject) DO UPDATE SET
+    email = EXCLUDED.email,
+    email_verified = EXCLUDED.email_verified,
+    display_name = EXCLUDED.display_name,
+    avatar_url = EXCLUDED.avatar_url,
+    -- The first sign-in fixes the accounting timezone. A browser timezone
+    -- change must not silently move the user's daily reset boundary.
+    timezone = users.timezone,
+    updated_at = CURRENT_TIMESTAMP
+RETURNING id, google_subject, email, email_verified, display_name, avatar_url, access_tier, timezone, created_at, updated_at
+`
+
+type UpsertGoogleUserParams struct {
+	GoogleSubject string      `json:"google_subject"`
+	Email         string      `json:"email"`
+	EmailVerified bool        `json:"email_verified"`
+	DisplayName   pgtype.Text `json:"display_name"`
+	AvatarUrl     pgtype.Text `json:"avatar_url"`
+	Timezone      string      `json:"timezone"`
+}
+
+func (q *Queries) UpsertGoogleUser(ctx context.Context, arg UpsertGoogleUserParams) (User, error) {
+	row := q.db.QueryRow(ctx, upsertGoogleUser,
+		arg.GoogleSubject,
+		arg.Email,
+		arg.EmailVerified,
+		arg.DisplayName,
+		arg.AvatarUrl,
+		arg.Timezone,
+	)
+	var i User
+	err := row.Scan(
+		&i.ID,
+		&i.GoogleSubject,
+		&i.Email,
+		&i.EmailVerified,
+		&i.DisplayName,
+		&i.AvatarUrl,
+		&i.AccessTier,
+		&i.Timezone,
+		&i.CreatedAt,
+		&i.UpdatedAt,
 	)
 	return i, err
 }

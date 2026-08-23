@@ -12,14 +12,3 @@
 <div class="app">
 	{@render children()}
 </div>
-
-<style>
-	.app {
-		display: flex;
-		flex-direction: column;
-		height: 100dvh;
-		width: 100dvw;
-		overflow-y: auto;
-		padding: 2rem;
-	}
-</style>

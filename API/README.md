@@ -1,134 +1,99 @@
-# Facebook Groups Bulk Poster API
+# Facebook Marketing Tool API
 
-This API currently supports two access systems:
+The API authenticates extension users with Google and stores each user's
+prepared Group posts and Marketplace listings under their stable Google
+account ID.
 
-- Existing account/auth endpoints, kept for future signup, login, and subscriptions.
-- Anonymous extension access for the current 7-day trial and manual lifetime deal flow.
+## Current foundation
 
-## Anonymous Trial And Lifetime Access
+- PostgreSQL connection pool using `pgxpool`
+- Schema and generated data layer managed by Goose and sqlc
+- Google OAuth access-token verification and opaque application sessions
+- User-owned Group posts and Marketplace listings
+- Free and Pro entitlements with race-safe calendar-day posting usage
+- Streaming Bunny Storage uploads with database-backed image metadata
+- Health endpoint at `GET /health`
 
-The Chrome extension no longer requires signup/login to unlock the main workflow.
-
-When the sidepanel opens, the extension:
-
-1. Creates or reuses a local `install_id` stored in `chrome.storage.local`.
-2. Creates or reuses a user-facing `activation_id`, for example `FGBP-8KQ2-X9LM`.
-3. Calls the API to start or check access.
-4. Unlocks the extension if the trial is active or lifetime access is enabled.
-5. Shows contact instructions when the trial has expired.
-
-The API stores only a hash of the install ID. Opening the sidepanel repeatedly does not restart the 7-day trial.
-
-## Database
-
-Run the migration that creates `extension_accesses` before using this flow:
-
-```sql
-API/db/migrations/20260623120000_extension_accesses.sql
-```
-
-The table stores:
-
-- hashed install ID
-- activation ID
-- trial expiry time
-- lifetime access flag
-- activation timestamp
-- optional admin note
-- last seen timestamp
-
-## Environment
-
-Add an admin API key to `API/.env`:
+## Required environment
 
 ```env
-ADMIN_API_KEY=your_random_secret_here
+DATABASE_URL=postgres://...
+PORT=:4000
+GOOGLE_OAUTH_CLIENT_ID=248783871494-fpf7i952h85k1433lm9qhhq62e2b4hdt.apps.googleusercontent.com
+BUNNY_STORAGE_ZONE=...
+BUNNY_STORAGE_ENDPOINT=https://storage.bunnycdn.com
+BUNNY_PUBLIC_BASE_URL=https://your-zone.b-cdn.net
+BUNNY_STORAGE_ACCESS_KEY=...
 ```
 
-Generate a strong value with:
+Existing deployments may keep using `BUNNY_API_KEY`; it is accepted as a
+backwards-compatible alias for `BUNNY_STORAGE_ACCESS_KEY`. Google Chrome
+extension OAuth clients are public clients, so this API does not use a Google
+client secret.
+
+## Database commands
 
 ```bash
-openssl rand -hex 32
+make migrate-up
+make migrate-down
+make migrate-reset
+make migrate-status
+make sqlc
 ```
 
-Keep this value private. Do not put it in the Chrome extension, frontend code, GitHub, or public docs.
+`make migrate-reset` loads `DATABASE_URL` from `API/.env` and rolls back every
+applied Goose migration. This deletes all data stored in migration-managed
+tables. Run `make migrate-up` afterward when you want to recreate the current
+schema from the baseline migration.
 
-## Public Extension Endpoint
+The baseline migration is
+`db/migrations/20260811000000_initial_schema.sql`.
 
-The extension calls this endpoint on sidepanel load:
+## Authentication
 
-```http
-POST /api/extension-access/start
-Content-Type: application/json
+The extension obtains a Google OAuth access token with `chrome.identity`, then
+exchanges it for an application session:
+
+```text
+POST /api/auth/google
+Authorization: Bearer <google-access-token>
 ```
 
-Request:
+The API validates the token's audience against `GOOGLE_OAUTH_CLIENT_ID`, loads
+the verified Google profile, upserts the user, and returns a seven-day opaque
+session token. Only the SHA-256 hash of that token is stored in PostgreSQL.
 
-```json
-{
-  "install_id": "browser-local-random-uuid",
-  "activation_id": "FGBP-XXXX-XXXX"
-}
+All other API routes require:
+
+```text
+Authorization: Bearer <application-session-token>
 ```
 
-Response:
+Available authenticated routes:
 
-```json
-{
-  "active": true,
-  "access_type": "trial",
-  "activation_id": "FGBP-XXXX-XXXX",
-  "trial_expires_at": "2026-06-30T12:00:00Z",
-  "lifetime_active": false
-}
+```text
+GET    /api/me
+POST   /api/auth/logout
+POST   /api/posting-usage/claim
+POST   /api/posting-usage/complete
+POST   /api/posting-usage/release
+GET    /api/group-posts
+POST   /api/group-posts
+PUT    /api/group-posts/{postID}
+DELETE /api/group-posts/{postID}
+GET    /api/marketplace-listings
+POST   /api/marketplace-listings
+GET    /api/marketplace-listings/{listingID}
+PUT    /api/marketplace-listings/{listingID}
+DELETE /api/marketplace-listings/{listingID}
 ```
 
-`access_type` can be:
+Group and Marketplace writes are multipart requests. Images stream to Bunny,
+while ordered URLs and associated form fields are stored in PostgreSQL.
 
-- `trial`
-- `lifetime`
-- `expired`
-
-## Activate Lifetime Access
-
-When a customer pays manually, ask them to send their Activation ID from the extension.
-
-Then activate lifetime access with:
-
-```bash
-curl -X POST https://YOUR_API_DOMAIN/api/admin/extension-access/activate-lifetime \
-  -H "Authorization: Bearer YOUR_ADMIN_API_KEY" \
-  -H "Content-Type: application/json" \
-  -d '{"activation_id":"FGBP-XXXX-XXXX","note":"Paid via WhatsApp"}'
-```
-
-Successful response:
-
-```json
-{
-  "active": true,
-  "access_type": "lifetime",
-  "activation_id": "FGBP-XXXX-XXXX",
-  "trial_expires_at": "2026-06-30T12:00:00Z",
-  "lifetime_active": true,
-  "activated_at": "2026-06-23T12:00:00Z"
-}
-```
-
-After activation, the customer can click **Refresh Access** in the extension or reopen the sidepanel.
-
-## Contact Details In Extension
-
-Expired trials show:
-
-- Email: `haronkibetrutoh@gmail.com`
-- WhatsApp: `+254718448461`
-
-Those values are currently configured in `src/sidepanel.ts`.
-
-## Notes
-
-- This access method is intentionally low-friction for early sales.
-- It is tied to the browser profile/install, not a permanent user identity.
-- If users clear extension storage or reinstall, they may need to contact you again.
-- The existing user/auth tables and endpoints are still available for future account-based billing.
+New accounts default to Free. Free accounts can store up to five prepared
+Group posts and five Marketplace listings, and can publish up to 20 of each per
+calendar day in their fixed account timezone. Pro accounts have no storage or
+publishing limits.
+The extension claims a posting slot immediately before a Facebook action,
+completes it after success, and releases it after a confirmed failure.
