@@ -24,6 +24,13 @@ function apiHostPermission(apiBaseUrl) {
 
 async function generateManifest() {
   const manifest = JSON.parse(await readFile(manifestTemplatePath, "utf8"));
+  const existingManifest = await readExistingManifest();
+  const extensionName =
+    nonEmptyString(process.env.EXTENSION_NAME) ??
+    nonEmptyString(existingManifest?.name);
+  if (extensionName) {
+    manifest.name = extensionName;
+  }
   const apiHostname = new URL(authApiBaseUrl).hostname;
   const apiPermissions =
     !isProductionBuild &&
@@ -36,6 +43,21 @@ async function generateManifest() {
     `${JSON.stringify(manifest, null, 2)}\n`,
     "utf8",
   );
+}
+
+async function readExistingManifest() {
+  try {
+    return JSON.parse(await readFile(generatedManifestPath, "utf8"));
+  } catch (error) {
+    if (error?.code === "ENOENT") {
+      return undefined;
+    }
+    throw new Error(`Unable to read the existing generated manifest: ${error}`);
+  }
+}
+
+function nonEmptyString(value) {
+  return typeof value === "string" && value.trim() ? value.trim() : undefined;
 }
 
 const sharedConfig = {

@@ -22,9 +22,13 @@ runtime dependency and must not be packaged with `public`.
 ## Extension build modes
 
 The extension API URL and matching API host permission are generated at build
-time. `manifest.base.json` is the manifest source of truth; each build writes
-the environment-specific manifest to `public/manifest.json`. Run the command
-for the environment you want before loading or packaging the extension.
+time. `manifest.base.json` supplies the manifest defaults; each build writes
+the environment-specific manifest to `public/manifest.json`. The extension
+`name` is preserved from the existing `public/manifest.json`, so changing that
+field is not undone by a development or production build. Set `EXTENSION_NAME`
+to a non-empty value when you want a build to override the preserved name. Run
+the command for the environment you want before loading or packaging the
+extension.
 
 ### Local development
 
@@ -49,6 +53,12 @@ This points the extension to
 `https://api.facebook-groups-bulk-poster.softwrhq.com`. The generated
 production manifest grants that API host and does not contain localhost host
 permissions.
+
+To change the extension name as part of a build:
+
+```bash
+EXTENSION_NAME='My Extension Name' make build-prod
+```
 
 Reload the unpacked extension after building, or package the generated
 `public` directory for Chrome Web Store. Do not run a development build after
