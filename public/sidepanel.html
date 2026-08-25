@@ -289,7 +289,7 @@
             </div>
 
             <div class="field">
-              <label for="max-posts-input">Maximum Successful Posts</label>
+              <label for="max-posts-input">Maximum Accepted Submissions</label>
               <div class="number-input-row">
                 <input
                   type="number"
@@ -302,9 +302,9 @@
                 />
               </div>
               <p class="section-note" id="max-posts-note">
-                Failed attempts do not count. The queue stops after this many
-                successful posts, cycling through the selected groups again when
-                needed.
+                Published posts and posts waiting for approval count. Failed
+                attempts do not. The queue cycles through selected Groups again
+                when needed.
               </p>
             </div>
 
@@ -415,6 +415,16 @@
                 >
                   <strong id="posting-progress-success">0</strong>
                   posted
+                </button>
+                <button
+                  type="button"
+                  id="posting-progress-filter-pending"
+                  class="posting-progress__stat-filter"
+                  aria-pressed="false"
+                  title="Show only posts waiting for approval"
+                >
+                  <strong id="posting-progress-pending">0</strong>
+                  pending
                 </button>
                 <button
                   type="button"
@@ -2315,6 +2325,57 @@
               class="delete-confirmation__confirm"
             >
               Delete
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <div
+        id="group-posting-strategy-choice"
+        class="delete-confirmation group-posting-strategy-choice"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="group-posting-strategy-choice-title"
+        aria-describedby="group-posting-strategy-choice-message"
+        hidden
+      >
+        <button
+          type="button"
+          id="group-posting-strategy-choice-backdrop"
+          class="delete-confirmation__backdrop"
+          aria-label="Cancel Group posting"
+        ></button>
+        <div
+          class="delete-confirmation__dialog group-posting-strategy-choice__dialog"
+        >
+          <p class="section-heading__eyebrow">Posting preference</p>
+          <h2 id="group-posting-strategy-choice-title">
+            How do you want to post?
+          </h2>
+          <p id="group-posting-strategy-choice-message">
+            Spread your posts evenly by starting with Groups you have posted to
+            the least, or use the order in which you selected them. If a Group
+            fails, KundiPost skips it and continues with the others.
+          </p>
+          <div
+            class="delete-confirmation__actions group-posting-strategy-choice__actions"
+          >
+            <button type="button" id="group-posting-strategy-choice-cancel">
+              Cancel
+            </button>
+            <button
+              type="button"
+              id="group-posting-strategy-choice-selected-order"
+              class="group-posting-strategy-choice__selected-order"
+            >
+              Keep selected order
+            </button>
+            <button
+              type="button"
+              id="group-posting-strategy-choice-balanced"
+              class="group-posting-strategy-choice__balanced"
+            >
+              Spread posts evenly (Recommended)
             </button>
           </div>
         </div>

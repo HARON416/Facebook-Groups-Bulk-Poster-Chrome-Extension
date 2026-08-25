@@ -11,6 +11,7 @@ account ID.
 - Google OAuth access-token verification and opaque application sessions
 - User-owned Group posts and Marketplace listings
 - Free and Pro entitlements with race-safe calendar-day posting usage
+- Per-Facebook-account lifetime Group posting totals for optional balanced queues
 - Streaming Bunny Storage uploads with database-backed image metadata
 - Health endpoint at `GET /health`
 
@@ -20,6 +21,8 @@ account ID.
 DATABASE_URL=postgres://...
 PORT=:4000
 GOOGLE_OAUTH_CLIENT_ID=248783871494-fpf7i952h85k1433lm9qhhq62e2b4hdt.apps.googleusercontent.com
+ADMIN_API_KEY=<at-least-32-random-characters>
+FACEBOOK_ACTOR_HMAC_KEY=<at-least-32-random-characters>
 BUNNY_STORAGE_ZONE=...
 BUNNY_STORAGE_ENDPOINT=https://storage.bunnycdn.com
 BUNNY_PUBLIC_BASE_URL=https://your-zone.b-cdn.net
@@ -30,6 +33,17 @@ Existing deployments may keep using `BUNNY_API_KEY`; it is accepted as a
 backwards-compatible alias for `BUNNY_STORAGE_ACCESS_KEY`. Google Chrome
 extension OAuth clients are public clients, so this API does not use a Google
 client secret.
+
+Generate `FACEBOOK_ACTOR_HMAC_KEY` once with `openssl rand -hex 32`, keep it
+secret, and use the same value across deployments. The API uses it to HMAC the
+Facebook account identifier used for Free-tier binding; the raw Facebook
+identifier is not stored. Rotating or losing this key invalidates comparisons
+against existing bindings and requires resetting those bindings.
+
+`ADMIN_API_KEY` protects private account-management endpoints and must never be
+included in the extension, landing page, source control, or browser storage.
+Generate it with `openssl rand -hex 32`, retain it only in trusted administrator
+environments, and send it exclusively over HTTPS.
 
 ## Database commands
 
@@ -77,6 +91,8 @@ POST   /api/auth/logout
 POST   /api/posting-usage/claim
 POST   /api/posting-usage/complete
 POST   /api/posting-usage/release
+POST   /api/group-posting-stats/plan
+POST   /api/group-posting-stats/accepted
 GET    /api/group-posts
 POST   /api/group-posts
 PUT    /api/group-posts/{postID}
@@ -93,7 +109,86 @@ while ordered URLs and associated form fields are stored in PostgreSQL.
 
 New accounts default to Free. Free accounts can store up to five prepared
 Group posts and five Marketplace listings, and can publish up to 20 of each per
-calendar day in their fixed account timezone. Pro accounts have no storage or
-publishing limits.
-The extension claims a posting slot immediately before a Facebook action,
-completes it after success, and releases it after a confirmed failure.
+calendar day in their fixed account timezone. The first Free-tier publishing
+claim creates a one-to-one binding between the Google user and the Facebook
+account active in Chrome. Both identities are checked inside the same database
+transaction, so switching Chrome profiles or attempting concurrent claims does
+not create another allowance. Pro accounts have no storage or publishing
+limits. The extension claims a posting slot immediately before a Facebook
+action, completes it after success, and releases it after a confirmed failure.
+
+Every accepted Group submission, whether published immediately or pending
+administrator approval, is recorded once using its posting operation ID. The
+API stores the Group ID, latest known name, unlimited lifetime accepted count,
+and last accepted time under the Google user and an HMAC of the active Facebook
+actor. Confirmed failures are not recorded. When the user chooses Balanced
+posting, the extension sends all selected Groups and the accepted-post target to
+the planning endpoint. The API returns the complete priority sequence, giving
+each eligible Group one turn per round before reuse. If a Group fails, the
+extension requests a replacement plan for the remaining target with that Group
+excluded. Normal selected-order queues remain available.
+
+Pro access may be temporary or lifetime. Temporary terms use consecutive
+24-hour periods measured from the exact grant timestamp; lifetime grants have
+no expiry. Expiry is checked on every authenticated request, so no scheduler is
+required. Expiry never deletes saved content, but Free limits immediately apply
+to new saves and publishing.
+
+Manage access from the API directory with the authenticated server database
+configuration. This is intentionally a server-side command rather than a
+public API endpoint:
+
+```bash
+make access ACCESS_ARGS='--email user@example.com --days 30 --note "Order reference"'
+make access ACCESS_ARGS='--email user@example.com --lifetime --note "Lifetime customer"'
+make access ACCESS_ARGS='--email user@example.com --revoke'
+```
+
+For a 30-day grant, the user receives exactly 720 hours of Pro access beginning
+at the grant time. The account card displays the exact expiry in the user's
+stored timezone or “Lifetime Pro.”
+
+### Private Pro-access endpoints
+
+The number of temporary days is dynamic; replace `30` with any positive whole
+number. A new temporary grant replaces the previous expiry and starts from the
+exact time of the new grant. Export the administrator secret only in your
+trusted terminal:
+
+```bash
+export ADMIN_API_KEY='your-server-admin-api-key'
+```
+
+Grant temporary Pro:
+
+```bash
+curl --request POST \
+  --url 'https://api.facebook-groups-bulk-poster.softwrhq.com/api/admin/access/temporary' \
+  --header "Authorization: Bearer ${ADMIN_API_KEY}" \
+  --header 'Content-Type: application/json' \
+  --data '{"email":"user@example.com","days":30,"note":"Order reference"}'
+```
+
+Grant lifetime Pro:
+
+```bash
+curl --request POST \
+  --url 'https://api.facebook-groups-bulk-poster.softwrhq.com/api/admin/access/lifetime' \
+  --header "Authorization: Bearer ${ADMIN_API_KEY}" \
+  --header 'Content-Type: application/json' \
+  --data '{"email":"user@example.com","note":"Lifetime customer"}'
+```
+
+Revoke Pro:
+
+```bash
+curl --request POST \
+  --url 'https://api.facebook-groups-bulk-poster.softwrhq.com/api/admin/access/revoke' \
+  --header "Authorization: Bearer ${ADMIN_API_KEY}" \
+  --header 'Content-Type: application/json' \
+  --data '{"email":"user@example.com"}'
+```
+
+The API returns `401` for a missing or incorrect key, `404` when the Google
+user does not exist, and `400` for invalid input. Successful responses return
+the effective tier, stored timezone, and temporary expiry or lifetime status.

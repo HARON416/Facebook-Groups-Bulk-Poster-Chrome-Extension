@@ -55,6 +55,42 @@ func (q *Queries) DeleteExpiredAuthSessions(ctx context.Context) error {
 	return err
 }
 
+const expireProAccess = `-- name: ExpireProAccess :one
+UPDATE users
+SET
+    access_tier = 'free',
+    pro_expires_at = NULL,
+    pro_granted_at = NULL,
+    pro_grant_note = NULL,
+    updated_at = CURRENT_TIMESTAMP
+WHERE id = $1
+  AND access_tier = 'pro'
+  AND pro_expires_at IS NOT NULL
+  AND pro_expires_at <= CURRENT_TIMESTAMP
+RETURNING id, google_subject, email, email_verified, display_name, avatar_url, access_tier, pro_expires_at, pro_granted_at, pro_grant_note, timezone, created_at, updated_at
+`
+
+func (q *Queries) ExpireProAccess(ctx context.Context, id pgtype.UUID) (User, error) {
+	row := q.db.QueryRow(ctx, expireProAccess, id)
+	var i User
+	err := row.Scan(
+		&i.ID,
+		&i.GoogleSubject,
+		&i.Email,
+		&i.EmailVerified,
+		&i.DisplayName,
+		&i.AvatarUrl,
+		&i.AccessTier,
+		&i.ProExpiresAt,
+		&i.ProGrantedAt,
+		&i.ProGrantNote,
+		&i.Timezone,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
 const getAuthSessionByTokenHash = `-- name: GetAuthSessionByTokenHash :one
 SELECT id, user_id, token_hash, expires_at, created_at, last_used_at FROM auth_sessions
 WHERE token_hash = $1 AND expires_at > CURRENT_TIMESTAMP
@@ -74,8 +110,35 @@ func (q *Queries) GetAuthSessionByTokenHash(ctx context.Context, tokenHash strin
 	return i, err
 }
 
+const getUserByEmail = `-- name: GetUserByEmail :one
+SELECT id, google_subject, email, email_verified, display_name, avatar_url, access_tier, pro_expires_at, pro_granted_at, pro_grant_note, timezone, created_at, updated_at FROM users WHERE lower(email) = lower($1)
+ORDER BY created_at ASC
+LIMIT 1
+`
+
+func (q *Queries) GetUserByEmail(ctx context.Context, email string) (User, error) {
+	row := q.db.QueryRow(ctx, getUserByEmail, email)
+	var i User
+	err := row.Scan(
+		&i.ID,
+		&i.GoogleSubject,
+		&i.Email,
+		&i.EmailVerified,
+		&i.DisplayName,
+		&i.AvatarUrl,
+		&i.AccessTier,
+		&i.ProExpiresAt,
+		&i.ProGrantedAt,
+		&i.ProGrantNote,
+		&i.Timezone,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
 const getUserByID = `-- name: GetUserByID :one
-SELECT id, google_subject, email, email_verified, display_name, avatar_url, access_tier, timezone, created_at, updated_at FROM users WHERE id = $1
+SELECT id, google_subject, email, email_verified, display_name, avatar_url, access_tier, pro_expires_at, pro_granted_at, pro_grant_note, timezone, created_at, updated_at FROM users WHERE id = $1
 `
 
 func (q *Queries) GetUserByID(ctx context.Context, id pgtype.UUID) (User, error) {
@@ -89,6 +152,119 @@ func (q *Queries) GetUserByID(ctx context.Context, id pgtype.UUID) (User, error)
 		&i.DisplayName,
 		&i.AvatarUrl,
 		&i.AccessTier,
+		&i.ProExpiresAt,
+		&i.ProGrantedAt,
+		&i.ProGrantNote,
+		&i.Timezone,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const grantLifetimePro = `-- name: GrantLifetimePro :one
+UPDATE users
+SET
+    access_tier = 'pro',
+    pro_expires_at = NULL,
+    pro_granted_at = CURRENT_TIMESTAMP,
+    pro_grant_note = NULLIF(trim($1::TEXT), ''),
+    updated_at = CURRENT_TIMESTAMP
+WHERE id = $2
+RETURNING id, google_subject, email, email_verified, display_name, avatar_url, access_tier, pro_expires_at, pro_granted_at, pro_grant_note, timezone, created_at, updated_at
+`
+
+type GrantLifetimeProParams struct {
+	ProGrantNote string      `json:"pro_grant_note"`
+	ID           pgtype.UUID `json:"id"`
+}
+
+func (q *Queries) GrantLifetimePro(ctx context.Context, arg GrantLifetimeProParams) (User, error) {
+	row := q.db.QueryRow(ctx, grantLifetimePro, arg.ProGrantNote, arg.ID)
+	var i User
+	err := row.Scan(
+		&i.ID,
+		&i.GoogleSubject,
+		&i.Email,
+		&i.EmailVerified,
+		&i.DisplayName,
+		&i.AvatarUrl,
+		&i.AccessTier,
+		&i.ProExpiresAt,
+		&i.ProGrantedAt,
+		&i.ProGrantNote,
+		&i.Timezone,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const grantTemporaryPro = `-- name: GrantTemporaryPro :one
+UPDATE users
+SET
+    access_tier = 'pro',
+    pro_expires_at = $1,
+    pro_granted_at = CURRENT_TIMESTAMP,
+    pro_grant_note = NULLIF(trim($2::TEXT), ''),
+    updated_at = CURRENT_TIMESTAMP
+WHERE id = $3
+RETURNING id, google_subject, email, email_verified, display_name, avatar_url, access_tier, pro_expires_at, pro_granted_at, pro_grant_note, timezone, created_at, updated_at
+`
+
+type GrantTemporaryProParams struct {
+	ProExpiresAt pgtype.Timestamptz `json:"pro_expires_at"`
+	ProGrantNote string             `json:"pro_grant_note"`
+	ID           pgtype.UUID        `json:"id"`
+}
+
+func (q *Queries) GrantTemporaryPro(ctx context.Context, arg GrantTemporaryProParams) (User, error) {
+	row := q.db.QueryRow(ctx, grantTemporaryPro, arg.ProExpiresAt, arg.ProGrantNote, arg.ID)
+	var i User
+	err := row.Scan(
+		&i.ID,
+		&i.GoogleSubject,
+		&i.Email,
+		&i.EmailVerified,
+		&i.DisplayName,
+		&i.AvatarUrl,
+		&i.AccessTier,
+		&i.ProExpiresAt,
+		&i.ProGrantedAt,
+		&i.ProGrantNote,
+		&i.Timezone,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const revokePro = `-- name: RevokePro :one
+UPDATE users
+SET
+    access_tier = 'free',
+    pro_expires_at = NULL,
+    pro_granted_at = NULL,
+    pro_grant_note = NULL,
+    updated_at = CURRENT_TIMESTAMP
+WHERE id = $1
+RETURNING id, google_subject, email, email_verified, display_name, avatar_url, access_tier, pro_expires_at, pro_granted_at, pro_grant_note, timezone, created_at, updated_at
+`
+
+func (q *Queries) RevokePro(ctx context.Context, id pgtype.UUID) (User, error) {
+	row := q.db.QueryRow(ctx, revokePro, id)
+	var i User
+	err := row.Scan(
+		&i.ID,
+		&i.GoogleSubject,
+		&i.Email,
+		&i.EmailVerified,
+		&i.DisplayName,
+		&i.AvatarUrl,
+		&i.AccessTier,
+		&i.ProExpiresAt,
+		&i.ProGrantedAt,
+		&i.ProGrantNote,
 		&i.Timezone,
 		&i.CreatedAt,
 		&i.UpdatedAt,
@@ -120,7 +296,7 @@ ON CONFLICT (google_subject) DO UPDATE SET
     -- change must not silently move the user's daily reset boundary.
     timezone = users.timezone,
     updated_at = CURRENT_TIMESTAMP
-RETURNING id, google_subject, email, email_verified, display_name, avatar_url, access_tier, timezone, created_at, updated_at
+RETURNING id, google_subject, email, email_verified, display_name, avatar_url, access_tier, pro_expires_at, pro_granted_at, pro_grant_note, timezone, created_at, updated_at
 `
 
 type UpsertGoogleUserParams struct {
@@ -150,6 +326,9 @@ func (q *Queries) UpsertGoogleUser(ctx context.Context, arg UpsertGoogleUserPara
 		&i.DisplayName,
 		&i.AvatarUrl,
 		&i.AccessTier,
+		&i.ProExpiresAt,
+		&i.ProGrantedAt,
+		&i.ProGrantNote,
 		&i.Timezone,
 		&i.CreatedAt,
 		&i.UpdatedAt,

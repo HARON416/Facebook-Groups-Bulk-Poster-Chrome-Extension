@@ -11,6 +11,7 @@ import (
 )
 
 type Querier interface {
+	BindFacebookAccountByActorHash(ctx context.Context, arg BindFacebookAccountByActorHashParams) (FacebookAccountBinding, error)
 	CountGroupPostsByUser(ctx context.Context, userID pgtype.UUID) (int64, error)
 	CountMarketplaceListingsByUser(ctx context.Context, userID pgtype.UUID) (int64, error)
 	CreateAuthSession(ctx context.Context, arg CreateAuthSessionParams) (AuthSession, error)
@@ -28,7 +29,12 @@ type Querier interface {
 	DeleteGroupPostImages(ctx context.Context, groupPostID pgtype.UUID) error
 	DeleteMarketplaceListing(ctx context.Context, arg DeleteMarketplaceListingParams) (int64, error)
 	DeleteMarketplaceListingImages(ctx context.Context, listingID pgtype.UUID) error
+	ExpireProAccess(ctx context.Context, id pgtype.UUID) (User, error)
 	GetAuthSessionByTokenHash(ctx context.Context, tokenHash string) (AuthSession, error)
+	GetFacebookAccountBindingByUser(ctx context.Context, userID pgtype.UUID) (FacebookAccountBinding, error)
+	GetFacebookGroupPostingEvent(ctx context.Context, arg GetFacebookGroupPostingEventParams) (FacebookGroupPostingEvent, error)
+	GetFacebookGroupPostingStat(ctx context.Context, arg GetFacebookGroupPostingStatParams) (FacebookGroupPostingStat, error)
+	GetFacebookPostingUsageSummary(ctx context.Context, arg GetFacebookPostingUsageSummaryParams) (GetFacebookPostingUsageSummaryRow, error)
 	GetGroupPost(ctx context.Context, arg GetGroupPostParams) (GroupPost, error)
 	GetMarketplaceHomeDetails(ctx context.Context, listingID pgtype.UUID) (MarketplaceHomeDetail, error)
 	GetMarketplaceItemDetails(ctx context.Context, listingID pgtype.UUID) (MarketplaceItemDetail, error)
@@ -36,7 +42,13 @@ type Querier interface {
 	GetMarketplaceVehicleDetails(ctx context.Context, listingID pgtype.UUID) (MarketplaceVehicleDetail, error)
 	GetPostingUsageClaim(ctx context.Context, arg GetPostingUsageClaimParams) (PostingUsageClaim, error)
 	GetPostingUsageSummary(ctx context.Context, arg GetPostingUsageSummaryParams) (GetPostingUsageSummaryRow, error)
+	GetUserByEmail(ctx context.Context, email string) (User, error)
 	GetUserByID(ctx context.Context, id pgtype.UUID) (User, error)
+	GrantLifetimePro(ctx context.Context, arg GrantLifetimeProParams) (User, error)
+	GrantTemporaryPro(ctx context.Context, arg GrantTemporaryProParams) (User, error)
+	IncrementFacebookGroupPostingStat(ctx context.Context, arg IncrementFacebookGroupPostingStatParams) (FacebookGroupPostingStat, error)
+	InsertFacebookGroupPostingEvent(ctx context.Context, arg InsertFacebookGroupPostingEventParams) (int64, error)
+	ListFacebookGroupPostingStats(ctx context.Context, arg ListFacebookGroupPostingStatsParams) ([]FacebookGroupPostingStat, error)
 	ListGroupPostImages(ctx context.Context, groupPostID pgtype.UUID) ([]GroupPostImage, error)
 	ListGroupPosts(ctx context.Context, userID pgtype.UUID) ([]GroupPost, error)
 	ListMarketplaceListingImages(ctx context.Context, listingID pgtype.UUID) ([]MarketplaceListingImage, error)
@@ -44,7 +56,9 @@ type Querier interface {
 	LockUserForUsage(ctx context.Context, userID pgtype.UUID) (User, error)
 	MarkPostingUsageClaimSucceeded(ctx context.Context, arg MarkPostingUsageClaimSucceededParams) (PostingUsageClaim, error)
 	ReleasePostingUsageClaim(ctx context.Context, arg ReleasePostingUsageClaimParams) (PostingUsageClaim, error)
+	RevokePro(ctx context.Context, id pgtype.UUID) (User, error)
 	TouchAuthSession(ctx context.Context, id pgtype.UUID) error
+	TouchFacebookAccountBinding(ctx context.Context, id pgtype.UUID) (FacebookAccountBinding, error)
 	UpdateGroupPost(ctx context.Context, arg UpdateGroupPostParams) (GroupPost, error)
 	UpdateMarketplaceHomeDetails(ctx context.Context, arg UpdateMarketplaceHomeDetailsParams) (MarketplaceHomeDetail, error)
 	UpdateMarketplaceItemDetails(ctx context.Context, arg UpdateMarketplaceItemDetailsParams) (MarketplaceItemDetail, error)

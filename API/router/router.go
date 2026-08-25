@@ -31,6 +31,12 @@ func Router(apiHandler *handlers.APIHandler) *chi.Mux {
 
 	r.Get("/health", healthHandler)
 	r.Post("/api/auth/google", apiHandler.AuthenticateGoogle)
+	r.Group(func(r chi.Router) {
+		r.Use(apiHandler.RequireAdminAPIKey)
+		r.Post("/api/admin/access/temporary", apiHandler.GrantTemporaryPro)
+		r.Post("/api/admin/access/lifetime", apiHandler.GrantLifetimePro)
+		r.Post("/api/admin/access/revoke", apiHandler.RevokePro)
+	})
 
 	r.Group(func(r chi.Router) {
 		r.Use(apiHandler.RequireAuthenticatedUser)
@@ -39,6 +45,8 @@ func Router(apiHandler *handlers.APIHandler) *chi.Mux {
 		r.Post("/api/posting-usage/claim", apiHandler.ClaimPostingUsage)
 		r.Post("/api/posting-usage/complete", apiHandler.CompletePostingUsage)
 		r.Post("/api/posting-usage/release", apiHandler.ReleasePostingUsage)
+		r.Post("/api/group-posting-stats/plan", apiHandler.CreateBalancedGroupPostingPlan)
+		r.Post("/api/group-posting-stats/accepted", apiHandler.RecordAcceptedGroupPost)
 		r.Get("/api/group-posts", apiHandler.ListGroupPosts)
 		r.Post("/api/group-posts", apiHandler.CreateGroupPost)
 		r.Put("/api/group-posts/{postID}", apiHandler.UpdateGroupPost)

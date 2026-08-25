@@ -12,6 +12,13 @@ tidy:
 sqlc:
 	sqlc generate
 
+# Examples:
+# make access ACCESS_ARGS='--email user@example.com --days 30 --note "WhatsApp order"'
+# make access ACCESS_ARGS='--email user@example.com --lifetime'
+# make access ACCESS_ARGS='--email user@example.com --revoke'
+access:
+	go run ./cmd/access $(ACCESS_ARGS)
+
 migrate-up:
 	@set -a; \
 	if [ -f "$(ENV_FILE)" ]; then . "./$(ENV_FILE)"; fi; \

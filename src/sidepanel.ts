@@ -2,6 +2,7 @@ import type {
   AccessEntitlements,
   AccessEntitlementsUpdatedMessage,
   FacebookGroup,
+  GroupPostingStrategy,
   GroupExtractionStatusMessage,
   LoadGroupsResponse,
   MarketplaceCleanupStatusMessage,
@@ -756,6 +757,9 @@ const postingProgressBar = document.querySelector<HTMLElement>(
 const postingProgressSuccess = document.querySelector<HTMLElement>(
   "#posting-progress-success",
 );
+const postingProgressPending = document.querySelector<HTMLElement>(
+  "#posting-progress-pending",
+);
 const postingProgressFailed = document.querySelector<HTMLElement>(
   "#posting-progress-failed",
 );
@@ -770,6 +774,8 @@ const postingProgressLog = document.querySelector<HTMLOListElement>(
 );
 const postingProgressPostedFilterButton =
   document.querySelector<HTMLButtonElement>("#posting-progress-filter-posted");
+const postingProgressPendingFilterButton =
+  document.querySelector<HTMLButtonElement>("#posting-progress-filter-pending");
 const postingProgressFailedFilterButton =
   document.querySelector<HTMLButtonElement>("#posting-progress-filter-failed");
 const authLoginButton =
@@ -801,6 +807,25 @@ const deleteConfirmationCancel = document.querySelector<HTMLButtonElement>(
 const deleteConfirmationConfirm = document.querySelector<HTMLButtonElement>(
   "#delete-confirmation-confirm",
 );
+const groupPostingStrategyChoice = document.querySelector<HTMLElement>(
+  "#group-posting-strategy-choice",
+);
+const groupPostingStrategyChoiceBackdrop =
+  document.querySelector<HTMLButtonElement>(
+    "#group-posting-strategy-choice-backdrop",
+  );
+const groupPostingStrategyChoiceCancel =
+  document.querySelector<HTMLButtonElement>(
+    "#group-posting-strategy-choice-cancel",
+  );
+const groupPostingStrategyChoiceSelectedOrder =
+  document.querySelector<HTMLButtonElement>(
+    "#group-posting-strategy-choice-selected-order",
+  );
+const groupPostingStrategyChoiceBalanced =
+  document.querySelector<HTMLButtonElement>(
+    "#group-posting-strategy-choice-balanced",
+  );
 const marketplaceAudienceChoice = document.querySelector<HTMLElement>(
   "#marketplace-audience-choice",
 );
@@ -939,7 +964,7 @@ let isMarketplaceStopRequestPending = false;
 let isMarketplacePauseRequestPending = false;
 let isMarketplaceListingSaving = false;
 let isMarketplaceCleanupActive = false;
-type PostingLogFilter = "all" | "posted" | "failed";
+type PostingLogFilter = "all" | "posted" | "pending" | "failed";
 let groupsPostingLogFilter: PostingLogFilter = "all";
 let marketplacePostingLogFilter: PostingLogFilter = "all";
 let editingMarketplaceListingId: string | undefined;
@@ -970,6 +995,10 @@ let marketplaceAudienceChoiceResolver:
   | ((shareToSuggestedGroups: boolean | undefined) => void)
   | undefined;
 let marketplaceAudienceChoiceReturnFocus: HTMLElement | undefined;
+let groupPostingStrategyChoiceResolver:
+  | ((strategy: GroupPostingStrategy | undefined) => void)
+  | undefined;
+let groupPostingStrategyChoiceReturnFocus: HTMLElement | undefined;
 let currentExtensionAccess:
   | {
       active: true;
@@ -1017,6 +1046,7 @@ initializeVehicleTypeAvailability();
 configureMarketplaceVehicleTypeField();
 initializePasteNormalization();
 initializeDeleteConfirmation();
+initializeGroupPostingStrategyChoice();
 initializeMarketplaceAudienceChoice();
 
 async function initializeApplication() {
@@ -1160,6 +1190,92 @@ function closeDeleteConfirmation(confirmed: boolean) {
   }
   document.body.classList.remove("delete-confirmation-open");
   resolve(confirmed);
+  returnFocus?.focus();
+}
+
+function initializeGroupPostingStrategyChoice() {
+  groupPostingStrategyChoiceCancel?.addEventListener("click", () => {
+    closeGroupPostingStrategyChoice(undefined);
+  });
+  groupPostingStrategyChoiceBackdrop?.addEventListener("click", () => {
+    closeGroupPostingStrategyChoice(undefined);
+  });
+  groupPostingStrategyChoiceSelectedOrder?.addEventListener("click", () => {
+    closeGroupPostingStrategyChoice("selected_order");
+  });
+  groupPostingStrategyChoiceBalanced?.addEventListener("click", () => {
+    closeGroupPostingStrategyChoice("balanced");
+  });
+  groupPostingStrategyChoice?.addEventListener("keydown", (event) => {
+    if (event.key === "Escape") {
+      event.preventDefault();
+      closeGroupPostingStrategyChoice(undefined);
+      return;
+    }
+    if (event.key !== "Tab") {
+      return;
+    }
+    const focusable = [
+      groupPostingStrategyChoiceCancel,
+      groupPostingStrategyChoiceSelectedOrder,
+      groupPostingStrategyChoiceBalanced,
+    ].filter((button): button is HTMLButtonElement => Boolean(button));
+    if (focusable.length === 0) {
+      return;
+    }
+    const currentIndex = focusable.indexOf(
+      document.activeElement as HTMLButtonElement,
+    );
+    if (event.shiftKey && currentIndex <= 0) {
+      event.preventDefault();
+      focusable[focusable.length - 1]?.focus();
+    } else if (!event.shiftKey && currentIndex === focusable.length - 1) {
+      event.preventDefault();
+      focusable[0]?.focus();
+    }
+  });
+}
+
+function requestGroupPostingStrategyChoice(): Promise<
+  GroupPostingStrategy | undefined
+> {
+  if (
+    !groupPostingStrategyChoice ||
+    !groupPostingStrategyChoiceSelectedOrder ||
+    !groupPostingStrategyChoiceBalanced
+  ) {
+    return Promise.resolve(undefined);
+  }
+  if (groupPostingStrategyChoiceResolver) {
+    closeGroupPostingStrategyChoice(undefined);
+  }
+  groupPostingStrategyChoiceReturnFocus =
+    document.activeElement instanceof HTMLElement
+      ? document.activeElement
+      : undefined;
+  groupPostingStrategyChoice.hidden = false;
+  document.body.classList.add("group-posting-strategy-choice-open");
+  groupPostingStrategyChoiceBalanced.focus();
+  return new Promise((resolve) => {
+    groupPostingStrategyChoiceResolver = resolve;
+  });
+}
+
+function closeGroupPostingStrategyChoice(
+  strategy: GroupPostingStrategy | undefined,
+) {
+  if (!groupPostingStrategyChoiceResolver) {
+    return;
+  }
+  const resolve = groupPostingStrategyChoiceResolver;
+  const returnFocus = groupPostingStrategyChoiceReturnFocus;
+  groupPostingStrategyChoiceResolver = undefined;
+  groupPostingStrategyChoiceReturnFocus = undefined;
+  if (groupPostingStrategyChoice) {
+    groupPostingStrategyChoice.hidden = true;
+  }
+  document.body.classList.remove("group-posting-strategy-choice-open");
+  resolve(strategy);
   returnFocus?.focus();
 }
 
@@ -4894,6 +5010,56 @@ function appendMarketplaceCleanupLog(message: MarketplaceCleanupStatusMessage) {
   if (!updatable) marketplaceCleanupLog.prepend(item);
 }
 
+function createFacebookResponseCopyButton(
+  responseBody: string,
+): HTMLButtonElement {
+  const button = document.createElement("button");
+  button.type = "button";
+  button.className = "posting-progress__copy-response";
+  button.title = "Copy Facebook failure response";
+  button.setAttribute("aria-label", "Copy Facebook failure response");
+
+  const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+  svg.setAttribute("width", "32");
+  svg.setAttribute("height", "32");
+  svg.setAttribute("fill", "currentColor");
+  svg.setAttribute("viewBox", "0 0 256 256");
+  svg.setAttribute("aria-hidden", "true");
+  const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
+  path.setAttribute(
+    "d",
+    "M216,32H88a8,8,0,0,0-8,8V80H40a8,8,0,0,0-8,8V216a8,8,0,0,0,8,8H168a8,8,0,0,0,8-8V176h40a8,8,0,0,0,8-8V40A8,8,0,0,0,216,32ZM160,208H48V96H160Zm48-48H176V88a8,8,0,0,0-8-8H96V48H208Z",
+  );
+  svg.append(path);
+  button.append(svg);
+  button.addEventListener("click", async () => {
+    if (await copyTextToClipboard(responseBody)) {
+      showToast("Facebook failure response copied.", "success");
+    } else {
+      showToast("Unable to copy the Facebook response.", "error");
+    }
+  });
+  return button;
+}
+
+async function copyTextToClipboard(value: string): Promise<boolean> {
+  try {
+    await navigator.clipboard.writeText(value);
+    return true;
+  } catch {
+    const textarea = document.createElement("textarea");
+    textarea.value = value;
+    textarea.readOnly = true;
+    textarea.style.position = "fixed";
+    textarea.style.opacity = "0";
+    document.body.append(textarea);
+    textarea.select();
+    const copied = document.execCommand("copy");
+    textarea.remove();
+    return copied;
+  }
+}
+
 function updateMarketplaceCleanupControls() {
   const rawDays = marketplaceCleanupDaysInput?.value.trim() ?? "";
   const days = Number(rawDays);
@@ -5057,17 +5223,21 @@ function applyPostingLogFilter(
   filter: PostingLogFilter,
   postedButton: HTMLButtonElement | null,
   failedButton: HTMLButtonElement | null,
+  pendingButton?: HTMLButtonElement | null,
 ) {
   postedButton?.setAttribute("aria-pressed", String(filter === "posted"));
   failedButton?.setAttribute("aria-pressed", String(filter === "failed"));
+  pendingButton?.setAttribute("aria-pressed", String(filter === "pending"));
   log?.querySelectorAll<HTMLLIElement>("li[data-status]").forEach((item) => {
     const status = item.dataset.status;
     item.hidden =
       filter === "posted"
         ? status !== "posted"
-        : filter === "failed"
-          ? status !== "failed" && status !== "rate_limited"
-          : false;
+        : filter === "pending"
+          ? status !== "pending"
+          : filter === "failed"
+            ? status !== "failed" && status !== "rate_limited"
+            : false;
   });
 }
 
@@ -5080,6 +5250,7 @@ function toggleGroupsPostingLogFilter(
     groupsPostingLogFilter,
     postingProgressPostedFilterButton,
     postingProgressFailedFilterButton,
+    postingProgressPendingFilterButton,
   );
 }
 
@@ -5102,6 +5273,7 @@ function updateUiPostingStatus(message: UiPostingStatusMessage) {
     message.status === "waiting" ||
     message.status === "paused" ||
     message.status === "posted" ||
+    message.status === "pending" ||
     message.status === "failed"
   ) {
     isPostingActive = true;
@@ -5120,10 +5292,13 @@ function updateUiPostingStatus(message: UiPostingStatusMessage) {
   }
 
   if (groupsStatusCount) {
+    const acceptedCount = message.successCount ?? 0;
+    const pendingCount = message.pendingCount ?? 0;
+    const postedCount = Math.max(acceptedCount - pendingCount, 0);
     groupsStatusCount.textContent =
       message.successTarget !== undefined
-        ? `${message.successCount ?? 0}/${message.successTarget} successful posts`
-        : `${message.successCount ?? 0}/${message.total} posted`;
+        ? `${acceptedCount}/${message.successTarget} accepted · ${postedCount} posted · ${pendingCount} pending`
+        : `${postedCount} posted · ${pendingCount} pending`;
   }
 
   if (
@@ -5153,6 +5328,8 @@ function updatePostingProgress(message: UiPostingStatusMessage) {
   }
 
   const successCount = message.successCount ?? 0;
+  const pendingCount = message.pendingCount ?? 0;
+  const postedCount = Math.max(successCount - pendingCount, 0);
   const failedCount = message.failedCount ?? 0;
   const processedCount =
     message.processedCount ??
@@ -5171,7 +5348,7 @@ function updatePostingProgress(message: UiPostingStatusMessage) {
 
   if (postingProgressTitle) {
     postingProgressTitle.textContent = hasSuccessTarget
-      ? `${successCount}/${message.successTarget} successful posts`
+      ? `${successCount}/${message.successTarget} accepted submissions`
       : `${processedCount}/${message.total} groups processed`;
   }
 
@@ -5184,7 +5361,11 @@ function updatePostingProgress(message: UiPostingStatusMessage) {
   }
 
   if (postingProgressSuccess) {
-    postingProgressSuccess.textContent = String(successCount);
+    postingProgressSuccess.textContent = String(postedCount);
+  }
+
+  if (postingProgressPending) {
+    postingProgressPending.textContent = String(pendingCount);
   }
 
   if (postingProgressFailed) {
@@ -5249,6 +5430,13 @@ function appendPostingProgressLog(message: UiPostingStatusMessage) {
 
   body.append(text);
 
+  if (message.detail) {
+    const detail = document.createElement("span");
+    detail.className = "posting-progress__log-detail";
+    detail.textContent = message.detail;
+    body.append(detail);
+  }
+
   if (count || message.error) {
     const meta = document.createElement("span");
     meta.className = "posting-progress__log-meta";
@@ -5256,7 +5444,14 @@ function appendPostingProgressLog(message: UiPostingStatusMessage) {
     body.append(meta);
   }
 
-  item.replaceChildren(badge, body);
+  const copyResponseButton = message.responseBody
+    ? createFacebookResponseCopyButton(message.responseBody)
+    : undefined;
+  item.replaceChildren(
+    badge,
+    body,
+    ...(copyResponseButton ? [copyResponseButton] : []),
+  );
 
   if (!existingUpdatableItem) {
     postingProgressLog.prepend(item);
@@ -5266,6 +5461,7 @@ function appendPostingProgressLog(message: UiPostingStatusMessage) {
     groupsPostingLogFilter,
     postingProgressPostedFilterButton,
     postingProgressFailedFilterButton,
+    postingProgressPendingFilterButton,
   );
 }
 
@@ -5273,6 +5469,8 @@ function getPostingStatusLabel(status: UiPostingStatusMessage["status"]) {
   switch (status) {
     case "posted":
       return "Done";
+    case "pending":
+      return "Pending";
     case "failed":
       return "Fail";
     case "rate_limited":
@@ -6093,6 +6291,9 @@ deleteOldMarketplaceListingsButton?.addEventListener("click", async () => {
 postingProgressPostedFilterButton?.addEventListener("click", () => {
   toggleGroupsPostingLogFilter("posted");
 });
+postingProgressPendingFilterButton?.addEventListener("click", () => {
+  toggleGroupsPostingLogFilter("pending");
+});
 postingProgressFailedFilterButton?.addEventListener("click", () => {
   toggleGroupsPostingLogFilter("failed");
 });
@@ -6450,9 +6651,15 @@ startPostingButton?.addEventListener("click", async () => {
     return;
   }
 
-  const orderedPostingGroups = shuffleGroupsToggle?.checked
-    ? shuffleItems(selectedGroups)
-    : selectedGroups;
+  const postingStrategy = await requestGroupPostingStrategyChoice();
+  if (!postingStrategy) {
+    return;
+  }
+
+  const orderedPostingGroups =
+    postingStrategy === "selected_order" && shuffleGroupsToggle?.checked
+      ? shuffleItems(selectedGroups)
+      : selectedGroups;
   const postingGroups = orderedPostingGroups;
   const postingPreparedPosts = shuffleItems(selectedPreparedPosts);
 
@@ -6482,6 +6689,7 @@ startPostingButton?.addEventListener("click", async () => {
       minimumDelaySeconds,
       maximumDelaySeconds,
       maxPosts,
+      postingStrategy,
     };
     const response = await chrome.runtime.sendMessage<
       StartUiPostingRequest,
@@ -6834,10 +7042,19 @@ function renderAccessSummary(access?: AccessEntitlements) {
     .sort((left, right) => left.getTime() - right.getTime())[0];
   if (accessResetMessage) {
     const timezone = currentExtensionAccess?.user.timezone ?? "UTC";
-    accessResetMessage.hidden = access.tier === "pro";
-    accessResetMessage.textContent = nextReset
-      ? `Daily limits reset at midnight (${timezone}). Your allowance resets ${formatAccessResetTime(nextReset.toISOString())}.`
-      : `Daily limits reset at midnight (${timezone}).`;
+    if (access.tier === "pro") {
+      accessResetMessage.hidden = false;
+      accessResetMessage.textContent = access.pro_lifetime
+        ? "Lifetime Pro access."
+        : access.pro_expires_at
+          ? `Pro access expires ${formatAccessResetTime(access.pro_expires_at)}.`
+          : "Pro access.";
+    } else {
+      accessResetMessage.hidden = false;
+      accessResetMessage.textContent = nextReset
+        ? `Daily limits reset at midnight (${timezone}). Your allowance resets ${formatAccessResetTime(nextReset.toISOString())}.`
+        : `Daily limits reset at midnight (${timezone}).`;
+    }
   }
 }
 
@@ -6914,7 +7131,7 @@ function updateExtensionAccessUi() {
       }
       if (maxPostsNote) {
         maxPostsNote.textContent =
-          "Failed attempts do not count. The queue stops after this many successful posts, cycling through the selected groups again when needed.";
+          "Published posts and posts waiting for approval count. Failed attempts do not. The queue cycles through selected Groups again when needed.";
       }
     }
   }
@@ -8227,7 +8444,7 @@ function resetPostingProgress(total: number, successTarget?: number) {
 
   if (postingProgressTitle) {
     postingProgressTitle.textContent = successTarget
-      ? `0/${successTarget} successful posts`
+      ? `0/${successTarget} accepted submissions`
       : `0/${total} groups processed`;
   }
 
@@ -8241,6 +8458,10 @@ function resetPostingProgress(total: number, successTarget?: number) {
 
   if (postingProgressSuccess) {
     postingProgressSuccess.textContent = "0";
+  }
+
+  if (postingProgressPending) {
+    postingProgressPending.textContent = "0";
   }
 
   if (postingProgressFailed) {
@@ -8262,6 +8483,7 @@ function resetPostingProgress(total: number, successTarget?: number) {
     groupsPostingLogFilter,
     postingProgressPostedFilterButton,
     postingProgressFailedFilterButton,
+    postingProgressPendingFilterButton,
   );
 }
 

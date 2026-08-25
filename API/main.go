@@ -25,6 +25,14 @@ func main() {
 		utils.Errorf("GOOGLE_OAUTH_CLIENT_ID is required")
 		return
 	}
+	if len(strings.TrimSpace(config.AdminAPIKey)) < 32 {
+		utils.Errorf("ADMIN_API_KEY must contain at least 32 characters")
+		return
+	}
+	if len(strings.TrimSpace(config.FacebookActorHMACKey)) < 32 {
+		utils.Errorf("FACEBOOK_ACTOR_HMAC_KEY must contain at least 32 characters")
+		return
+	}
 
 	ctx := context.Background()
 	pool, err := postgres.NewPoolFromConfig(ctx, config)

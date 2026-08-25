@@ -103,6 +103,7 @@ func (h *APIHandler) AuthenticateGoogle(w http.ResponseWriter, r *http.Request) 
 		utils.WriteError(w, http.StatusInternalServerError, "unable to create user session")
 		return
 	}
+	user = h.refreshExpiredProAccess(r.Context(), user)
 	_ = h.store.DeleteExpiredAuthSessions(r.Context())
 
 	rawToken, tokenHash, err := newSessionToken()
@@ -157,6 +158,7 @@ func (h *APIHandler) RequireAuthenticatedUser(next http.Handler) http.Handler {
 			utils.WriteError(w, http.StatusUnauthorized, "user account is unavailable")
 			return
 		}
+		user = h.refreshExpiredProAccess(r.Context(), user)
 		_ = h.store.TouchAuthSession(r.Context(), session.ID)
 		ctx := context.WithValue(r.Context(), currentUserContextKey, user)
 		ctx = context.WithValue(ctx, currentSessionHashContextKey, tokenHash)
@@ -282,9 +284,32 @@ func userResponse(user db.User) authenticatedUserResponse {
 		EmailVerified: user.EmailVerified,
 		DisplayName:   textString(user.DisplayName),
 		AvatarURL:     textString(user.AvatarUrl),
-		AccessTier:    normalizedAccessTier(user.AccessTier),
+		AccessTier:    effectiveAccessTier(user, time.Now()),
 		Timezone:      normalizeUserTimezone(user.Timezone),
 	}
+}
+
+func (h *APIHandler) refreshExpiredProAccess(ctx context.Context, user db.User) db.User {
+	if normalizedAccessTier(user.AccessTier) != accessTierPro ||
+		effectiveAccessTier(user, time.Now()) == accessTierPro {
+		return user
+	}
+	updated, err := h.store.ExpireProAccess(ctx, user.ID)
+	if err == nil {
+		return updated
+	}
+	if errors.Is(err, pgx.ErrNoRows) {
+		if current, loadErr := h.store.GetUserByID(ctx, user.ID); loadErr == nil {
+			return current
+		}
+	}
+	utils.Errorf("expire Pro access: %v", err)
+	// Enforcement must not depend on the cleanup write succeeding.
+	user.AccessTier = accessTierFree
+	user.ProExpiresAt = pgtype.Timestamptz{}
+	user.ProGrantedAt = pgtype.Timestamptz{}
+	user.ProGrantNote = pgtype.Text{}
+	return user
 }
 
 func normalizeUserTimezone(value string) string {

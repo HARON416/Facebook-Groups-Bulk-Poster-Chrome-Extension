@@ -2,12 +2,16 @@ package handlers
 
 import (
 	"context"
+	"crypto/hmac"
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
 	"net/http"
 	"strings"
 	"time"
 
 	"facebook-groups-bulk-poster-api/internal/db"
+	"facebook-groups-bulk-poster-api/internal/entitlements"
 	"facebook-groups-bulk-poster-api/utils"
 
 	"github.com/jackc/pgx/v5"
@@ -25,8 +29,10 @@ const (
 )
 
 var (
-	errSavedGroupPostLimit = errors.New("saved Group posts limit reached")
-	errSavedListingLimit   = errors.New("saved Marketplace listings limit reached")
+	errSavedGroupPostLimit              = errors.New("saved Group posts limit reached")
+	errSavedListingLimit                = errors.New("saved Marketplace listings limit reached")
+	errFacebookAccountAlreadyLinked     = errors.New("Facebook account is already linked to another Free account")
+	errFreeAccountFacebookBindingLocked = errors.New("Free account is already linked to another Facebook account")
 )
 
 type accessLimitsResponse struct {
@@ -49,16 +55,19 @@ type accessResetResponse struct {
 }
 
 type accessEntitlementsResponse struct {
-	Tier      string               `json:"tier"`
-	Limits    accessLimitsResponse `json:"limits"`
-	Usage     accessUsageResponse  `json:"usage"`
-	Remaining accessLimitsResponse `json:"remaining"`
-	ResetAt   accessResetResponse  `json:"reset_at"`
+	Tier         string               `json:"tier"`
+	ProExpiresAt *time.Time           `json:"pro_expires_at,omitempty"`
+	ProLifetime  bool                 `json:"pro_lifetime,omitempty"`
+	Limits       accessLimitsResponse `json:"limits"`
+	Usage        accessUsageResponse  `json:"usage"`
+	Remaining    accessLimitsResponse `json:"remaining"`
+	ResetAt      accessResetResponse  `json:"reset_at"`
 }
 
 type postingUsagePayload struct {
-	Kind        string `json:"kind"`
-	OperationID string `json:"operation_id"`
+	Kind            string `json:"kind"`
+	OperationID     string `json:"operation_id"`
+	FacebookActorID string `json:"facebook_actor_id,omitempty"`
 }
 
 type postingUsageResponse struct {
@@ -77,6 +86,12 @@ type accessLimitErrorResponse struct {
 	Remaining int64                       `json:"remaining"`
 	ResetAt   *time.Time                  `json:"reset_at,omitempty"`
 	Access    *accessEntitlementsResponse `json:"access,omitempty"`
+}
+
+type facebookBindingStore interface {
+	GetFacebookAccountBindingByUser(context.Context, pgtype.UUID) (db.FacebookAccountBinding, error)
+	BindFacebookAccountByActorHash(context.Context, db.BindFacebookAccountByActorHashParams) (db.FacebookAccountBinding, error)
+	TouchFacebookAccountBinding(context.Context, pgtype.UUID) (db.FacebookAccountBinding, error)
 }
 
 func (h *APIHandler) accessEntitlements(ctx context.Context, user db.User) (accessEntitlementsResponse, error) {
@@ -109,7 +124,7 @@ func (h *APIHandler) accessEntitlements(ctx context.Context, user db.User) (acce
 	}
 
 	response := accessEntitlementsResponse{
-		Tier: normalizedAccessTier(user.AccessTier),
+		Tier: effectiveAccessTier(user, time.Now()),
 		Usage: accessUsageResponse{
 			SavedGroupPosts: groupPosts,
 			SavedListings:   listings,
@@ -122,6 +137,8 @@ func (h *APIHandler) accessEntitlements(ctx context.Context, user db.User) (acce
 		},
 	}
 	if response.Tier == accessTierPro {
+		response.ProExpiresAt = timestamptzPointer(user.ProExpiresAt)
+		response.ProLifetime = !user.ProExpiresAt.Valid
 		return response, nil
 	}
 
@@ -159,12 +176,35 @@ func (h *APIHandler) ClaimPostingUsage(w http.ResponseWriter, r *http.Request) {
 		utils.WriteError(w, http.StatusUnauthorized, "user account is unavailable")
 		return
 	}
-	if normalizedAccessTier(lockedUser.AccessTier) == accessTierPro {
+	if effectiveAccessTier(lockedUser, time.Now()) == accessTierPro {
 		if err := tx.Commit(r.Context()); err != nil {
 			utils.WriteError(w, http.StatusInternalServerError, "unable to reserve posting allowance")
 			return
 		}
 		h.writePostingUsageResponse(w, r, lockedUser, payload, "unlimited", true)
+		return
+	}
+	facebookActorID := normalizeFacebookActorID(payload.FacebookActorID)
+	if facebookActorID == "" {
+		utils.WriteError(w, http.StatusBadRequest, "a valid Facebook account is required to publish")
+		return
+	}
+	facebookBinding, err := h.resolveFacebookAccountBinding(r.Context(), queries, lockedUser, facebookActorID)
+	if err != nil {
+		switch {
+		case errors.Is(err, errFacebookAccountAlreadyLinked):
+			utils.WriteJSON(w, http.StatusConflict, map[string]any{
+				"error": "This Facebook account is already connected to another Free KundiPost account. Sign in with the original Google account or contact support.",
+				"code":  "facebook_account_already_linked",
+			})
+		case errors.Is(err, errFreeAccountFacebookBindingLocked):
+			utils.WriteJSON(w, http.StatusConflict, map[string]any{
+				"error": "This Free KundiPost account is already connected to another Facebook account. Sign back in to the original Facebook account or contact support.",
+				"code":  "free_account_facebook_binding_locked",
+			})
+		default:
+			utils.WriteError(w, http.StatusInternalServerError, "unable to verify the Facebook account binding")
+		}
 		return
 	}
 
@@ -203,22 +243,36 @@ func (h *APIHandler) ClaimPostingUsage(w http.ResponseWriter, r *http.Request) {
 		utils.WriteError(w, http.StatusInternalServerError, "unable to check posting allowance")
 		return
 	}
-	if summary.Used >= freeDailyPostingLimit {
+	facebookSummary, err := queries.GetFacebookPostingUsageSummary(r.Context(), db.GetFacebookPostingUsageSummaryParams{
+		FacebookAccountBindingID: facebookBinding.ID,
+		Kind:                     payload.Kind,
+		WindowStart:              timestamptz(window.Start),
+		WindowEnd:                timestamptz(window.End),
+	})
+	if err != nil {
+		utils.WriteError(w, http.StatusInternalServerError, "unable to check Facebook account allowance")
+		return
+	}
+	used := dualIdentityUsage(summary.Used, facebookSummary.Used)
+	if used >= freeDailyPostingLimit {
 		utils.WriteJSON(w, http.StatusTooManyRequests, accessLimitErrorResponse{
 			Error:     postingLimitMessage(payload.Kind),
 			Code:      "daily_posting_limit_reached",
 			Limit:     freeDailyPostingLimit,
-			Used:      summary.Used,
+			Used:      used,
 			Remaining: 0,
-			ResetAt:   timestamptzPointer(summary.ResetAt),
+			ResetAt:   timestamptzPointer(facebookSummary.ResetAt),
 		})
 		return
 	}
 
 	_, err = queries.CreatePostingUsageClaim(r.Context(), db.CreatePostingUsageClaimParams{
-		UserID: user.ID, Kind: payload.Kind, OperationID: operationID,
-		ClaimedAt: timestamptz(claimTime),
-		ExpiresAt: timestamptz(window.End),
+		UserID:                   user.ID,
+		FacebookAccountBindingID: facebookBinding.ID,
+		Kind:                     payload.Kind,
+		OperationID:              operationID,
+		ClaimedAt:                timestamptz(claimTime),
+		ExpiresAt:                timestamptz(window.End),
 	})
 	if err != nil {
 		utils.WriteError(w, http.StatusInternalServerError, "unable to reserve posting allowance")
@@ -229,6 +283,58 @@ func (h *APIHandler) ClaimPostingUsage(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	h.writePostingUsageResponse(w, r, lockedUser, payload, "claimed", false)
+}
+
+func (h *APIHandler) resolveFacebookAccountBinding(ctx context.Context, queries facebookBindingStore, user db.User, actorID string) (db.FacebookAccountBinding, error) {
+	actorHash := hashFacebookActorID(h.config.FacebookActorHMACKey, actorID)
+	existing, err := queries.GetFacebookAccountBindingByUser(ctx, user.ID)
+	if err == nil {
+		if !hmac.Equal([]byte(existing.ActorHash), []byte(actorHash)) {
+			return db.FacebookAccountBinding{}, errFreeAccountFacebookBindingLocked
+		}
+		return queries.TouchFacebookAccountBinding(ctx, existing.ID)
+	}
+	if !errors.Is(err, pgx.ErrNoRows) {
+		return db.FacebookAccountBinding{}, err
+	}
+
+	binding, err := queries.BindFacebookAccountByActorHash(ctx, db.BindFacebookAccountByActorHashParams{
+		UserID:    user.ID,
+		ActorHash: actorHash,
+	})
+	if err != nil {
+		return db.FacebookAccountBinding{}, err
+	}
+	if binding.UserID != user.ID {
+		return db.FacebookAccountBinding{}, errFacebookAccountAlreadyLinked
+	}
+	return binding, nil
+}
+
+func normalizeFacebookActorID(value string) string {
+	value = strings.TrimSpace(value)
+	if len(value) < 5 || len(value) > 32 {
+		return ""
+	}
+	for _, character := range value {
+		if character < '0' || character > '9' {
+			return ""
+		}
+	}
+	return value
+}
+
+func hashFacebookActorID(secret, actorID string) string {
+	digest := hmac.New(sha256.New, []byte(strings.TrimSpace(secret)))
+	_, _ = digest.Write([]byte(actorID))
+	return hex.EncodeToString(digest.Sum(nil))
+}
+
+func dualIdentityUsage(googleUsage, facebookUsage int64) int64 {
+	if googleUsage >= facebookUsage {
+		return googleUsage
+	}
+	return facebookUsage
 }
 
 func (h *APIHandler) CompletePostingUsage(w http.ResponseWriter, r *http.Request) {
@@ -245,7 +351,7 @@ func (h *APIHandler) transitionPostingUsage(w http.ResponseWriter, r *http.Reque
 	if !ok {
 		return
 	}
-	if normalizedAccessTier(user.AccessTier) == accessTierPro {
+	if effectiveAccessTier(user, time.Now()) == accessTierPro {
 		h.writePostingUsageResponse(w, r, user, payload, "unlimited", true)
 		return
 	}
@@ -328,10 +434,16 @@ func decodePostingUsagePayload(w http.ResponseWriter, r *http.Request) (postingU
 }
 
 func normalizedAccessTier(value string) string {
-	if strings.EqualFold(strings.TrimSpace(value), accessTierPro) {
-		return accessTierPro
-	}
-	return accessTierFree
+	return entitlements.NormalizeTier(value)
+}
+
+func effectiveAccessTier(user db.User, now time.Time) string {
+	return entitlements.EffectiveTier(
+		user.AccessTier,
+		user.ProExpiresAt.Time,
+		user.ProExpiresAt.Valid,
+		now,
+	)
 }
 
 func remainingLimit(limit, used int64) int64 {
@@ -399,7 +511,7 @@ func (h *APIHandler) createGroupPostWithinAccess(ctx context.Context, user db.Us
 	if err != nil {
 		return db.GroupPost{}, err
 	}
-	if normalizedAccessTier(lockedUser.AccessTier) == accessTierFree {
+	if effectiveAccessTier(lockedUser, time.Now()) == accessTierFree {
 		count, err := queries.CountGroupPostsByUser(ctx, user.ID)
 		if err != nil {
 			return db.GroupPost{}, err
@@ -429,7 +541,7 @@ func (h *APIHandler) createMarketplaceListingWithinAccess(ctx context.Context, u
 	if err != nil {
 		return db.MarketplaceListing{}, err
 	}
-	if normalizedAccessTier(lockedUser.AccessTier) == accessTierFree {
+	if effectiveAccessTier(lockedUser, time.Now()) == accessTierFree {
 		count, err := queries.CountMarketplaceListingsByUser(ctx, user.ID)
 		if err != nil {
 			return db.MarketplaceListing{}, err

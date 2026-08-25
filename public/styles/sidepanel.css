@@ -98,6 +98,10 @@ body.marketplace-audience-choice-open {
   overflow: hidden;
 }
 
+body.group-posting-strategy-choice-open {
+  overflow: hidden;
+}
+
 .toast-region {
   position: fixed;
   z-index: 10000;
@@ -300,6 +304,15 @@ input[type="password"] {
 .access-summary__reset {
   color: rgba(16, 35, 59, 0.88);
   font-size: 1.15rem;
+  font-weight: 600;
+}
+
+.access-summary__binding {
+  margin-top: 0.2rem;
+  padding-top: 0.8rem;
+  border-top: 0.1rem solid rgba(16, 35, 59, 0.14);
+  color: rgba(16, 35, 59, 0.82);
+  font-size: 1.12rem;
   font-weight: 600;
 }
 
@@ -885,9 +898,9 @@ input[type="password"] {
 }
 
 .marketplace-progress-card {
-  height: clamp(34rem, 50dvh, 56rem);
+  height: clamp(52rem, 70dvh, 78rem);
   min-height: 0;
-  max-height: 56rem;
+  max-height: 78rem;
   border-left-color: var(--primary);
   overflow: hidden;
 }
@@ -1226,6 +1239,27 @@ input[type="password"] {
 
 .marketplace-audience-choice__actions
   .marketplace-audience-choice__with-groups {
+  border-color: var(--primary);
+  background: var(--primary);
+  color: #ffffff;
+}
+
+.group-posting-strategy-choice__dialog {
+  border-top-color: var(--primary);
+}
+
+.group-posting-strategy-choice__actions {
+  grid-template-columns: 1fr;
+}
+
+.group-posting-strategy-choice__actions
+  .group-posting-strategy-choice__selected-order {
+  border-color: var(--primary);
+  color: var(--primary-dark);
+}
+
+.group-posting-strategy-choice__actions
+  .group-posting-strategy-choice__balanced {
   border-color: var(--primary);
   background: var(--primary);
   color: #ffffff;
@@ -3290,9 +3324,9 @@ textarea:focus,
 .posting-progress {
   display: flex;
   width: 100%;
-  height: clamp(34rem, 50dvh, 56rem);
+  height: clamp(52rem, 70dvh, 78rem);
   min-height: 0;
-  max-height: 56rem;
+  max-height: 78rem;
   flex-direction: column;
   gap: 1.2rem;
   border: 0.1rem solid var(--border);
@@ -3357,6 +3391,10 @@ textarea:focus,
   gap: 0.8rem;
 }
 
+#posting-progress .posting-progress__stats {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
 .posting-progress__stats > span,
 .posting-progress__stats > button {
   border: 0.1rem solid var(--border);
@@ -3399,6 +3437,12 @@ textarea:focus,
   box-shadow: inset 0 -0.3rem 0 var(--error);
 }
 
+#posting-progress-filter-pending[aria-pressed="true"] {
+  border-color: var(--warning);
+  background: var(--warning-soft);
+  box-shadow: inset 0 -0.3rem 0 var(--warning);
+}
+
 .posting-progress__stats strong {
   display: block;
   color: var(--text);
@@ -3415,7 +3459,7 @@ textarea:focus,
 
 .posting-progress__log {
   display: flex;
-  min-height: 0;
+  min-height: 20rem;
   max-height: none;
   flex: 1 1 auto;
   flex-direction: column;
@@ -3430,7 +3474,7 @@ textarea:focus,
 
 .posting-progress__log li {
   display: grid;
-  grid-template-columns: auto minmax(0, 1fr);
+  grid-template-columns: auto minmax(0, 1fr) auto;
   align-items: start;
   gap: 0.85rem;
   border: 0.1rem solid var(--border);
@@ -3441,6 +3485,32 @@ textarea:focus,
   font-size: 1.18rem;
   line-height: 1.45;
   padding: 0.85rem 0.9rem;
+}
+
+.posting-progress__copy-response {
+  display: inline-flex;
+  width: 3.2rem;
+  height: 3.2rem;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border: 0.1rem solid currentColor;
+  border-radius: var(--radius-md);
+  background: rgba(255, 255, 255, 0.72);
+  color: var(--error);
+  cursor: pointer;
+}
+
+.posting-progress__copy-response:hover,
+.posting-progress__copy-response:focus-visible {
+  background: #fff;
+  outline: 0.2rem solid var(--error);
+  outline-offset: 0.1rem;
+}
+
+.posting-progress__copy-response svg {
+  width: 1.8rem;
+  height: 1.8rem;
 }
 
 .posting-progress__log-badge {
@@ -3471,6 +3541,13 @@ textarea:focus,
   overflow-wrap: anywhere;
 }
 
+.posting-progress__log-detail {
+  color: var(--text);
+  font-size: 1.2rem;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+
 .posting-progress__log-meta {
   color: var(--text-muted);
   font-size: 1.08rem;
@@ -3491,6 +3568,12 @@ textarea:focus,
 }
 
 .posting-progress__log li[data-status="waiting"] {
+  border-color: rgba(199, 106, 0, 0.22);
+  border-left-color: var(--warning);
+  background: var(--warning-soft);
+}
+
+.posting-progress__log li[data-status="pending"] {
   border-color: rgba(199, 106, 0, 0.22);
   border-left-color: var(--warning);
   background: var(--warning-soft);
@@ -3532,6 +3615,11 @@ textarea:focus,
 }
 
 .posting-progress__log li[data-status="waiting"] .posting-progress__log-badge {
+  background: var(--warning-soft);
+  color: var(--warning);
+}
+
+.posting-progress__log li[data-status="pending"] .posting-progress__log-badge {
   background: var(--warning-soft);
   color: var(--warning);
 }

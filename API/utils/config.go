@@ -13,6 +13,8 @@ type Config struct {
 	DatabaseURL           string `mapstructure:"DATABASE_URL"`
 	Port                  string `mapstructure:"PORT"`
 	GoogleOAuthClientID   string `mapstructure:"GOOGLE_OAUTH_CLIENT_ID"`
+	AdminAPIKey           string `mapstructure:"ADMIN_API_KEY"`
+	FacebookActorHMACKey  string `mapstructure:"FACEBOOK_ACTOR_HMAC_KEY"`
 	BunnyStorageZone      string `mapstructure:"BUNNY_STORAGE_ZONE"`
 	BunnyStorageEndpoint  string `mapstructure:"BUNNY_STORAGE_ENDPOINT"`
 	BunnyPublicBaseURL    string `mapstructure:"BUNNY_PUBLIC_BASE_URL"`
@@ -53,11 +55,13 @@ func LoadConfig(path string) (Config, error) {
 
 func (c Config) Summary() string {
 	return fmt.Sprintf(
-		"config=%s database_url=%t port=%t google_oauth_client_id=%t bunny_storage=%t",
+		"config=%s database_url=%t port=%t google_oauth_client_id=%t admin_api_key=%t facebook_actor_hmac_key=%t bunny_storage=%t",
 		c.ConfigFile,
 		hasValue(c.DatabaseURL),
 		hasValue(c.Port),
 		hasValue(c.GoogleOAuthClientID),
+		hasValue(c.AdminAPIKey),
+		hasValue(c.FacebookActorHMACKey),
 		hasValue(c.BunnyStorageZone) &&
 			hasValue(c.BunnyStorageEndpoint) &&
 			hasValue(c.BunnyPublicBaseURL) &&

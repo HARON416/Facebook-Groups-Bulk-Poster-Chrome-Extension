@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "name": "KundiPost – Groups & Marketplace",
   "short_name": "KUNDIPOST",
-  "version": "1.6.5",
+  "version": "1.6.29",
   "description": "Bulk post to Facebook Groups and Marketplace using reusable posts and listings, paced queues, optional AI rewriting, and cleanup.",
   "icons": {
     "48": "images/icon-48.png",
@@ -33,7 +33,8 @@
     "default_path": "sidepanel.html"
   },
   "host_permissions": [
-    "https://api.facebook-groups-bulk-poster.softwrhq.com/*",
+    "http://localhost/*",
+    "http://127.0.0.1/*",
     "https://*.b-cdn.net/*",
     "https://generativelanguage.googleapis.com/*",
     "https://www.facebook.com/*",

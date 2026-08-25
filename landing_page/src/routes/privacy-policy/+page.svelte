@@ -10,7 +10,7 @@
 	<article class="legal-card">
 		<p class="legal-card__eyebrow">Legal</p>
 		<h1>Privacy Policy</h1>
-		<p class="legal-card__updated">Last updated: August 23, 2026</p>
+		<p class="legal-card__updated">Last updated: August 25, 2026</p>
 
 		<div class="legal-copy">
 			<h2>1. What KundiPost Is</h2>
@@ -44,8 +44,15 @@
 				<li>Email address and email-verification status.</li>
 				<li>Display name and profile image URL when Google provides them.</li>
 				<li>The browser timezone supplied during the first sign-in.</li>
-				<li>Your KundiPost access tier, such as Free or Pro.</li>
+				<li>
+					Your KundiPost access tier, such as Free or Pro, and any temporary Pro grant and
+					expiration details.
+				</li>
 			</ul>
+			<p>
+				Temporary Pro access lasts for the granted number of consecutive 24-hour periods, measured
+				from the exact grant time. Lifetime Pro access has no scheduled expiration.
+			</p>
 			<p>
 				The Google access token is used to complete authentication and is not stored in the
 				KundiPost database. After successful sign-in, KundiPost issues a separate application
@@ -100,6 +107,10 @@
 				</li>
 				<li>The post text and images you select for a Group publishing queue.</li>
 				<li>
+					For Group balance history, the selected Group identifiers and the latest known name of
+					each Group that accepts a post.
+				</li>
+				<li>
 					Facebook request URLs, headers, request bodies, form fields, and response data needed to
 					load Groups and carry out the posting queue you started.
 				</li>
@@ -111,15 +122,36 @@
 					deletion-request data needed for the cleanup you confirmed.
 				</li>
 				<li>
-					Facebook cookie names and request-cookie availability used for local diagnostics. The
-					extension does not send Facebook cookie values to the KundiPost server.
+					Facebook cookie names and request-cookie availability used for local diagnostics. For a
+					publishing workflow, the extension also reads the numeric <code>c_user</code>
+					Facebook account identifier and sends that identifier to the KundiPost server for Free-tier
+					binding and per-Facebook-account Group balance history. It does not send other Facebook cookie
+					values.
 				</li>
 			</ul>
 			<p>
 				This Facebook workflow information and captured request templates are processed inside the
-				browser and sent to Facebook to perform the action you requested. KundiPost does not store
-				Facebook passwords, Facebook cookies, or captured Facebook request templates in its server
-				database.
+				browser and sent to Facebook to perform the action you requested. The server converts the
+				numeric Facebook account identifier into a keyed HMAC for Free-tier binding and Group
+				balance history and does not store the raw identifier. KundiPost does not store Facebook
+				passwords, other Facebook cookie values, or captured Facebook request templates in its
+				server database.
+			</p>
+			<p>
+				When a Group post fails, KundiPost may temporarily display Facebook's response body in the
+				current activity log so you can copy it for troubleshooting. The response remains in the
+				current extension session, is not uploaded to the KundiPost server, and is copied only when
+				you press the copy button.
+			</p>
+			<p>
+				When you choose Balanced posting, the extension sends the selected Group identifiers and
+				latest names, accepted-post target, active Facebook account identifier, Groups that
+				genuinely failed during the current queue, and starter-incompatible Groups remembered for
+				the current browser session to the supporting KundiPost server. The server converts the
+				Facebook identifier to a keyed HMAC, compares the selected Groups with stored lifetime
+				counts, and returns an ordered posting plan. Merely including a Group in a plan does not
+				create or increment its stored statistic; that happens only after Facebook accepts a post as
+				published or pending approval.
 			</p>
 			<p>
 				Saved post and listing content is stored by KundiPost as described above. Content published
@@ -138,6 +170,12 @@
 				<li>
 					Loaded Group information, selected Group identifiers, Group search text, and display
 					preferences.
+				</li>
+				<li>
+					During the current browser session, a SHA-256 key representing the active Facebook account
+					and Group identifiers that could not initialize the first visible composer, so the current
+					or a later Balanced or selected-order queue can automatically choose another starter
+					Group.
 				</li>
 				<li>
 					Group and Marketplace queue intervals, successful-post targets, shuffle settings, and
@@ -167,23 +205,40 @@
 				rewriting is disabled, unavailable, or unsuccessful, KundiPost uses the original content.
 			</p>
 
-			<h2>8. Access-Tier and Daily-Usage Records</h2>
+			<h2>8. Access-Tier, Daily-Usage, and Group-Balance Records</h2>
 			<p>
 				KundiPost stores your access tier and counts saved Group posts and Marketplace listings to
 				enforce Free-account storage limits. Immediately before a Facebook publishing action, the
 				extension requests a usage reservation from the supporting server. For Free accounts, the
-				server stores:
+				first publishing claim creates a one-to-one binding between the signed-in Google account and
+				the Facebook account active in Chrome. The same Free Google account cannot switch to another
+				Facebook account, and the same Facebook account cannot obtain another Free allowance through
+				a different Google account. The server stores:
 			</p>
 			<ul>
+				<li>A keyed HMAC of the numeric Facebook account identifier, not the raw identifier.</li>
 				<li>Whether the operation is a Group post or Marketplace listing.</li>
 				<li>A randomly generated operation identifier.</li>
 				<li>Whether the operation was claimed, succeeded, or released after a known failure.</li>
 				<li>Claim, success, release, and daily-expiry times as applicable.</li>
+				<li>
+					For accepted Group posts, the Group identifier, latest known Group name, lifetime
+					accepted-post count, last accepted time, and an operation identifier used to prevent a
+					retried request from incrementing the count twice.
+				</li>
 			</ul>
 			<p>
-				These records enforce the current calendar-day allowance in the account timezone. Saved
-				drafts do not count as publications. Only successful publications and active reservations
-				count toward the displayed daily usage; a known failed attempt is released.
+				These records enforce the current calendar-day allowance against both the Google account and
+				the bound Facebook account inside a database transaction. Saved drafts do not count as
+				publications. Facebook-accepted Group submissions, including posts awaiting administrator
+				approval, successful Marketplace publications, and active reservations count toward the
+				displayed daily usage; a confirmed failed attempt is released.
+			</p>
+			<p>
+				Published Group posts and posts awaiting administrator approval increment the lifetime
+				Group-balance count. Confirmed failures do not. This count does not impose a posting limit
+				and does not reset; it is used only when you choose Balanced posting to prioritize selected
+				Groups with fewer accepted posts. You can instead choose the normal selected-order workflow.
 			</p>
 
 			<h2>9. Server Logs</h2>
@@ -241,9 +296,9 @@
 					remain until routine server cleanup removes them.
 				</li>
 				<li>
-					Account, access-tier, usage, and operational records remain while needed to provide the
-					account, enforce limits, address security or abuse, resolve disputes, or meet legal
-					requirements.
+					Account, hashed Facebook-account binding, Group-balance history, access-tier, usage, and
+					operational records remain while needed to provide the account, enforce limits, address
+					security or abuse, resolve disputes, or meet legal requirements.
 				</li>
 			</ul>
 			<p>

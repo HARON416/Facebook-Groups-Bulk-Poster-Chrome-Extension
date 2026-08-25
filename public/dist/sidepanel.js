@@ -1,7 +1,7 @@
 "use strict";
 (() => {
   // src/auth-config.ts
-  var AUTH_API_BASE_URL = "https://api.facebook-groups-bulk-poster.softwrhq.com";
+  var AUTH_API_BASE_URL = "http://localhost:4000";
 
   // src/sidepanel.ts
   var GEMINI_API_KEY_STORAGE_KEY = "geminiApiKey";
@@ -667,6 +667,9 @@
   var postingProgressSuccess = document.querySelector(
     "#posting-progress-success"
   );
+  var postingProgressPending = document.querySelector(
+    "#posting-progress-pending"
+  );
   var postingProgressFailed = document.querySelector(
     "#posting-progress-failed"
   );
@@ -680,6 +683,7 @@
     "#posting-progress-log"
   );
   var postingProgressPostedFilterButton = document.querySelector("#posting-progress-filter-posted");
+  var postingProgressPendingFilterButton = document.querySelector("#posting-progress-filter-pending");
   var postingProgressFailedFilterButton = document.querySelector("#posting-progress-filter-failed");
   var authLoginButton = document.querySelector("#auth-login-btn");
   var authLogoutButton = document.querySelector("#auth-logout-btn");
@@ -706,6 +710,21 @@
   );
   var deleteConfirmationConfirm = document.querySelector(
     "#delete-confirmation-confirm"
+  );
+  var groupPostingStrategyChoice = document.querySelector(
+    "#group-posting-strategy-choice"
+  );
+  var groupPostingStrategyChoiceBackdrop = document.querySelector(
+    "#group-posting-strategy-choice-backdrop"
+  );
+  var groupPostingStrategyChoiceCancel = document.querySelector(
+    "#group-posting-strategy-choice-cancel"
+  );
+  var groupPostingStrategyChoiceSelectedOrder = document.querySelector(
+    "#group-posting-strategy-choice-selected-order"
+  );
+  var groupPostingStrategyChoiceBalanced = document.querySelector(
+    "#group-posting-strategy-choice-balanced"
   );
   var marketplaceAudienceChoice = document.querySelector(
     "#marketplace-audience-choice"
@@ -843,6 +862,8 @@
   var deleteConfirmationReturnFocus;
   var marketplaceAudienceChoiceResolver;
   var marketplaceAudienceChoiceReturnFocus;
+  var groupPostingStrategyChoiceResolver;
+  var groupPostingStrategyChoiceReturnFocus;
   var currentExtensionAccess;
   var currentGoogleAccessToken;
   if (marketplaceSavedListingsCard && marketplacePostingPreferencesCard) {
@@ -865,6 +886,7 @@
   configureMarketplaceVehicleTypeField();
   initializePasteNormalization();
   initializeDeleteConfirmation();
+  initializeGroupPostingStrategyChoice();
   initializeMarketplaceAudienceChoice();
   async function initializeApplication() {
     await initializeSidePanelSession();
@@ -979,6 +1001,78 @@
     }
     document.body.classList.remove("delete-confirmation-open");
     resolve(confirmed);
+    returnFocus?.focus();
+  }
+  function initializeGroupPostingStrategyChoice() {
+    groupPostingStrategyChoiceCancel?.addEventListener("click", () => {
+      closeGroupPostingStrategyChoice(void 0);
+    });
+    groupPostingStrategyChoiceBackdrop?.addEventListener("click", () => {
+      closeGroupPostingStrategyChoice(void 0);
+    });
+    groupPostingStrategyChoiceSelectedOrder?.addEventListener("click", () => {
+      closeGroupPostingStrategyChoice("selected_order");
+    });
+    groupPostingStrategyChoiceBalanced?.addEventListener("click", () => {
+      closeGroupPostingStrategyChoice("balanced");
+    });
+    groupPostingStrategyChoice?.addEventListener("keydown", (event) => {
+      if (event.key === "Escape") {
+        event.preventDefault();
+        closeGroupPostingStrategyChoice(void 0);
+        return;
+      }
+      if (event.key !== "Tab") {
+        return;
+      }
+      const focusable = [
+        groupPostingStrategyChoiceCancel,
+        groupPostingStrategyChoiceSelectedOrder,
+        groupPostingStrategyChoiceBalanced
+      ].filter((button) => Boolean(button));
+      if (focusable.length === 0) {
+        return;
+      }
+      const currentIndex = focusable.indexOf(
+        document.activeElement
+      );
+      if (event.shiftKey && currentIndex <= 0) {
+        event.preventDefault();
+        focusable[focusable.length - 1]?.focus();
+      } else if (!event.shiftKey && currentIndex === focusable.length - 1) {
+        event.preventDefault();
+        focusable[0]?.focus();
+      }
+    });
+  }
+  function requestGroupPostingStrategyChoice() {
+    if (!groupPostingStrategyChoice || !groupPostingStrategyChoiceSelectedOrder || !groupPostingStrategyChoiceBalanced) {
+      return Promise.resolve(void 0);
+    }
+    if (groupPostingStrategyChoiceResolver) {
+      closeGroupPostingStrategyChoice(void 0);
+    }
+    groupPostingStrategyChoiceReturnFocus = document.activeElement instanceof HTMLElement ? document.activeElement : void 0;
+    groupPostingStrategyChoice.hidden = false;
+    document.body.classList.add("group-posting-strategy-choice-open");
+    groupPostingStrategyChoiceBalanced.focus();
+    return new Promise((resolve) => {
+      groupPostingStrategyChoiceResolver = resolve;
+    });
+  }
+  function closeGroupPostingStrategyChoice(strategy) {
+    if (!groupPostingStrategyChoiceResolver) {
+      return;
+    }
+    const resolve = groupPostingStrategyChoiceResolver;
+    const returnFocus = groupPostingStrategyChoiceReturnFocus;
+    groupPostingStrategyChoiceResolver = void 0;
+    groupPostingStrategyChoiceReturnFocus = void 0;
+    if (groupPostingStrategyChoice) {
+      groupPostingStrategyChoice.hidden = true;
+    }
+    document.body.classList.remove("group-posting-strategy-choice-open");
+    resolve(strategy);
     returnFocus?.focus();
   }
   function initializeMarketplaceAudienceChoice() {
@@ -3937,6 +4031,51 @@
     item.replaceChildren(badge, body);
     if (!updatable) marketplaceCleanupLog.prepend(item);
   }
+  function createFacebookResponseCopyButton(responseBody) {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "posting-progress__copy-response";
+    button.title = "Copy Facebook failure response";
+    button.setAttribute("aria-label", "Copy Facebook failure response");
+    const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+    svg.setAttribute("width", "32");
+    svg.setAttribute("height", "32");
+    svg.setAttribute("fill", "currentColor");
+    svg.setAttribute("viewBox", "0 0 256 256");
+    svg.setAttribute("aria-hidden", "true");
+    const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
+    path.setAttribute(
+      "d",
+      "M216,32H88a8,8,0,0,0-8,8V80H40a8,8,0,0,0-8,8V216a8,8,0,0,0,8,8H168a8,8,0,0,0,8-8V176h40a8,8,0,0,0,8-8V40A8,8,0,0,0,216,32ZM160,208H48V96H160Zm48-48H176V88a8,8,0,0,0-8-8H96V48H208Z"
+    );
+    svg.append(path);
+    button.append(svg);
+    button.addEventListener("click", async () => {
+      if (await copyTextToClipboard(responseBody)) {
+        showToast("Facebook failure response copied.", "success");
+      } else {
+        showToast("Unable to copy the Facebook response.", "error");
+      }
+    });
+    return button;
+  }
+  async function copyTextToClipboard(value) {
+    try {
+      await navigator.clipboard.writeText(value);
+      return true;
+    } catch {
+      const textarea = document.createElement("textarea");
+      textarea.value = value;
+      textarea.readOnly = true;
+      textarea.style.position = "fixed";
+      textarea.style.opacity = "0";
+      document.body.append(textarea);
+      textarea.select();
+      const copied = document.execCommand("copy");
+      textarea.remove();
+      return copied;
+    }
+  }
   function updateMarketplaceCleanupControls() {
     const rawDays = marketplaceCleanupDaysInput?.value.trim() ?? "";
     const days = Number(rawDays);
@@ -4066,12 +4205,13 @@
         return "Info";
     }
   }
-  function applyPostingLogFilter(log, filter, postedButton, failedButton) {
+  function applyPostingLogFilter(log, filter, postedButton, failedButton, pendingButton) {
     postedButton?.setAttribute("aria-pressed", String(filter === "posted"));
     failedButton?.setAttribute("aria-pressed", String(filter === "failed"));
+    pendingButton?.setAttribute("aria-pressed", String(filter === "pending"));
     log?.querySelectorAll("li[data-status]").forEach((item) => {
       const status = item.dataset.status;
-      item.hidden = filter === "posted" ? status !== "posted" : filter === "failed" ? status !== "failed" && status !== "rate_limited" : false;
+      item.hidden = filter === "posted" ? status !== "posted" : filter === "pending" ? status !== "pending" : filter === "failed" ? status !== "failed" && status !== "rate_limited" : false;
     });
   }
   function toggleGroupsPostingLogFilter(filter) {
@@ -4080,7 +4220,8 @@
       postingProgressLog,
       groupsPostingLogFilter,
       postingProgressPostedFilterButton,
-      postingProgressFailedFilterButton
+      postingProgressFailedFilterButton,
+      postingProgressPendingFilterButton
     );
   }
   function toggleMarketplacePostingLogFilter(filter) {
@@ -4093,7 +4234,7 @@
     );
   }
   function updateUiPostingStatus(message) {
-    if (message.status === "posting" || message.status === "waiting" || message.status === "paused" || message.status === "posted" || message.status === "failed") {
+    if (message.status === "posting" || message.status === "waiting" || message.status === "paused" || message.status === "posted" || message.status === "pending" || message.status === "failed") {
       isPostingActive = true;
       isPostingPaused = message.status === "paused";
       if (message.status === "paused") {
@@ -4105,7 +4246,10 @@
       groupsStatusMessage.textContent = message.error ? `${message.message}: ${message.error}` : message.message;
     }
     if (groupsStatusCount) {
-      groupsStatusCount.textContent = message.successTarget !== void 0 ? `${message.successCount ?? 0}/${message.successTarget} successful posts` : `${message.successCount ?? 0}/${message.total} posted`;
+      const acceptedCount = message.successCount ?? 0;
+      const pendingCount = message.pendingCount ?? 0;
+      const postedCount = Math.max(acceptedCount - pendingCount, 0);
+      groupsStatusCount.textContent = message.successTarget !== void 0 ? `${acceptedCount}/${message.successTarget} accepted \xB7 ${postedCount} posted \xB7 ${pendingCount} pending` : `${postedCount} posted \xB7 ${pendingCount} pending`;
     }
     if (message.status === "stopped" || message.status === "done" || message.status === "rate_limited") {
       isPostingActive = false;
@@ -4128,13 +4272,15 @@
       postingProgress.hidden = false;
     }
     const successCount = message.successCount ?? 0;
+    const pendingCount = message.pendingCount ?? 0;
+    const postedCount = Math.max(successCount - pendingCount, 0);
     const failedCount = message.failedCount ?? 0;
     const processedCount = message.processedCount ?? Math.min(message.total, successCount + failedCount);
     const hasSuccessTarget = message.successTarget !== void 0;
     const remainingCount = hasSuccessTarget ? Math.max(message.successTarget - successCount, 0) : Math.max(message.total - processedCount, 0);
     const percent = hasSuccessTarget ? message.successTarget > 0 ? Math.min(Math.round(successCount / message.successTarget * 100), 100) : 0 : message.total > 0 ? Math.round(processedCount / message.total * 100) : 0;
     if (postingProgressTitle) {
-      postingProgressTitle.textContent = hasSuccessTarget ? `${successCount}/${message.successTarget} successful posts` : `${processedCount}/${message.total} groups processed`;
+      postingProgressTitle.textContent = hasSuccessTarget ? `${successCount}/${message.successTarget} accepted submissions` : `${processedCount}/${message.total} groups processed`;
     }
     if (postingProgressPercent) {
       postingProgressPercent.textContent = `${percent}%`;
@@ -4143,7 +4289,10 @@
       postingProgressBar.style.width = `${percent}%`;
     }
     if (postingProgressSuccess) {
-      postingProgressSuccess.textContent = String(successCount);
+      postingProgressSuccess.textContent = String(postedCount);
+    }
+    if (postingProgressPending) {
+      postingProgressPending.textContent = String(pendingCount);
     }
     if (postingProgressFailed) {
       postingProgressFailed.textContent = String(failedCount);
@@ -4182,13 +4331,24 @@
     text.className = "posting-progress__log-text";
     text.textContent = message.message;
     body.append(text);
+    if (message.detail) {
+      const detail = document.createElement("span");
+      detail.className = "posting-progress__log-detail";
+      detail.textContent = message.detail;
+      body.append(detail);
+    }
     if (count || message.error) {
       const meta = document.createElement("span");
       meta.className = "posting-progress__log-meta";
       meta.textContent = [count, message.error].filter(Boolean).join(" \xB7 ");
       body.append(meta);
     }
-    item.replaceChildren(badge, body);
+    const copyResponseButton = message.responseBody ? createFacebookResponseCopyButton(message.responseBody) : void 0;
+    item.replaceChildren(
+      badge,
+      body,
+      ...copyResponseButton ? [copyResponseButton] : []
+    );
     if (!existingUpdatableItem) {
       postingProgressLog.prepend(item);
     }
@@ -4196,13 +4356,16 @@
       postingProgressLog,
       groupsPostingLogFilter,
       postingProgressPostedFilterButton,
-      postingProgressFailedFilterButton
+      postingProgressFailedFilterButton,
+      postingProgressPendingFilterButton
     );
   }
   function getPostingStatusLabel(status) {
     switch (status) {
       case "posted":
         return "Done";
+      case "pending":
+        return "Pending";
       case "failed":
         return "Fail";
       case "rate_limited":
@@ -4869,6 +5032,9 @@
   postingProgressPostedFilterButton?.addEventListener("click", () => {
     toggleGroupsPostingLogFilter("posted");
   });
+  postingProgressPendingFilterButton?.addEventListener("click", () => {
+    toggleGroupsPostingLogFilter("pending");
+  });
   postingProgressFailedFilterButton?.addEventListener("click", () => {
     toggleGroupsPostingLogFilter("failed");
   });
@@ -5145,7 +5311,11 @@
       );
       return;
     }
-    const orderedPostingGroups = shuffleGroupsToggle?.checked ? shuffleItems(selectedGroups) : selectedGroups;
+    const postingStrategy = await requestGroupPostingStrategyChoice();
+    if (!postingStrategy) {
+      return;
+    }
+    const orderedPostingGroups = postingStrategy === "selected_order" && shuffleGroupsToggle?.checked ? shuffleItems(selectedGroups) : selectedGroups;
     const postingGroups = orderedPostingGroups;
     const postingPreparedPosts = shuffleItems(selectedPreparedPosts);
     isPostingActive = true;
@@ -5172,7 +5342,8 @@
         })),
         minimumDelaySeconds,
         maximumDelaySeconds,
-        maxPosts
+        maxPosts,
+        postingStrategy
       };
       const response = await chrome.runtime.sendMessage(request);
       if (!response?.ok) {
@@ -5439,8 +5610,13 @@
     ].filter((value) => Boolean(value)).map((value) => new Date(value)).filter((value) => !Number.isNaN(value.getTime())).sort((left, right) => left.getTime() - right.getTime())[0];
     if (accessResetMessage) {
       const timezone = currentExtensionAccess?.user.timezone ?? "UTC";
-      accessResetMessage.hidden = access.tier === "pro";
-      accessResetMessage.textContent = nextReset ? `Daily limits reset at midnight (${timezone}). Your allowance resets ${formatAccessResetTime(nextReset.toISOString())}.` : `Daily limits reset at midnight (${timezone}).`;
+      if (access.tier === "pro") {
+        accessResetMessage.hidden = false;
+        accessResetMessage.textContent = access.pro_lifetime ? "Lifetime Pro access." : access.pro_expires_at ? `Pro access expires ${formatAccessResetTime(access.pro_expires_at)}.` : "Pro access.";
+      } else {
+        accessResetMessage.hidden = false;
+        accessResetMessage.textContent = nextReset ? `Daily limits reset at midnight (${timezone}). Your allowance resets ${formatAccessResetTime(nextReset.toISOString())}.` : `Daily limits reset at midnight (${timezone}).`;
+      }
     }
   }
   function updateExtensionAccessUi() {
@@ -5500,7 +5676,7 @@
           maxPostsInput.value = String(proMaxPostsPreference);
         }
         if (maxPostsNote) {
-          maxPostsNote.textContent = "Failed attempts do not count. The queue stops after this many successful posts, cycling through the selected groups again when needed.";
+          maxPostsNote.textContent = "Published posts and posts waiting for approval count. Failed attempts do not. The queue cycles through selected Groups again when needed.";
         }
       }
     }
@@ -6539,7 +6715,7 @@
       postingProgress.hidden = false;
     }
     if (postingProgressTitle) {
-      postingProgressTitle.textContent = successTarget ? `0/${successTarget} successful posts` : `0/${total} groups processed`;
+      postingProgressTitle.textContent = successTarget ? `0/${successTarget} accepted submissions` : `0/${total} groups processed`;
     }
     if (postingProgressPercent) {
       postingProgressPercent.textContent = "0%";
@@ -6549,6 +6725,9 @@
     }
     if (postingProgressSuccess) {
       postingProgressSuccess.textContent = "0";
+    }
+    if (postingProgressPending) {
+      postingProgressPending.textContent = "0";
     }
     if (postingProgressFailed) {
       postingProgressFailed.textContent = "0";
@@ -6565,7 +6744,8 @@
       postingProgressLog,
       groupsPostingLogFilter,
       postingProgressPostedFilterButton,
-      postingProgressFailedFilterButton
+      postingProgressFailedFilterButton,
+      postingProgressPendingFilterButton
     );
   }
   function scrollPostingProgressIntoView() {

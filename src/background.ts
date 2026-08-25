@@ -45,8 +45,11 @@ type UploadResponse = {
 
 type GraphqlPostResult = {
   success: boolean;
+  pendingApproval?: boolean;
+  actorId?: string;
   postId?: string;
   postUrl?: string;
+  responseBody?: string;
   error?: string;
 };
 
@@ -79,6 +82,7 @@ const GEMINI_MODEL = "gemini-2.5-flash";
 const GEMINI_TIMEOUT_MS = 30_000;
 const MIN_POSTING_DELAY_SECONDS = 60;
 const AUTH_SESSION_STORAGE_KEY = "googleAuthSession";
+const GROUP_STARTER_EXCLUSIONS_STORAGE_KEY = "balancedStarterExcludedGroupIds";
 const LOG_PREFIX = "[Facebook Groups Bulk Poster]";
 
 type PostingUsageKind = "group_post" | "marketplace_listing";
@@ -90,22 +94,32 @@ class PostingAccessError extends Error {
   }
 }
 
+class MissingFirstGroupComposerError extends Error {
+  constructor(groupName: string) {
+    super(
+      `KundiPost could not find “Write something...” in ${groupName}. Start posting again and KundiPost will try another selected Group first.`,
+    );
+    this.name = "MissingFirstGroupComposerError";
+  }
+}
+
+class FacebookPostResponseError extends Error {
+  readonly responseBody: string;
+
+  constructor(message: string, responseBody: string) {
+    super(message);
+    this.name = "FacebookPostResponseError";
+    this.responseBody = responseBody;
+  }
+}
+
 async function updatePostingUsage(
   action: "claim" | "complete" | "release",
   kind: PostingUsageKind,
   operationId: string,
+  facebookActorId?: string,
 ) {
-  const storage = await chrome.storage.local.get(AUTH_SESSION_STORAGE_KEY);
-  const session = storage[AUTH_SESSION_STORAGE_KEY] as
-    | { sessionToken?: unknown }
-    | undefined;
-  const sessionToken =
-    typeof session?.sessionToken === "string"
-      ? session.sessionToken.trim()
-      : "";
-  if (!sessionToken) {
-    throw new PostingAccessError("Sign in with Google to continue posting.");
-  }
+  const sessionToken = await getKundiPostSessionToken();
 
   const response = await fetch(
     `${AUTH_API_BASE_URL}/api/posting-usage/${action}`,
@@ -115,7 +129,13 @@ async function updatePostingUsage(
         Authorization: `Bearer ${sessionToken}`,
         "Content-Type": "application/json",
       },
-      body: JSON.stringify({ kind, operation_id: operationId }),
+      body: JSON.stringify({
+        kind,
+        operation_id: operationId,
+        ...(action === "claim" && facebookActorId
+          ? { facebook_actor_id: facebookActorId }
+          : {}),
+      }),
     },
   );
   const payload = (await response.json().catch(() => ({}))) as {
@@ -141,9 +161,201 @@ async function updatePostingUsage(
   }
 }
 
-async function claimPostingUsage(kind: PostingUsageKind): Promise<string> {
+async function getKundiPostSessionToken(): Promise<string> {
+  const storage = await chrome.storage.local.get(AUTH_SESSION_STORAGE_KEY);
+  const session = storage[AUTH_SESSION_STORAGE_KEY] as
+    | { sessionToken?: unknown }
+    | undefined;
+  const sessionToken =
+    typeof session?.sessionToken === "string"
+      ? session.sessionToken.trim()
+      : "";
+  if (!sessionToken) {
+    throw new PostingAccessError("Sign in with Google to continue posting.");
+  }
+  return sessionToken;
+}
+
+async function createBalancedGroupPostingPlan(
+  groups: StartUiPostingRequest["groups"],
+  facebookActorId: string,
+  maximumPosts: number,
+  failedGroupIds: string[],
+  starterExcludedGroupIds: string[],
+): Promise<StartUiPostingRequest["groups"]> {
+  const sessionToken = await getKundiPostSessionToken();
+  const response = await fetch(
+    `${AUTH_API_BASE_URL}/api/group-posting-stats/plan`,
+    {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${sessionToken}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        facebook_actor_id: facebookActorId,
+        groups: groups.map(({ id, name }) => ({ id, name })),
+        maximum_posts: maximumPosts,
+        failed_group_ids: failedGroupIds,
+        starter_excluded_group_ids: starterExcludedGroupIds,
+      }),
+    },
+  );
+  const payload = (await response.json().catch(() => ({}))) as {
+    plan?: StartUiPostingRequest["groups"];
+    error?: string;
+    code?: string;
+  };
+  if (!response.ok) {
+    if (payload.code === "no_eligible_balanced_group") {
+      return [];
+    }
+    throw new PostingAccessError(
+      payload.error ?? "Unable to create a balanced Group posting plan.",
+    );
+  }
+  return payload.plan ?? [];
+}
+
+async function getGroupStarterExcludedIds(
+  facebookActorId: string,
+): Promise<string[]> {
+  const actorKey = await hashLocalIdentifier(facebookActorId);
+  const stored = await chrome.storage.session.get(
+    GROUP_STARTER_EXCLUSIONS_STORAGE_KEY,
+  );
+  const exclusions = stored[GROUP_STARTER_EXCLUSIONS_STORAGE_KEY] as
+    | Record<string, unknown>
+    | undefined;
+  const values = exclusions?.[actorKey];
+  return Array.isArray(values)
+    ? values.filter(
+        (value): value is string =>
+          typeof value === "string" && /^\d{5,32}$/.test(value),
+      )
+    : [];
+}
+
+async function rememberGroupStarterExclusion(
+  facebookActorId: string,
+  groupId: string,
+): Promise<void> {
+  const actorKey = await hashLocalIdentifier(facebookActorId);
+  const stored = await chrome.storage.session.get(
+    GROUP_STARTER_EXCLUSIONS_STORAGE_KEY,
+  );
+  const exclusions = {
+    ...((stored[GROUP_STARTER_EXCLUSIONS_STORAGE_KEY] as
+      | Record<string, unknown>
+      | undefined) ?? {}),
+  };
+  const existing = Array.isArray(exclusions[actorKey])
+    ? (exclusions[actorKey] as unknown[]).filter(
+        (value): value is string => typeof value === "string",
+      )
+    : [];
+  exclusions[actorKey] = Array.from(new Set([...existing, groupId]));
+  await chrome.storage.session.set({
+    [GROUP_STARTER_EXCLUSIONS_STORAGE_KEY]: exclusions,
+  });
+}
+
+function moveFirstAvailableStarterToFront(
+  groups: StartUiPostingRequest["groups"],
+  excludedGroupIds: string[],
+): StartUiPostingRequest["groups"] {
+  const excluded = new Set(excludedGroupIds);
+  const starterIndex = groups.findIndex((group) => !excluded.has(group.id));
+  if (starterIndex < 0) {
+    return [];
+  }
+  if (starterIndex === 0) {
+    return [...groups];
+  }
+  return [
+    groups[starterIndex],
+    ...groups.slice(0, starterIndex),
+    ...groups.slice(starterIndex + 1),
+  ];
+}
+
+async function hashLocalIdentifier(value: string): Promise<string> {
+  const digest = await crypto.subtle.digest(
+    "SHA-256",
+    new TextEncoder().encode(value),
+  );
+  return Array.from(new Uint8Array(digest), (byte) =>
+    byte.toString(16).padStart(2, "0"),
+  ).join("");
+}
+
+function isMissingFirstGroupComposerError(error: unknown): boolean {
+  return (
+    error instanceof Error &&
+    (error instanceof MissingFirstGroupComposerError ||
+      /write something(?:\.\.\.)?.*(?:not found|could not find)/i.test(
+        error.message,
+      ))
+  );
+}
+
+async function recordAcceptedGroupPost(
+  facebookActorId: string,
+  group: StartUiPostingRequest["groups"][number],
+  operationId: string,
+): Promise<boolean> {
+  const sessionToken = await getKundiPostSessionToken();
+  for (let attempt = 1; attempt <= 3; attempt += 1) {
+    try {
+      const response = await fetch(
+        `${AUTH_API_BASE_URL}/api/group-posting-stats/accepted`,
+        {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${sessionToken}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            facebook_actor_id: facebookActorId,
+            group_id: group.id,
+            group_name: group.name,
+            operation_id: operationId,
+          }),
+        },
+      );
+      const payload = (await response.json().catch(() => ({}))) as {
+        error?: string;
+      };
+      if (response.ok) {
+        return true;
+      }
+      if (response.status < 500 || attempt === 3) {
+        debugWarn("Unable to update Group posting history.", {
+          groupId: group.id,
+          status: response.status,
+          error: payload.error,
+        });
+        return false;
+      }
+    } catch (error) {
+      if (attempt === 3) {
+        debugWarn("Unable to update Group posting history.", {
+          groupId: group.id,
+          error: error instanceof Error ? error.message : String(error),
+        });
+        return false;
+      }
+    }
+  }
+  return false;
+}
+
+async function claimPostingUsage(
+  kind: PostingUsageKind,
+  facebookActorId: string,
+): Promise<string> {
   const operationId = crypto.randomUUID();
-  await updatePostingUsage("claim", kind, operationId);
+  await updatePostingUsage("claim", kind, operationId, facebookActorId);
   return operationId;
 }
 
@@ -164,6 +376,31 @@ const FACEBOOK_HOSTS = new Set([
   "upload.facebook.com",
 ]);
 
+function normalizeFacebookActorId(value: string | undefined): string {
+  const actorId = value?.trim() ?? "";
+  return /^\d{5,32}$/.test(actorId) ? actorId : "";
+}
+
+async function getFacebookActorId(tabId: number): Promise<string> {
+  const tab = await chrome.tabs.get(tabId);
+  if (!tab.url || !isFacebookUrl(tab.url)) {
+    throw new PostingAccessError(
+      "Open Facebook and sign in before starting a posting queue.",
+    );
+  }
+  const cookie = await chrome.cookies.get({
+    url: tab.url,
+    name: "c_user",
+  });
+  const actorId = normalizeFacebookActorId(cookie?.value);
+  if (!actorId) {
+    throw new PostingAccessError(
+      "KundiPost could not identify the Facebook account signed in to this Chrome profile. Refresh Facebook, sign in again, and retry.",
+    );
+  }
+  return actorId;
+}
+
 const pendingRequests = new Map<string, PendingRequest>();
 
 let capturedGroupsRequest: CapturedRequest | undefined;
@@ -178,6 +415,7 @@ const marketplaceCleanupCompletions = new Map<
 
 let activePosting = false;
 let activePostingSuccessTarget: number | undefined;
+let activePostingPendingCount = 0;
 let stopPostingRequested = false;
 let pausePostingRequested = false;
 let pauseNotificationSent = false;
@@ -196,8 +434,20 @@ let latestMarketplacePostingStatus:
 let activeMarketplacePostingTabId: number | undefined;
 const loggedUploadCandidateRequestIds = new Set<string>();
 const MANUAL_STOP_MESSAGE = "Posting stopped by user.";
-const FACEBOOK_POST_LIMIT_PATTERN =
-  /we\s+limit\s+how\s+often\s+you\s+can\s+post,\s+comment\s+or\s+do\s+other\s+things\s+in\s+a\s+given\s+amount\s+of\s+time\s+in\s+order\s+to\s+help\s+protect\s+the\s+community\s+from\s+spam\.\s+you\s+can\s+try\s+again\s+later/i;
+const FACEBOOK_POST_LIMIT_PATTERN = /\bwe\s+limit\s+how\s+often\s+you\b/i;
+const FACEBOOK_OTHER_POSTING_RESTRICTION_PATTERN =
+  /\b(?:temporarily\s+(?:blocked|restricted)|posting\s+(?:has\s+been\s+)?(?:limited|restricted)|posting\s+limit|rate\s+limit)\b/i;
+const FACEBOOK_RATE_LIMIT_ERROR_CODE_PATTERN = /"code"\s*:\s*1390008\b/;
+const FACEBOOK_RATE_LIMIT_API_ERROR_CODE_PATTERN =
+  /"api_error_code"\s*:\s*368\b/;
+const FACEBOOK_PENDING_CONTENT_LIMIT_PATTERN =
+  /limit\s+for\s+pending\s+content\s+in\s+this\s+group/i;
+const FACEBOOK_PENDING_CONTENT_LIMIT_ERROR_CODE_PATTERN =
+  /"code"\s*:\s*1357006\b/;
+const FACEBOOK_PENDING_CONTENT_LIMIT_MESSAGE =
+  "You're at the limit for pending content in this group.";
+const FACEBOOK_RATE_LIMIT_MESSAGE =
+  "Facebook has temporarily limited posting. Stop and try again later.";
 
 chrome.runtime.onInstalled.addListener(() => {
   void chrome.sidePanel.setPanelBehavior({ openPanelOnActionClick: true });
@@ -1137,7 +1387,11 @@ async function runMarketplaceItemPostingQueue(
       });
       await waitWhileMarketplacePostingPaused();
       throwIfMarketplacePostingStopped();
-      postingUsageOperationId = await claimPostingUsage("marketplace_listing");
+      const facebookActorId = await getFacebookActorId(tabId);
+      postingUsageOperationId = await claimPostingUsage(
+        "marketplace_listing",
+        facebookActorId,
+      );
       await runMarketplaceItemPosting(
         { ...listing, description },
         tabId,
@@ -2542,10 +2796,13 @@ function randomIntegerBetween(minimum: number, maximum: number): number {
 async function runGraphqlPostingQueue(
   request: StartUiPostingRequest,
 ): Promise<void> {
-  const maxPosts = Number.isInteger(request.maxPosts)
+  const requestedMaxPosts = Number.isInteger(request.maxPosts)
     ? Math.max(request.maxPosts, 1)
     : request.groups.length;
-  const groups = request.groups;
+  const balancedPosting = request.postingStrategy === "balanced";
+  const maxPosts = requestedMaxPosts;
+  const selectedGroups = request.groups;
+  let groups = selectedGroups;
   const requestedPosts = request.posts.filter(
     (post) => post.body.trim().length > 0 && post.images.length > 0,
   );
@@ -2599,13 +2856,15 @@ async function runGraphqlPostingQueue(
 
   activePosting = true;
   activePostingSuccessTarget = maxPosts;
+  activePostingPendingCount = 0;
   latestUiPostingStatus = undefined;
   stopPostingRequested = false;
   pausePostingRequested = false;
   pauseNotificationSent = false;
   let successCount = 0;
   let failedCount = 0;
-  const total = groups.length;
+  const failedBalancedGroupIds = new Set<string>();
+  const total = balancedPosting ? maxPosts : groups.length;
   let postingTabId: number | undefined;
 
   try {
@@ -2625,36 +2884,170 @@ async function runGraphqlPostingQueue(
       throw new Error("Unable to find the active tab for posting.");
     }
     activePostingTabId = postingTabId;
-
-    const firstPostingUsageOperationId = await claimPostingUsage("group_post");
-    let templates: Awaited<ReturnType<typeof ensurePostingTemplates>>;
-    try {
-      templates = await ensurePostingTemplates(
-        postingTabId,
-        groups,
-        posts[0].body,
-        posts[0].images,
+    const facebookActorId = await getFacebookActorId(postingTabId);
+    const starterExcludedGroupIds = new Set(
+      await getGroupStarterExcludedIds(facebookActorId),
+    );
+    if (balancedPosting) {
+      groups = await createBalancedGroupPostingPlan(
+        selectedGroups,
+        facebookActorId,
+        maxPosts,
+        [],
+        Array.from(starterExcludedGroupIds),
+      );
+      if (groups.length === 0) {
+        throw new Error(
+          "None of the selected Groups can start posting in this browser session. Select another standard Group with a visible “Write something...” button.",
+        );
+      }
+      notifyUiPostingStatus({
+        status: "posting",
+        message: `Ready to spread ${groups.length} posts across ${selectedGroups.length} selected Groups, starting with Groups you have posted to the least.`,
+        current: 0,
         total,
+        successCount,
+        failedCount,
+        processedCount: 0,
+        successTarget: maxPosts,
+      });
+    } else {
+      groups = moveFirstAvailableStarterToFront(
+        selectedGroups,
+        Array.from(starterExcludedGroupIds),
       );
-    } catch (error) {
-      await finalizePostingUsage(
-        "release",
+      if (groups.length === 0) {
+        throw new Error(
+          "None of the selected Groups can start posting in this browser session. Select another standard Group with a visible “Write something...” button.",
+        );
+      }
+    }
+
+    notifyUiPostingStatus({
+      status: "posting",
+      message: "Preparing the first post...",
+      current: 1,
+      total,
+      groupId: groups[0].id,
+      groupName: groups[0].name,
+      successCount,
+      failedCount,
+      processedCount: 0,
+    });
+    const firstPostBody = await maybeRewriteDescription(posts[0].body);
+    throwIfPostingStopped();
+
+    let firstPostingUsageOperationId = "";
+    let templates: Awaited<ReturnType<typeof ensurePostingTemplates>>;
+    while (true) {
+      firstPostingUsageOperationId = await claimPostingUsage(
         "group_post",
-        firstPostingUsageOperationId,
+        facebookActorId,
       );
-      throw error;
+      try {
+        templates = await ensurePostingTemplates(
+          postingTabId,
+          groups,
+          posts[0].body,
+          firstPostBody,
+          posts[0].images,
+          total,
+        );
+        break;
+      } catch (error) {
+        await finalizePostingUsage(
+          "release",
+          "group_post",
+          firstPostingUsageOperationId,
+        );
+        if (!isMissingFirstGroupComposerError(error)) {
+          throw error;
+        }
+
+        const incompatibleStarter = groups[0];
+        starterExcludedGroupIds.add(incompatibleStarter.id);
+        try {
+          await rememberGroupStarterExclusion(
+            facebookActorId,
+            incompatibleStarter.id,
+          );
+        } catch (storageError) {
+          debugWarn("Unable to remember the incompatible starter Group.", {
+            groupId: incompatibleStarter.id,
+            error:
+              storageError instanceof Error
+                ? storageError.message
+                : String(storageError),
+          });
+        }
+
+        groups = balancedPosting
+          ? await createBalancedGroupPostingPlan(
+              selectedGroups,
+              facebookActorId,
+              maxPosts,
+              [],
+              Array.from(starterExcludedGroupIds),
+            )
+          : moveFirstAvailableStarterToFront(
+              selectedGroups,
+              Array.from(starterExcludedGroupIds),
+            );
+        if (groups.length === 0) {
+          throw new Error(
+            "None of the selected Groups has a visible “Write something...” button. Select another standard Group and try again.",
+          );
+        }
+        notifyUiPostingStatus({
+          status: "posting",
+          message: `${incompatibleStarter.name} cannot start the queue. Trying ${groups[0].name} instead...`,
+          current: 0,
+          total,
+          groupId: groups[0].id,
+          groupName: groups[0].name,
+          successCount,
+          failedCount,
+          processedCount: 0,
+          successTarget: maxPosts,
+        });
+      }
     }
 
     if (templates.firstGroupPosted) {
+      if (
+        templates.firstPostResult?.actorId &&
+        templates.firstPostResult.actorId !== facebookActorId
+      ) {
+        debugWarn(
+          "First post actor did not match the signed-in Facebook account.",
+        );
+      }
       await finalizePostingUsage(
         "complete",
         "group_post",
         firstPostingUsageOperationId,
       );
+      const firstHistoryRecorded = await recordAcceptedGroupPost(
+        facebookActorId,
+        groups[0],
+        firstPostingUsageOperationId,
+      );
       successCount += 1;
+      const firstPostPending =
+        templates.firstPostResult?.pendingApproval === true;
+      if (firstPostPending) {
+        activePostingPendingCount += 1;
+      }
       notifyUiPostingStatus({
-        status: "posted",
-        message: `Posted to ${groups[0].name}.`,
+        status: firstPostPending ? "pending" : "posted",
+        message: firstPostPending
+          ? "Your post is pending"
+          : `Posted to ${groups[0].name}.`,
+        detail: firstPostPending
+          ? "Your post is awaiting admin approval. If the admin team approves it, it'll become visible in the group."
+          : firstHistoryRecorded
+            ? undefined
+            : "The post succeeded, but KundiPost could not update its Group balance history.",
         current: 1,
         total,
         groupId: groups[0].id,
@@ -2668,7 +3061,7 @@ async function runGraphqlPostingQueue(
       if (successCount >= maxPosts) {
         notifyUiPostingStatus({
           status: "done",
-          message: `Maximum of ${maxPosts} successful posts reached. Queue stopped.`,
+          message: `Maximum of ${maxPosts} accepted submissions reached. Queue stopped.`,
           current: 1,
           total,
           successCount,
@@ -2719,13 +3112,24 @@ async function runGraphqlPostingQueue(
 
     for (
       let attemptIndex = startIndex;
-      successCount < maxPosts;
+      successCount < maxPosts &&
+      (!balancedPosting || attemptIndex < groups.length);
       attemptIndex += 1
     ) {
       throwIfPostingStopped();
-      const groupIndex = attemptIndex % groups.length;
-      const cycleNumber = Math.floor(attemptIndex / groups.length) + 1;
+      const groupIndex = balancedPosting
+        ? attemptIndex
+        : attemptIndex % groups.length;
+      const cycleNumber = balancedPosting
+        ? Math.floor(attemptIndex / selectedGroups.length) + 1
+        : Math.floor(attemptIndex / groups.length) + 1;
       const group = groups[groupIndex];
+      if (balancedPosting && failedBalancedGroupIds.has(group.id)) {
+        if (failedBalancedGroupIds.size >= selectedGroups.length) {
+          break;
+        }
+        continue;
+      }
       const preparedPost = posts[attemptIndex % posts.length];
       const preparedPostNumber = (attemptIndex % posts.length) + 1;
       const hasImages = preparedPost.images.length > 0;
@@ -2838,7 +3242,10 @@ async function runGraphqlPostingQueue(
         processedCount: attemptIndex,
       });
 
-      const postingUsageOperationId = await claimPostingUsage("group_post");
+      const postingUsageOperationId = await claimPostingUsage(
+        "group_post",
+        facebookActorId,
+      );
       let postResult: GraphqlPostResult;
       try {
         postResult = await createGraphqlPost(
@@ -2860,10 +3267,16 @@ async function runGraphqlPostingQueue(
       debugLog("GraphQL post result received.", {
         groupId: group.id,
         success: postResult.success,
+        pendingApproval: postResult.pendingApproval,
         postId: postResult.postId,
         postUrl: postResult.postUrl,
         error: postResult.error,
       });
+      if (postResult.actorId && postResult.actorId !== facebookActorId) {
+        debugWarn("Post actor did not match the signed-in Facebook account.", {
+          groupId: group.id,
+        });
+      }
 
       if (postResult.success) {
         await finalizePostingUsage(
@@ -2871,10 +3284,25 @@ async function runGraphqlPostingQueue(
           "group_post",
           postingUsageOperationId,
         );
+        const historyRecorded = await recordAcceptedGroupPost(
+          facebookActorId,
+          group,
+          postingUsageOperationId,
+        );
         successCount += 1;
+        if (postResult.pendingApproval) {
+          activePostingPendingCount += 1;
+        }
         notifyUiPostingStatus({
-          status: "posted",
-          message: `Posted successfully to ${group.name}.`,
+          status: postResult.pendingApproval ? "pending" : "posted",
+          message: postResult.pendingApproval
+            ? "Your post is pending"
+            : `Posted successfully to ${group.name}.`,
+          detail: postResult.pendingApproval
+            ? "Your post is awaiting admin approval. If the admin team approves it, it'll become visible in the group."
+            : historyRecorded
+              ? undefined
+              : "The post succeeded, but KundiPost could not update its Group balance history.",
           current,
           total,
           groupId: group.id,
@@ -2887,7 +3315,7 @@ async function runGraphqlPostingQueue(
         if (successCount >= maxPosts) {
           notifyUiPostingStatus({
             status: "done",
-            message: `Maximum of ${maxPosts} successful posts reached. Queue stopped.`,
+            message: `Maximum of ${maxPosts} accepted submissions reached. Queue stopped.`,
             current,
             total,
             successCount,
@@ -2904,11 +3332,15 @@ async function runGraphqlPostingQueue(
           postingUsageOperationId,
         );
         failedCount += 1;
+        if (balancedPosting) {
+          failedBalancedGroupIds.add(group.id);
+        }
 
-        if (isRateLimitError(postResult.error)) {
+        if (isRateLimitError(postResult.error, postResult.responseBody)) {
           notifyUiPostingStatus({
             status: "rate_limited",
-            message: "Facebook rate limit detected. Stopping.",
+            message:
+              "Facebook temporarily blocked posting on this account. Queue stopped. Try again later.",
             current,
             total,
             groupId: group.id,
@@ -2917,13 +3349,21 @@ async function runGraphqlPostingQueue(
             failedCount,
             processedCount: attemptIndex + 1,
             error: postResult.error,
+            responseBody: postResult.responseBody,
           });
           return;
         }
 
         notifyUiPostingStatus({
           status: "failed",
-          message: `Failed to post to ${group.name}.`,
+          message:
+            postResult.error === FACEBOOK_PENDING_CONTENT_LIMIT_MESSAGE
+              ? FACEBOOK_PENDING_CONTENT_LIMIT_MESSAGE
+              : `Failed to post to ${group.name}.`,
+          detail:
+            postResult.error === FACEBOOK_PENDING_CONTENT_LIMIT_MESSAGE
+              ? `Facebook rejected the post to ${group.name} because this Group cannot accept more pending content from your account.`
+              : undefined,
           current,
           total,
           groupId: group.id,
@@ -2932,11 +3372,44 @@ async function runGraphqlPostingQueue(
           failedCount,
           processedCount: attemptIndex + 1,
           error: postResult.error,
+          responseBody: postResult.responseBody,
         });
       }
 
       const nextAttemptIndex = attemptIndex + 1;
-      const nextGroupIndex = nextAttemptIndex % groups.length;
+      if (
+        balancedPosting &&
+        failedBalancedGroupIds.size >= selectedGroups.length
+      ) {
+        break;
+      }
+      if (balancedPosting) {
+        const currentPlan = groups.slice(0, nextAttemptIndex);
+        const remainingPlan = groups
+          .slice(nextAttemptIndex)
+          .filter(
+            (plannedGroup) => !failedBalancedGroupIds.has(plannedGroup.id),
+          );
+        const remainingTarget = maxPosts - successCount;
+        if (remainingPlan.length < remainingTarget) {
+          const replacementPlan = await createBalancedGroupPostingPlan(
+            selectedGroups,
+            facebookActorId,
+            remainingTarget,
+            Array.from(failedBalancedGroupIds),
+            [],
+          );
+          groups = [...currentPlan, ...replacementPlan];
+        } else {
+          groups = [...currentPlan, ...remainingPlan];
+        }
+      }
+      if (balancedPosting && nextAttemptIndex >= groups.length) {
+        break;
+      }
+      const nextGroupIndex = balancedPosting
+        ? nextAttemptIndex
+        : nextAttemptIndex % groups.length;
       const nextGroup = groups[nextGroupIndex];
       const nextCurrent = nextGroupIndex + 1;
       const delaySeconds = randomIntegerBetween(
@@ -2954,31 +3427,97 @@ async function runGraphqlPostingQueue(
         processedCount: nextAttemptIndex,
       });
     }
+    if (balancedPosting) {
+      notifyUiPostingStatus({
+        status: "done",
+        message:
+          successCount >= maxPosts
+            ? `Balanced queue reached ${successCount} accepted posts.`
+            : `Balanced queue stopped after every selected Group failed. ${successCount} posts were accepted.`,
+        current: Math.min(successCount + failedCount, total),
+        total,
+        successCount,
+        failedCount,
+        processedCount: Math.min(successCount + failedCount, total),
+        successTarget: maxPosts,
+      });
+    }
   } catch (error) {
     const errorMessage =
       error instanceof Error ? error.message : "Unknown error";
     debugWarn("Posting queue stopped with error.", { error: errorMessage });
-    notifyUiPostingStatus({
-      status: errorMessage === MANUAL_STOP_MESSAGE ? "stopped" : "done",
-      message:
-        errorMessage === MANUAL_STOP_MESSAGE
-          ? MANUAL_STOP_MESSAGE
-          : "GraphQL posting stopped.",
-      current: Math.min(successCount + failedCount, total),
-      total,
-      successCount,
-      failedCount,
-      processedCount: Math.min(successCount + failedCount, total),
-      error: errorMessage,
-    });
+    const responseBody =
+      error instanceof FacebookPostResponseError
+        ? error.responseBody
+        : undefined;
+    const rateLimited = isRateLimitError(errorMessage, responseBody);
+    if (rateLimited) {
+      failedCount += 1;
+      notifyUiPostingStatus({
+        status: "rate_limited",
+        message:
+          "Facebook temporarily blocked posting on this account. Queue stopped. Try again later.",
+        current: groups.length > 0 ? 1 : 0,
+        total,
+        groupId: groups[0]?.id,
+        groupName: groups[0]?.name,
+        successCount,
+        failedCount,
+        processedCount: 1,
+        error: errorMessage,
+        responseBody,
+      });
+    } else {
+      if (error instanceof FacebookPostResponseError) {
+        failedCount += 1;
+        notifyUiPostingStatus({
+          status: "failed",
+          message:
+            errorMessage === FACEBOOK_PENDING_CONTENT_LIMIT_MESSAGE
+              ? FACEBOOK_PENDING_CONTENT_LIMIT_MESSAGE
+              : `Failed to post to ${groups[0]?.name ?? "the first Group"}.`,
+          detail:
+            errorMessage === FACEBOOK_PENDING_CONTENT_LIMIT_MESSAGE
+              ? `Facebook rejected the post to ${groups[0]?.name ?? "the first Group"} because this Group cannot accept more pending content from your account.`
+              : undefined,
+          current: groups.length > 0 ? 1 : 0,
+          total,
+          groupId: groups[0]?.id,
+          groupName: groups[0]?.name,
+          successCount,
+          failedCount,
+          processedCount: 1,
+          error: errorMessage,
+          responseBody: error.responseBody,
+        });
+      }
+      notifyUiPostingStatus({
+        status: errorMessage === MANUAL_STOP_MESSAGE ? "stopped" : "done",
+        message:
+          errorMessage === MANUAL_STOP_MESSAGE
+            ? MANUAL_STOP_MESSAGE
+            : "GraphQL posting stopped.",
+        current: Math.min(successCount + failedCount, total),
+        total,
+        successCount,
+        failedCount,
+        processedCount: Math.min(successCount + failedCount, total),
+        error: errorMessage,
+      });
+    }
   } finally {
+    if (postingTabId) {
+      await readFirstPostResponseCapture(postingTabId, true);
+    }
     debugLog("Posting queue finished.", {
       total,
       successCount,
+      pendingCount: activePostingPendingCount,
       failedCount,
     });
     activePosting = false;
     activePostingSuccessTarget = undefined;
+    activePostingPendingCount = 0;
     stopPostingRequested = false;
     pausePostingRequested = false;
     pauseNotificationSent = false;
@@ -2990,12 +3529,14 @@ async function ensurePostingTemplates(
   tabId: number,
   groups: SimpleGroup[],
   originalBody: string,
+  body: string,
   images: UiPostImage[],
   total: number,
 ): Promise<{
   uploadTemplate?: CapturedRequest;
   postTemplate: CapturedRequest;
   firstGroupPosted: boolean;
+  firstPostResult?: GraphqlPostResult;
 }> {
   const requiresUploadTemplate = images.length > 0;
 
@@ -3010,19 +3551,6 @@ async function ensurePostingTemplates(
     requiresUploadTemplate,
   });
 
-  notifyUiPostingStatus({
-    status: "posting",
-    message: `Rewriting description for ${firstGroup.name}...`,
-    current: 1,
-    total,
-    groupId: firstGroup.id,
-    groupName: firstGroup.name,
-    successCount: 0,
-    failedCount: 0,
-    processedCount: 0,
-  });
-
-  const body = await maybeRewriteDescription(originalBody);
   throwIfPostingStopped();
   debugLog("Post body prepared for first group.", {
     current: 1,
@@ -3063,11 +3591,33 @@ async function ensurePostingTemplates(
     processedCount: 0,
   });
 
+  await installFirstPostResponseCapture(tabId);
   const postResult = await createPostInTab(tabId, images, body);
-  throwIfPostingStopped();
-  if (!postResult.ok) {
+  if (
+    !postResult.ok &&
+    postResult.composerFound === false &&
+    /write something button not found/i.test(postResult.error ?? "")
+  ) {
     stopPostingTemplateCapture();
-    throw new Error(postResult.error ?? "Unable to create the first post.");
+    throw new MissingFirstGroupComposerError(firstGroup.name);
+  }
+  const firstResponseText = await waitForFirstPostResponseCapture(tabId);
+  const firstPostResult = firstResponseText
+    ? parsePostResponse(firstResponseText)
+    : undefined;
+  throwIfPostingStopped();
+  if (!postResult.ok || firstPostResult?.success === false) {
+    stopPostingTemplateCapture();
+    const message = firstResponseText
+      ? classifyFacebookPostFailure(
+          firstResponseText,
+          firstPostResult?.error ?? postResult.error,
+        )
+      : (postResult.error ?? "Unable to create the first post.");
+    if (firstResponseText) {
+      throw new FacebookPostResponseError(message, firstResponseText);
+    }
+    throw new Error(message);
   }
 
   const capturedTemplates = await waitForPostingTemplatesInternal(
@@ -3078,7 +3628,149 @@ async function ensurePostingTemplates(
     uploadTemplate: capturedTemplates.uploadTemplate,
     postTemplate: capturedTemplates.postTemplate,
     firstGroupPosted: true,
+    firstPostResult,
   };
+}
+
+async function installFirstPostResponseCapture(tabId: number): Promise<void> {
+  await chrome.scripting.executeScript({
+    target: { tabId },
+    world: "MAIN",
+    func: installStoryCreateResponseCaptureInPage,
+  });
+}
+
+async function waitForFirstPostResponseCapture(
+  tabId: number,
+): Promise<string | undefined> {
+  const startedAt = Date.now();
+  while (Date.now() - startedAt < 10_000) {
+    throwIfPostingStopped();
+    const responseText = await readFirstPostResponseCapture(tabId, false);
+    if (responseText) {
+      await readFirstPostResponseCapture(tabId, true);
+      return responseText;
+    }
+    await sleepWithStopChecks(200);
+  }
+  await readFirstPostResponseCapture(tabId, true);
+  debugWarn(
+    "The first post response was not available for moderation classification.",
+  );
+  return undefined;
+}
+
+async function readFirstPostResponseCapture(
+  tabId: number,
+  cleanup: boolean,
+): Promise<string | undefined> {
+  try {
+    const [result] = await chrome.scripting.executeScript({
+      target: { tabId },
+      world: "MAIN",
+      func: readStoryCreateResponseCaptureInPage,
+      args: [cleanup],
+    });
+    return typeof result?.result === "string" && result.result.length > 0
+      ? result.result
+      : undefined;
+  } catch (error) {
+    debugWarn("Unable to read the first post response capture.", error);
+    return undefined;
+  }
+}
+
+function installStoryCreateResponseCaptureInPage(): void {
+  const key = "__kundiPostStoryCreateResponseCapture";
+  const scope = globalThis as typeof globalThis & Record<string, any>;
+  const previous = scope[key];
+  if (previous?.restore instanceof Function) {
+    previous.restore();
+  }
+
+  const responses: string[] = [];
+  const capture = (text: string) => {
+    if (text.includes('"story_create"')) {
+      responses.push(text);
+    }
+  };
+
+  const originalFetch = scope.fetch as typeof fetch;
+  const wrappedFetch: typeof fetch = async (...args) => {
+    const response = (await Reflect.apply(
+      originalFetch,
+      scope,
+      args,
+    )) as Response;
+    if (response.url.includes("/api/graphql/")) {
+      void response
+        .clone()
+        .text()
+        .then(capture)
+        .catch(() => undefined);
+    }
+    return response;
+  };
+  scope.fetch = wrappedFetch;
+
+  const xhrPrototype = scope.XMLHttpRequest?.prototype as
+    | Record<string, any>
+    | undefined;
+  const originalOpen = xhrPrototype?.open;
+  const originalSend = xhrPrototype?.send;
+  if (xhrPrototype && originalOpen && originalSend) {
+    xhrPrototype.open = function (...args: any[]) {
+      this.__kundiPostRequestUrl = String(args[1] ?? "");
+      return originalOpen.apply(this, args);
+    };
+    xhrPrototype.send = function (...args: any[]) {
+      if (String(this.__kundiPostRequestUrl).includes("/api/graphql/")) {
+        this.addEventListener(
+          "loadend",
+          () => {
+            try {
+              if (!this.responseType || this.responseType === "text") {
+                capture(String(this.responseText ?? ""));
+              }
+            } catch {
+              // Facebook may use a response type whose body is not readable.
+            }
+          },
+          { once: true },
+        );
+      }
+      return originalSend.apply(this, args);
+    };
+  }
+
+  const restore = () => {
+    if (scope.fetch === wrappedFetch) {
+      scope.fetch = originalFetch;
+    }
+    if (xhrPrototype && originalOpen && originalSend) {
+      xhrPrototype.open = originalOpen;
+      xhrPrototype.send = originalSend;
+    }
+  };
+  scope[key] = { responses, restore };
+}
+
+function readStoryCreateResponseCaptureInPage(
+  cleanup: boolean,
+): string | undefined {
+  const key = "__kundiPostStoryCreateResponseCapture";
+  const scope = globalThis as typeof globalThis & Record<string, any>;
+  const state = scope[key];
+  const response = Array.isArray(state?.responses)
+    ? state.responses.shift()
+    : undefined;
+  if (cleanup && state) {
+    if (state.restore instanceof Function) {
+      state.restore();
+    }
+    delete scope[key];
+  }
+  return typeof response === "string" ? response : undefined;
 }
 
 function beginPostingTemplateCapture(tabId: number) {
@@ -3185,8 +3877,20 @@ function normalizeGroupUrl(groupUrlOrId: string): string {
   return `https://www.facebook.com/groups/${groupUrlOrId}/`;
 }
 
-function isRateLimitError(error: string | undefined): boolean {
-  return /limit|temporarily blocked/i.test(error ?? "");
+function isRateLimitError(
+  error: string | undefined,
+  responseBody?: string,
+): boolean {
+  const message = error?.trim() ?? "";
+  const combined = `${message}\n${responseBody ?? ""}`;
+  if (
+    message === FACEBOOK_PENDING_CONTENT_LIMIT_MESSAGE ||
+    FACEBOOK_PENDING_CONTENT_LIMIT_PATTERN.test(combined) ||
+    FACEBOOK_PENDING_CONTENT_LIMIT_ERROR_CODE_PATTERN.test(combined)
+  ) {
+    return false;
+  }
+  return isRateLimitBody(combined);
 }
 
 async function createPostInTab(
@@ -3557,6 +4261,7 @@ async function createGraphqlPost(
   if (payload.error) {
     return {
       success: false,
+      responseBody: payload.responseText || undefined,
       error: payload.error,
     };
   }
@@ -3567,11 +4272,36 @@ async function createGraphqlPost(
     });
     return {
       success: false,
+      responseBody: payload.responseText,
       error: "Facebook returned a posting limit response.",
     };
   }
 
-  return parsePostResponse(payload.responseText);
+  const postResult = parsePostResponse(payload.responseText);
+  if (!postResult.success) {
+    postResult.responseBody = payload.responseText;
+    postResult.error = classifyFacebookPostFailure(
+      payload.responseText,
+      postResult.error,
+    );
+  }
+  return postResult;
+}
+
+function classifyFacebookPostFailure(
+  responseText: string,
+  fallback?: string,
+): string {
+  if (
+    FACEBOOK_PENDING_CONTENT_LIMIT_PATTERN.test(responseText) ||
+    FACEBOOK_PENDING_CONTENT_LIMIT_ERROR_CODE_PATTERN.test(responseText)
+  ) {
+    return FACEBOOK_PENDING_CONTENT_LIMIT_MESSAGE;
+  }
+  if (isRateLimitBody(responseText)) {
+    return FACEBOOK_RATE_LIMIT_MESSAGE;
+  }
+  return fallback ?? "Facebook rejected the Group post.";
 }
 
 function buildPostVariables(
@@ -3757,6 +4487,8 @@ function parsePostResponse(responseText: string): GraphqlPostResult {
     if (storyCreateMatch) {
       return {
         success: true,
+        pendingApproval: storyCreateMatch.pendingApproval,
+        actorId: storyCreateMatch.actorId,
         postId: storyCreateMatch.postId,
         postUrl: storyCreateMatch.url,
       };
@@ -3789,9 +4521,14 @@ function parsePostResponse(responseText: string): GraphqlPostResult {
   }
 }
 
-function findStoryCreateResult(
-  value: unknown,
-): { postId: string; url: string } | undefined {
+function findStoryCreateResult(value: unknown):
+  | {
+      postId: string;
+      url: string;
+      pendingApproval: boolean;
+      actorId?: string;
+    }
+  | undefined {
   if (Array.isArray(value)) {
     for (const entry of value) {
       const nested = findStoryCreateResult(entry);
@@ -3818,6 +4555,12 @@ function findStoryCreateResult(
       story && typeof story.url === "string" ? story.url : undefined;
     const storyId =
       story && typeof story.id === "string" ? story.id : undefined;
+    const defaultActor =
+      story && isRecord(story.default_actor) ? story.default_actor : undefined;
+    const actorId =
+      defaultActor && typeof defaultActor.id === "string"
+        ? defaultActor.id
+        : undefined;
     const fallbackUrl = directUrl ?? storyUrl;
     const fallbackId = directPostId ?? storyId;
 
@@ -3830,6 +4573,11 @@ function findStoryCreateResult(
       return {
         postId: fallbackId ?? "unknown-story-id",
         url: fallbackUrl,
+        pendingApproval:
+          fallbackUrl.includes("/pending_posts/") ||
+          Boolean(story?.if_viewer_can_learn_more_about_pending_post) ||
+          Boolean(story?.to?.if_viewer_can_see_pending_post_in_mall),
+        actorId,
       };
     }
   }
@@ -3872,9 +4620,14 @@ function findPostRecords(
 }
 
 function isRateLimitBody(responseText: string): boolean {
+  const normalized = responseText
+    .replace(/\\u0020/gi, " ")
+    .replace(/\\[nrt]/g, " ");
   return (
-    FACEBOOK_POST_LIMIT_PATTERN.test(responseText) ||
-    /temporarily blocked/i.test(responseText)
+    FACEBOOK_RATE_LIMIT_ERROR_CODE_PATTERN.test(normalized) ||
+    FACEBOOK_RATE_LIMIT_API_ERROR_CODE_PATTERN.test(normalized) ||
+    FACEBOOK_POST_LIMIT_PATTERN.test(normalized) ||
+    FACEBOOK_OTHER_POSTING_RESTRICTION_PATTERN.test(normalized)
   );
 }
 
@@ -4339,6 +5092,7 @@ function notifyUiPostingStatus(
   const status: UiPostingStatusMessage = {
     type: "UI_POSTING_STATUS",
     successTarget: activePostingSuccessTarget,
+    pendingCount: activePostingPendingCount,
     ...partial,
   };
 

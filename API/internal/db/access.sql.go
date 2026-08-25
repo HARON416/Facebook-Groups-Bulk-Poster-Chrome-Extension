@@ -11,27 +11,56 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const bindFacebookAccountByActorHash = `-- name: BindFacebookAccountByActorHash :one
+INSERT INTO facebook_account_bindings (user_id, actor_hash)
+VALUES ($1, $2)
+ON CONFLICT (actor_hash) DO UPDATE SET
+    last_used_at = CURRENT_TIMESTAMP
+RETURNING id, user_id, actor_hash, created_at, last_used_at
+`
+
+type BindFacebookAccountByActorHashParams struct {
+	UserID    pgtype.UUID `json:"user_id"`
+	ActorHash string      `json:"actor_hash"`
+}
+
+func (q *Queries) BindFacebookAccountByActorHash(ctx context.Context, arg BindFacebookAccountByActorHashParams) (FacebookAccountBinding, error) {
+	row := q.db.QueryRow(ctx, bindFacebookAccountByActorHash, arg.UserID, arg.ActorHash)
+	var i FacebookAccountBinding
+	err := row.Scan(
+		&i.ID,
+		&i.UserID,
+		&i.ActorHash,
+		&i.CreatedAt,
+		&i.LastUsedAt,
+	)
+	return i, err
+}
+
 const createPostingUsageClaim = `-- name: CreatePostingUsageClaim :one
 INSERT INTO posting_usage_claims (
-    user_id, kind, operation_id, claimed_at, expires_at
+    user_id, facebook_account_binding_id, kind, operation_id, claimed_at, expires_at
 ) VALUES (
-    $1, $2, $3,
-    $4, $5
+    $1, $2,
+    $3, $4,
+    $5, $6
 )
-RETURNING id, user_id, kind, operation_id, status, claimed_at, expires_at, succeeded_at, released_at
+RETURNING id, user_id, facebook_account_binding_id, kind, operation_id, status, claimed_at, expires_at, succeeded_at, released_at
 `
 
 type CreatePostingUsageClaimParams struct {
-	UserID      pgtype.UUID        `json:"user_id"`
-	Kind        string             `json:"kind"`
-	OperationID pgtype.UUID        `json:"operation_id"`
-	ClaimedAt   pgtype.Timestamptz `json:"claimed_at"`
-	ExpiresAt   pgtype.Timestamptz `json:"expires_at"`
+	UserID                   pgtype.UUID        `json:"user_id"`
+	FacebookAccountBindingID pgtype.UUID        `json:"facebook_account_binding_id"`
+	Kind                     string             `json:"kind"`
+	OperationID              pgtype.UUID        `json:"operation_id"`
+	ClaimedAt                pgtype.Timestamptz `json:"claimed_at"`
+	ExpiresAt                pgtype.Timestamptz `json:"expires_at"`
 }
 
 func (q *Queries) CreatePostingUsageClaim(ctx context.Context, arg CreatePostingUsageClaimParams) (PostingUsageClaim, error) {
 	row := q.db.QueryRow(ctx, createPostingUsageClaim,
 		arg.UserID,
+		arg.FacebookAccountBindingID,
 		arg.Kind,
 		arg.OperationID,
 		arg.ClaimedAt,
@@ -41,6 +70,7 @@ func (q *Queries) CreatePostingUsageClaim(ctx context.Context, arg CreatePosting
 	err := row.Scan(
 		&i.ID,
 		&i.UserID,
+		&i.FacebookAccountBindingID,
 		&i.Kind,
 		&i.OperationID,
 		&i.Status,
@@ -52,8 +82,68 @@ func (q *Queries) CreatePostingUsageClaim(ctx context.Context, arg CreatePosting
 	return i, err
 }
 
+const getFacebookAccountBindingByUser = `-- name: GetFacebookAccountBindingByUser :one
+SELECT id, user_id, actor_hash, created_at, last_used_at FROM facebook_account_bindings
+WHERE user_id = $1
+`
+
+func (q *Queries) GetFacebookAccountBindingByUser(ctx context.Context, userID pgtype.UUID) (FacebookAccountBinding, error) {
+	row := q.db.QueryRow(ctx, getFacebookAccountBindingByUser, userID)
+	var i FacebookAccountBinding
+	err := row.Scan(
+		&i.ID,
+		&i.UserID,
+		&i.ActorHash,
+		&i.CreatedAt,
+		&i.LastUsedAt,
+	)
+	return i, err
+}
+
+const getFacebookPostingUsageSummary = `-- name: GetFacebookPostingUsageSummary :one
+SELECT
+    COUNT(*)::BIGINT AS used,
+    CASE
+        WHEN COUNT(*) > 0 THEN $1::TIMESTAMPTZ
+        ELSE NULL
+    END::TIMESTAMPTZ AS reset_at
+FROM posting_usage_claims
+WHERE facebook_account_binding_id = $2
+  AND kind = $3
+  AND claimed_at >= $4::TIMESTAMPTZ
+  AND claimed_at < $1::TIMESTAMPTZ
+  AND (
+      status = 'succeeded'
+      OR (status = 'claimed' AND expires_at > CURRENT_TIMESTAMP)
+  )
+`
+
+type GetFacebookPostingUsageSummaryParams struct {
+	WindowEnd                pgtype.Timestamptz `json:"window_end"`
+	FacebookAccountBindingID pgtype.UUID        `json:"facebook_account_binding_id"`
+	Kind                     string             `json:"kind"`
+	WindowStart              pgtype.Timestamptz `json:"window_start"`
+}
+
+type GetFacebookPostingUsageSummaryRow struct {
+	Used    int64              `json:"used"`
+	ResetAt pgtype.Timestamptz `json:"reset_at"`
+}
+
+func (q *Queries) GetFacebookPostingUsageSummary(ctx context.Context, arg GetFacebookPostingUsageSummaryParams) (GetFacebookPostingUsageSummaryRow, error) {
+	row := q.db.QueryRow(ctx, getFacebookPostingUsageSummary,
+		arg.WindowEnd,
+		arg.FacebookAccountBindingID,
+		arg.Kind,
+		arg.WindowStart,
+	)
+	var i GetFacebookPostingUsageSummaryRow
+	err := row.Scan(&i.Used, &i.ResetAt)
+	return i, err
+}
+
 const getPostingUsageClaim = `-- name: GetPostingUsageClaim :one
-SELECT id, user_id, kind, operation_id, status, claimed_at, expires_at, succeeded_at, released_at FROM posting_usage_claims
+SELECT id, user_id, facebook_account_binding_id, kind, operation_id, status, claimed_at, expires_at, succeeded_at, released_at FROM posting_usage_claims
 WHERE user_id = $1
   AND kind = $2
   AND operation_id = $3
@@ -71,6 +161,7 @@ func (q *Queries) GetPostingUsageClaim(ctx context.Context, arg GetPostingUsageC
 	err := row.Scan(
 		&i.ID,
 		&i.UserID,
+		&i.FacebookAccountBindingID,
 		&i.Kind,
 		&i.OperationID,
 		&i.Status,
@@ -125,7 +216,7 @@ func (q *Queries) GetPostingUsageSummary(ctx context.Context, arg GetPostingUsag
 }
 
 const lockUserForUsage = `-- name: LockUserForUsage :one
-SELECT id, google_subject, email, email_verified, display_name, avatar_url, access_tier, timezone, created_at, updated_at FROM users
+SELECT id, google_subject, email, email_verified, display_name, avatar_url, access_tier, pro_expires_at, pro_granted_at, pro_grant_note, timezone, created_at, updated_at FROM users
 WHERE id = $1
 FOR UPDATE
 `
@@ -141,6 +232,9 @@ func (q *Queries) LockUserForUsage(ctx context.Context, userID pgtype.UUID) (Use
 		&i.DisplayName,
 		&i.AvatarUrl,
 		&i.AccessTier,
+		&i.ProExpiresAt,
+		&i.ProGrantedAt,
+		&i.ProGrantNote,
 		&i.Timezone,
 		&i.CreatedAt,
 		&i.UpdatedAt,
@@ -158,7 +252,7 @@ WHERE user_id = $1
   AND kind = $2
   AND operation_id = $3
   AND status = 'claimed'
-RETURNING id, user_id, kind, operation_id, status, claimed_at, expires_at, succeeded_at, released_at
+RETURNING id, user_id, facebook_account_binding_id, kind, operation_id, status, claimed_at, expires_at, succeeded_at, released_at
 `
 
 type MarkPostingUsageClaimSucceededParams struct {
@@ -173,6 +267,7 @@ func (q *Queries) MarkPostingUsageClaimSucceeded(ctx context.Context, arg MarkPo
 	err := row.Scan(
 		&i.ID,
 		&i.UserID,
+		&i.FacebookAccountBindingID,
 		&i.Kind,
 		&i.OperationID,
 		&i.Status,
@@ -194,7 +289,7 @@ WHERE user_id = $1
   AND kind = $2
   AND operation_id = $3
   AND status = 'claimed'
-RETURNING id, user_id, kind, operation_id, status, claimed_at, expires_at, succeeded_at, released_at
+RETURNING id, user_id, facebook_account_binding_id, kind, operation_id, status, claimed_at, expires_at, succeeded_at, released_at
 `
 
 type ReleasePostingUsageClaimParams struct {
@@ -209,6 +304,7 @@ func (q *Queries) ReleasePostingUsageClaim(ctx context.Context, arg ReleasePosti
 	err := row.Scan(
 		&i.ID,
 		&i.UserID,
+		&i.FacebookAccountBindingID,
 		&i.Kind,
 		&i.OperationID,
 		&i.Status,
@@ -216,6 +312,26 @@ func (q *Queries) ReleasePostingUsageClaim(ctx context.Context, arg ReleasePosti
 		&i.ExpiresAt,
 		&i.SucceededAt,
 		&i.ReleasedAt,
+	)
+	return i, err
+}
+
+const touchFacebookAccountBinding = `-- name: TouchFacebookAccountBinding :one
+UPDATE facebook_account_bindings
+SET last_used_at = CURRENT_TIMESTAMP
+WHERE id = $1
+RETURNING id, user_id, actor_hash, created_at, last_used_at
+`
+
+func (q *Queries) TouchFacebookAccountBinding(ctx context.Context, id pgtype.UUID) (FacebookAccountBinding, error) {
+	row := q.db.QueryRow(ctx, touchFacebookAccountBinding, id)
+	var i FacebookAccountBinding
+	err := row.Scan(
+		&i.ID,
+		&i.UserID,
+		&i.ActorHash,
+		&i.CreatedAt,
+		&i.LastUsedAt,
 	)
 	return i, err
 }

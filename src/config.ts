@@ -47,6 +47,8 @@ export type UiPreparedPost = {
   images: UiPostImage[];
 };
 
+export type GroupPostingStrategy = "selected_order" | "balanced";
+
 export type StartUiPostingRequest = {
   type: "START_UI_POSTING";
   groups: SimpleGroup[];
@@ -54,6 +56,7 @@ export type StartUiPostingRequest = {
   minimumDelaySeconds: number;
   maximumDelaySeconds: number;
   maxPosts: number;
+  postingStrategy: GroupPostingStrategy;
 };
 
 export type StopUiPostingRequest = {
@@ -76,16 +79,20 @@ export type UiPostingStatusMessage = {
     | "waiting"
     | "paused"
     | "posted"
+    | "pending"
     | "failed"
     | "rate_limited"
     | "stopped"
     | "done";
   message: string;
+  detail?: string;
+  responseBody?: string;
   current: number;
   total: number;
   groupId?: string;
   groupName?: string;
   successCount?: number;
+  pendingCount?: number;
   failedCount?: number;
   processedCount?: number;
   successTarget?: number;
@@ -106,6 +113,8 @@ export type AccessLimitValues = {
 
 export type AccessEntitlements = {
   tier: "free" | "pro";
+  pro_expires_at?: string;
+  pro_lifetime?: boolean;
   limits: AccessLimitValues;
   usage: {
     saved_group_posts: number;

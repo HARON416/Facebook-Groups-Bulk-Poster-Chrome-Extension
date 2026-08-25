@@ -17,6 +17,35 @@ type AuthSession struct {
 	LastUsedAt pgtype.Timestamptz `json:"last_used_at"`
 }
 
+type FacebookAccountBinding struct {
+	ID         pgtype.UUID        `json:"id"`
+	UserID     pgtype.UUID        `json:"user_id"`
+	ActorHash  string             `json:"actor_hash"`
+	CreatedAt  pgtype.Timestamptz `json:"created_at"`
+	LastUsedAt pgtype.Timestamptz `json:"last_used_at"`
+}
+
+type FacebookGroupPostingEvent struct {
+	ID          pgtype.UUID        `json:"id"`
+	UserID      pgtype.UUID        `json:"user_id"`
+	ActorHash   string             `json:"actor_hash"`
+	GroupID     string             `json:"group_id"`
+	OperationID pgtype.UUID        `json:"operation_id"`
+	AcceptedAt  pgtype.Timestamptz `json:"accepted_at"`
+}
+
+type FacebookGroupPostingStat struct {
+	ID             pgtype.UUID        `json:"id"`
+	UserID         pgtype.UUID        `json:"user_id"`
+	ActorHash      string             `json:"actor_hash"`
+	GroupID        string             `json:"group_id"`
+	GroupName      string             `json:"group_name"`
+	AcceptedCount  int64              `json:"accepted_count"`
+	LastAcceptedAt pgtype.Timestamptz `json:"last_accepted_at"`
+	CreatedAt      pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt      pgtype.Timestamptz `json:"updated_at"`
+}
+
 type GroupPost struct {
 	ID        pgtype.UUID        `json:"id"`
 	UserID    pgtype.UUID        `json:"user_id"`
@@ -93,15 +122,16 @@ type MarketplaceVehicleDetail struct {
 }
 
 type PostingUsageClaim struct {
-	ID          pgtype.UUID        `json:"id"`
-	UserID      pgtype.UUID        `json:"user_id"`
-	Kind        string             `json:"kind"`
-	OperationID pgtype.UUID        `json:"operation_id"`
-	Status      string             `json:"status"`
-	ClaimedAt   pgtype.Timestamptz `json:"claimed_at"`
-	ExpiresAt   pgtype.Timestamptz `json:"expires_at"`
-	SucceededAt pgtype.Timestamptz `json:"succeeded_at"`
-	ReleasedAt  pgtype.Timestamptz `json:"released_at"`
+	ID                       pgtype.UUID        `json:"id"`
+	UserID                   pgtype.UUID        `json:"user_id"`
+	FacebookAccountBindingID pgtype.UUID        `json:"facebook_account_binding_id"`
+	Kind                     string             `json:"kind"`
+	OperationID              pgtype.UUID        `json:"operation_id"`
+	Status                   string             `json:"status"`
+	ClaimedAt                pgtype.Timestamptz `json:"claimed_at"`
+	ExpiresAt                pgtype.Timestamptz `json:"expires_at"`
+	SucceededAt              pgtype.Timestamptz `json:"succeeded_at"`
+	ReleasedAt               pgtype.Timestamptz `json:"released_at"`
 }
 
 type User struct {
@@ -112,6 +142,9 @@ type User struct {
 	DisplayName   pgtype.Text        `json:"display_name"`
 	AvatarUrl     pgtype.Text        `json:"avatar_url"`
 	AccessTier    string             `json:"access_tier"`
+	ProExpiresAt  pgtype.Timestamptz `json:"pro_expires_at"`
+	ProGrantedAt  pgtype.Timestamptz `json:"pro_granted_at"`
+	ProGrantNote  pgtype.Text        `json:"pro_grant_note"`
 	Timezone      string             `json:"timezone"`
 	CreatedAt     pgtype.Timestamptz `json:"created_at"`
 	UpdatedAt     pgtype.Timestamptz `json:"updated_at"`
