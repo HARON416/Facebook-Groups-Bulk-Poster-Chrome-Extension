@@ -4,11 +4,13 @@ import {
   type CreatePostRequest,
   type CreatePostResponse,
   type ExtensionRequest,
+  type GeminiErrorPrompt,
   type FacebookGroup,
   type GroupExtractionStatusMessage,
   type MarketplaceItemPostingResponse,
   type MarketplaceItemPostingStatusMessage,
   type MarketplaceCleanupStatusMessage,
+  type PostingTiming,
   type SimpleGroup,
   type StartMarketplaceItemPostingRequest,
   type StartUiPostingRequest,
@@ -97,7 +99,7 @@ class PostingAccessError extends Error {
 class MissingFirstGroupComposerError extends Error {
   constructor(groupName: string) {
     super(
-      `KundiPost could not find “Write something...” in ${groupName}. Start posting again and KundiPost will try another selected Group first.`,
+      `Postika could not find “Write something...” in ${groupName}. Start posting again and Postika will try another selected Group first.`,
     );
     this.name = "MissingFirstGroupComposerError";
   }
@@ -395,7 +397,7 @@ async function getFacebookActorId(tabId: number): Promise<string> {
   const actorId = normalizeFacebookActorId(cookie?.value);
   if (!actorId) {
     throw new PostingAccessError(
-      "KundiPost could not identify the Facebook account signed in to this Chrome profile. Refresh Facebook, sign in again, and retry.",
+      "Postika could not identify the Facebook account signed in to this Chrome profile. Refresh Facebook, sign in again, and retry.",
     );
   }
   return actorId;
@@ -419,6 +421,68 @@ let activePostingPendingCount = 0;
 let stopPostingRequested = false;
 let pausePostingRequested = false;
 let pauseNotificationSent = false;
+type GeminiQueue = "groups" | "marketplace";
+const geminiBypassed = { groups: false, marketplace: false };
+const pendingGeminiPrompts = new Map<
+  string,
+  {
+    prompt: GeminiErrorPrompt;
+    resolve: (action: "continue" | "stop") => void;
+  }
+>();
+
+function resolveGeminiPrompt(id: string, action: "continue" | "stop") {
+  const pending = pendingGeminiPrompts.get(id);
+  if (!pending) return false;
+  pendingGeminiPrompts.delete(id);
+  pending.resolve(action);
+  return true;
+}
+
+async function handleGeminiFailure(
+  queue: GeminiQueue,
+  error: string,
+): Promise<void> {
+  const stopped = () =>
+    queue === "groups" ? stopPostingRequested : marketplaceStopPostingRequested;
+  if (stopped()) throw new Error(MANUAL_STOP_MESSAGE);
+  const prompt: GeminiErrorPrompt = {
+    type: "GEMINI_ERROR_PROMPT",
+    id: crypto.randomUUID(),
+    queue,
+    error,
+  };
+  const decision = new Promise<"continue" | "stop">((resolve) => {
+    pendingGeminiPrompts.set(prompt.id, { prompt, resolve });
+  });
+  const log = (message: string) => {
+    if (queue === "groups" && latestUiPostingStatus) {
+      notifyUiPostingStatus({
+        ...latestUiPostingStatus,
+        status: "posting",
+        message,
+      });
+    } else if (queue === "marketplace" && latestMarketplacePostingStatus) {
+      notifyMarketplaceItemPostingStatus({
+        ...latestMarketplacePostingStatus,
+        status: "posting",
+        message,
+      });
+    }
+  };
+  log(`Gemini rewrite failed: ${error} Waiting for your choice.`);
+  void chrome.runtime.sendMessage(prompt).catch(() => {});
+  const action = await decision;
+  if (action === "stop" || stopped()) {
+    if (queue === "groups") stopPostingRequested = true;
+    else marketplaceStopPostingRequested = true;
+    log("Stopped posting after Gemini rewrite failed.");
+    throw new Error(MANUAL_STOP_MESSAGE);
+  }
+  geminiBypassed[queue] = true;
+  log("Continuing without Gemini for this queue. Using original descriptions.");
+}
+
 let activeGeminiRequestController: AbortController | undefined;
 let latestUiPostingStatus: UiPostingStatusMessage | undefined;
 let activePostingTabId: number | undefined;
@@ -432,6 +496,127 @@ let latestMarketplacePostingStatus:
   | MarketplaceItemPostingStatusMessage
   | undefined;
 let activeMarketplacePostingTabId: number | undefined;
+
+type QueueTimer = {
+  startedAt: number;
+  totalActiveMs: number;
+  totalActiveSince?: number;
+  itemKey?: string;
+  itemActiveMs: number;
+  itemActiveSince?: number;
+  pausedAt?: number;
+  pausedMs: number;
+  complete: boolean;
+};
+
+let groupsPostingTimer: QueueTimer | undefined;
+let marketplacePostingTimer: QueueTimer | undefined;
+
+function createQueueTimer(requestedStartedAt?: number): QueueTimer {
+  const now = Date.now();
+  const startedAt =
+    typeof requestedStartedAt === "number" &&
+    Number.isFinite(requestedStartedAt) &&
+    requestedStartedAt <= now
+      ? Math.max(0, requestedStartedAt)
+      : now;
+  return {
+    startedAt,
+    totalActiveMs: now - startedAt,
+    totalActiveSince: now,
+    itemActiveMs: now - startedAt,
+    itemActiveSince: now,
+    pausedMs: 0,
+    complete: false,
+  };
+}
+
+function commitQueueTimer(timer: QueueTimer, now = Date.now()) {
+  if (timer.totalActiveSince !== undefined) {
+    timer.totalActiveMs += Math.max(0, now - timer.totalActiveSince);
+    timer.totalActiveSince = undefined;
+  }
+  if (timer.itemActiveSince !== undefined) {
+    timer.itemActiveMs += Math.max(0, now - timer.itemActiveSince);
+    timer.itemActiveSince = undefined;
+  }
+}
+
+function pauseQueueTimer(timer?: QueueTimer) {
+  if (!timer || timer.complete || timer.pausedAt !== undefined) {
+    return;
+  }
+  const now = Date.now();
+  commitQueueTimer(timer, now);
+  timer.pausedAt = now;
+}
+
+function resumeQueueTimer(timer?: QueueTimer) {
+  if (!timer || timer.complete || timer.pausedAt === undefined) {
+    return;
+  }
+  const now = Date.now();
+  timer.pausedMs += Math.max(0, now - timer.pausedAt);
+  timer.pausedAt = undefined;
+  timer.totalActiveSince = now;
+  timer.itemActiveSince = now;
+}
+
+function finishQueueTimer(timer?: QueueTimer) {
+  if (!timer || timer.complete) {
+    return;
+  }
+  const now = Date.now();
+  commitQueueTimer(timer, now);
+  if (timer.pausedAt !== undefined) {
+    timer.pausedMs += Math.max(0, now - timer.pausedAt);
+    timer.pausedAt = undefined;
+  }
+  timer.complete = true;
+}
+
+function queueTimingSnapshot(
+  timer: QueueTimer | undefined,
+  itemKey?: string,
+): PostingTiming | undefined {
+  if (!timer) {
+    return undefined;
+  }
+  const now = Date.now();
+  if (itemKey && itemKey !== timer.itemKey) {
+    if (timer.itemKey === undefined) {
+      timer.itemKey = itemKey;
+    } else {
+      if (timer.itemActiveSince !== undefined) {
+        timer.itemActiveMs += Math.max(0, now - timer.itemActiveSince);
+      }
+      timer.itemKey = itemKey;
+      timer.itemActiveMs = 0;
+      timer.itemActiveSince =
+        timer.pausedAt === undefined && !timer.complete ? now : undefined;
+    }
+  }
+  const running = timer.pausedAt === undefined && !timer.complete;
+  return {
+    startedAt: timer.startedAt,
+    updatedAt: now,
+    elapsedMs:
+      timer.totalActiveMs +
+      (running && timer.totalActiveSince !== undefined
+        ? Math.max(0, now - timer.totalActiveSince)
+        : 0),
+    itemElapsedMs:
+      timer.itemActiveMs +
+      (running && timer.itemActiveSince !== undefined
+        ? Math.max(0, now - timer.itemActiveSince)
+        : 0),
+    pausedMs:
+      timer.pausedMs +
+      (timer.pausedAt !== undefined ? Math.max(0, now - timer.pausedAt) : 0),
+    isPaused: timer.pausedAt !== undefined,
+    isComplete: timer.complete,
+  };
+}
 const loggedUploadCandidateRequestIds = new Set<string>();
 const MANUAL_STOP_MESSAGE = "Posting stopped by user.";
 const FACEBOOK_POST_LIMIT_PATTERN = /\bwe\s+limit\s+how\s+often\s+you\b/i;
@@ -448,6 +633,16 @@ const FACEBOOK_PENDING_CONTENT_LIMIT_MESSAGE =
   "You're at the limit for pending content in this group.";
 const FACEBOOK_RATE_LIMIT_MESSAGE =
   "Facebook has temporarily limited posting. Stop and try again later.";
+const LAST_GROUP_POSTING_STATUS_STORAGE_KEY = "lastGroupPostingStatus";
+const LAST_MARKETPLACE_POSTING_STATUS_STORAGE_KEY =
+  "lastMarketplacePostingStatus";
+
+// Older builds stored queue summaries durably. Remove those entries once so
+// logs now follow the browser session rather than surviving a restart.
+void chrome.storage.local.remove([
+  LAST_GROUP_POSTING_STATUS_STORAGE_KEY,
+  LAST_MARKETPLACE_POSTING_STATUS_STORAGE_KEY,
+]);
 
 chrome.runtime.onInstalled.addListener(() => {
   void chrome.sidePanel.setPanelBehavior({ openPanelOnActionClick: true });
@@ -662,6 +857,66 @@ chrome.runtime.onMessage.addListener(
     _sender,
     sendResponse: (response: any) => void,
   ) => {
+    if (request.type === "RESOLVE_GEMINI_ERROR") {
+      sendResponse({
+        ok:
+          (request.action === "continue" || request.action === "stop") &&
+          resolveGeminiPrompt(request.id, request.action),
+      });
+      return false;
+    }
+    if (request.type === "GET_POSTING_QUEUE_STATUS") {
+      void chrome.storage.session
+        .get([
+          LAST_GROUP_POSTING_STATUS_STORAGE_KEY,
+          LAST_MARKETPLACE_POSTING_STATUS_STORAGE_KEY,
+        ])
+        .then((storage) => {
+          const storedGroups = storage[
+            LAST_GROUP_POSTING_STATUS_STORAGE_KEY
+          ] as UiPostingStatusMessage | undefined;
+          const storedGroupsIsTransientError =
+            storedGroups?.status === "rate_limited";
+          if (storedGroupsIsTransientError) {
+            void chrome.storage.session.remove(
+              LAST_GROUP_POSTING_STATUS_STORAGE_KEY,
+            );
+          }
+          const currentGroups =
+            latestUiPostingStatus &&
+            (activePosting || latestUiPostingStatus.status !== "rate_limited")
+              ? {
+                  ...latestUiPostingStatus,
+                  timing:
+                    queueTimingSnapshot(
+                      groupsPostingTimer,
+                      latestUiPostingStatus.groupId,
+                    ) ?? latestUiPostingStatus.timing,
+                }
+              : undefined;
+          sendResponse({
+            geminiPrompts: Array.from(
+              pendingGeminiPrompts.values(),
+              ({ prompt }) => prompt,
+            ),
+            groups:
+              currentGroups ??
+              (storedGroupsIsTransientError ? undefined : storedGroups),
+            marketplace: latestMarketplacePostingStatus
+              ? {
+                  ...latestMarketplacePostingStatus,
+                  timing:
+                    queueTimingSnapshot(
+                      marketplacePostingTimer,
+                      latestMarketplacePostingStatus.listingId,
+                    ) ?? latestMarketplacePostingStatus.timing,
+                }
+              : storage[LAST_MARKETPLACE_POSTING_STATUS_STORAGE_KEY],
+          });
+        });
+      return true;
+    }
+
     if (request.type === "MARKETPLACE_CLEANUP_FINISHED") {
       marketplaceCleanupCompletions.get(request.runId)?.({
         ok: request.ok,
@@ -800,6 +1055,10 @@ chrome.runtime.onMessage.addListener(
         return false;
       }
       marketplaceStopPostingRequested = true;
+      for (const [id, pending] of pendingGeminiPrompts) {
+        if (pending.prompt.queue === "marketplace")
+          resolveGeminiPrompt(id, "stop");
+      }
       marketplacePausePostingRequested = false;
       activeGeminiRequestController?.abort();
       sendMarketplacePostingControl("STOP_MARKETPLACE_POSTING");
@@ -817,6 +1076,7 @@ chrome.runtime.onMessage.addListener(
         return false;
       }
       marketplacePausePostingRequested = true;
+      pauseQueueTimer(marketplacePostingTimer);
       sendMarketplacePostingControl("PAUSE_MARKETPLACE_POSTING");
       notifyMarketplacePostingControlStatus(
         "paused",
@@ -832,6 +1092,7 @@ chrome.runtime.onMessage.addListener(
         return false;
       }
       marketplacePausePostingRequested = false;
+      resumeQueueTimer(marketplacePostingTimer);
       sendMarketplacePostingControl("RESUME_MARKETPLACE_POSTING");
       notifyMarketplacePostingControlStatus(
         "posting",
@@ -848,6 +1109,9 @@ chrome.runtime.onMessage.addListener(
       }
 
       stopPostingRequested = true;
+      for (const [id, pending] of pendingGeminiPrompts) {
+        if (pending.prompt.queue === "groups") resolveGeminiPrompt(id, "stop");
+      }
       pausePostingRequested = false;
       activeGeminiRequestController?.abort();
       sendContentPostingControl("STOP_CREATE_POST");
@@ -867,6 +1131,7 @@ chrome.runtime.onMessage.addListener(
 
       pausePostingRequested = true;
       pauseNotificationSent = true;
+      pauseQueueTimer(groupsPostingTimer);
       sendContentPostingControl("PAUSE_CREATE_POST");
       notifyPostingControlStatus("paused", "Posting queue paused.");
       sendResponse({ ok: true });
@@ -881,6 +1146,7 @@ chrome.runtime.onMessage.addListener(
 
       pausePostingRequested = false;
       pauseNotificationSent = false;
+      resumeQueueTimer(groupsPostingTimer);
       sendContentPostingControl("RESUME_CREATE_POST");
       notifyPostingControlStatus("posting", "Posting queue resumed.");
       sendResponse({ ok: true });
@@ -1308,6 +1574,13 @@ async function runMarketplaceItemPostingQueue(
   if (total === 0) {
     throw new Error("Select at least one Marketplace item before posting.");
   }
+
+  geminiBypassed.marketplace = false;
+  marketplacePostingTimer = createQueueTimer(request.startedAt);
+  latestMarketplacePostingStatus = undefined;
+  void chrome.storage.session.remove(
+    LAST_MARKETPLACE_POSTING_STATUS_STORAGE_KEY,
+  );
 
   const minimumDelaySeconds = Math.max(
     MIN_POSTING_DELAY_SECONDS,
@@ -2855,6 +3128,9 @@ async function runGraphqlPostingQueue(
   }
 
   activePosting = true;
+  geminiBypassed.groups = false;
+  groupsPostingTimer = createQueueTimer(request.startedAt);
+  void chrome.storage.session.remove(LAST_GROUP_POSTING_STATUS_STORAGE_KEY);
   activePostingSuccessTarget = maxPosts;
   activePostingPendingCount = 0;
   latestUiPostingStatus = undefined;
@@ -3047,7 +3323,7 @@ async function runGraphqlPostingQueue(
           ? "Your post is awaiting admin approval. If the admin team approves it, it'll become visible in the group."
           : firstHistoryRecorded
             ? undefined
-            : "The post succeeded, but KundiPost could not update its Group balance history.",
+            : "The post succeeded, but Postika could not update its Group balance history.",
         current: 1,
         total,
         groupId: groups[0].id,
@@ -3254,7 +3530,6 @@ async function runGraphqlPostingQueue(
           postBody,
           photoIds,
           group.id,
-          postBodyWasRewritten,
         );
       } catch (error) {
         await finalizePostingUsage(
@@ -3302,7 +3577,7 @@ async function runGraphqlPostingQueue(
             ? "Your post is awaiting admin approval. If the admin team approves it, it'll become visible in the group."
             : historyRecorded
               ? undefined
-              : "The post succeeded, but KundiPost could not update its Group balance history.",
+              : "The post succeeded, but Postika could not update its Group balance history.",
           current,
           total,
           groupId: group.id,
@@ -4195,7 +4470,6 @@ async function createGraphqlPost(
   text: string,
   photoIds: string[],
   groupId: string,
-  textWasRewritten: boolean,
 ): Promise<GraphqlPostResult> {
   await logPageCookieDiagnostics(tabId, "Before GraphQL replay");
   const variables = buildPostVariables(
@@ -4203,7 +4477,6 @@ async function createGraphqlPost(
     text,
     photoIds,
     groupId,
-    textWasRewritten,
   );
   debugLog("Sending GraphQL post request.", {
     groupId,
@@ -4309,7 +4582,6 @@ function buildPostVariables(
   text: string,
   photoIds: string[],
   groupId: string,
-  textWasRewritten: boolean,
 ): string {
   const hasImages = photoIds.length > 0;
   const attachments = photoIds.map((photoId) => ({
@@ -4327,7 +4599,6 @@ function buildPostVariables(
       text,
       attachments,
       groupId,
-      textWasRewritten,
     );
   }
 
@@ -4363,9 +4634,7 @@ function buildPostVariables(
   input.client_mutation_id = String(Date.now());
 
   if (originalText !== text || !isRecord(input.composed_text)) {
-    input.composed_text = buildComposedText(text, {
-      preserveBlankLines: !textWasRewritten,
-    });
+    input.composed_text = buildComposedText(text);
   }
 
   replaceStringValue(templateVariables, originalText, text);
@@ -4379,7 +4648,6 @@ function buildFallbackPostVariables(
   text: string,
   attachments: Array<{ photo: { id: string } }>,
   groupId: string,
-  textWasRewritten: boolean,
 ): string {
   const actorId =
     extractUserIdFromFormData(templateFormData) ?? "61553861467726";
@@ -4396,9 +4664,7 @@ function buildFallbackPostVariables(
         ranges: [],
         text,
       },
-      composed_text: buildComposedText(text, {
-        preserveBlankLines: !textWasRewritten,
-      }),
+      composed_text: buildComposedText(text),
       audience: {
         to_id: groupId,
       },
@@ -4414,25 +4680,20 @@ function buildFallbackPostVariables(
   return JSON.stringify(variables);
 }
 
-function buildComposedText(
-  text: string,
-  { preserveBlankLines }: { preserveBlankLines: boolean },
-) {
-  const textBlocks = text.split(/\r?\n/);
-  const blocks = (textBlocks.length > 0 ? textBlocks : [text])
-    .map((block) => block.trimEnd())
-    .filter((block) => preserveBlankLines || block.trim().length > 0)
-    .map((block) => (block.length > 0 ? block : "\u00A0"));
-  const normalizedBlocks = blocks.length > 0 ? blocks : [text.trim()];
+function buildComposedText(text: string) {
+  // Facebook renders separate composed-text blocks as paragraphs. Keep the
+  // complete caption in one block so each newline remains a soft line break:
+  // one newline stays one break, while two newlines preserve one blank line.
+  const normalizedText = text.replace(/\r\n?/g, "\n");
 
   return {
-    block_data: normalizedBlocks.map(() => "{}"),
-    block_depths: normalizedBlocks.map(() => 0),
-    block_types: normalizedBlocks.map(() => 0),
-    blocks: normalizedBlocks,
-    entities: normalizedBlocks.map(() => "[]"),
+    block_data: ["{}"],
+    block_depths: [0],
+    block_types: [0],
+    blocks: [normalizedText],
+    entities: ["[]"],
     entity_map: "{}",
-    inline_styles: normalizedBlocks.map(() => "[]"),
+    inline_styles: ["[]"],
   };
 }
 
@@ -4944,13 +5205,18 @@ async function rewriteDescriptionWithGemini(
   if (!trimmed) {
     return trimmed;
   }
-  if (!settings.enabled) {
+  const queue: GeminiQueue =
+    settings.destination === "Facebook Group" ? "groups" : "marketplace";
+  if (!settings.enabled || geminiBypassed[queue]) {
     debugLog("Gemini rewrite skipped because the feature is disabled.");
     return trimmed;
   }
   const apiKey = settings.apiKey.trim();
   if (!apiKey) {
-    debugLog("Gemini rewrite skipped because no API key was found.");
+    await handleGeminiFailure(
+      queue,
+      "No Gemini API key is configured. Add a valid key in settings.",
+    );
     return trimmed;
   }
 
@@ -4999,13 +5265,14 @@ ${hashtagRules}
 Description:
 ${trimmed}`;
 
+  let requestController: AbortController | undefined;
   try {
     debugLog("Sending Gemini rewrite request.", {
       model: GEMINI_MODEL,
       inputLength: trimmed.length,
       customPromptLength: customPrompt.length,
     });
-    const requestController = new AbortController();
+    requestController = new AbortController();
     activeGeminiRequestController = requestController;
     const response = await withTimeout(
       (async (): Promise<GeminiGenerateContentResponse> => {
@@ -5017,7 +5284,7 @@ ${trimmed}`;
               "Content-Type": "application/json",
               "x-goog-api-key": apiKey,
             },
-            signal: requestController.signal,
+            signal: requestController!.signal,
             body: JSON.stringify({
               contents: [{ parts: [{ text: prompt }] }],
               generationConfig: {
@@ -5028,13 +5295,13 @@ ${trimmed}`;
             }),
           },
         );
-        const payload =
-          (await apiResponse.json()) as GeminiGenerateContentResponse;
+        const payload = (await apiResponse
+          .json()
+          .catch(() => ({}))) as GeminiGenerateContentResponse;
 
         if (!apiResponse.ok) {
           throw new Error(
-            payload.error?.message ??
-              `Gemini request failed with status ${apiResponse.status}.`,
+            `Gemini request failed (HTTP ${apiResponse.status}): ${payload.error?.message ?? "No error details returned."}`,
           );
         }
 
@@ -5053,11 +5320,23 @@ ${trimmed}`;
       outputLength: rewritten.length,
       changed: rewritten !== trimmed,
     });
-    return rewritten || trimmed;
+    if (!rewritten)
+      throw new Error(
+        "Gemini returned no rewritten text. The response may have been blocked.",
+      );
+    return rewritten;
   } catch (error) {
-    debugWarn("Gemini rewrite failed.", error);
+    requestController?.abort();
+    const rawError = error instanceof Error ? error.message : String(error);
+    const safeError = rawError.split(apiKey).join("[redacted]");
+    const detail = /failed to fetch/i.test(safeError)
+      ? "Could not reach Gemini. Check this browser profile’s connection, proxy, and extension permissions."
+      : safeError;
+    debugWarn("Gemini rewrite failed.", detail);
+    await handleGeminiFailure(queue, detail);
     return trimmed;
   } finally {
+    requestController?.abort();
     activeGeminiRequestController = undefined;
   }
 }
@@ -5089,25 +5368,50 @@ async function withTimeout<T>(
 function notifyUiPostingStatus(
   partial: Omit<UiPostingStatusMessage, "type">,
 ): void {
+  if (
+    partial.status === "done" ||
+    partial.status === "stopped" ||
+    partial.status === "rate_limited"
+  ) {
+    finishQueueTimer(groupsPostingTimer);
+  }
   const status: UiPostingStatusMessage = {
     type: "UI_POSTING_STATUS",
     successTarget: activePostingSuccessTarget,
     pendingCount: activePostingPendingCount,
     ...partial,
+    timing: queueTimingSnapshot(groupsPostingTimer, partial.groupId),
   };
 
   latestUiPostingStatus = status;
+  if (status.status === "done" || status.status === "stopped") {
+    const { responseBody: _responseBody, ...storedStatus } = status;
+    void chrome.storage.session.set({
+      [LAST_GROUP_POSTING_STATUS_STORAGE_KEY]: storedStatus,
+    });
+  } else if (status.status === "rate_limited") {
+    void chrome.storage.session.remove(LAST_GROUP_POSTING_STATUS_STORAGE_KEY);
+  }
   void chrome.runtime.sendMessage(status);
 }
 
 function notifyMarketplaceItemPostingStatus(
   partial: Omit<MarketplaceItemPostingStatusMessage, "type">,
 ): void {
+  if (partial.status === "done" || partial.status === "stopped") {
+    finishQueueTimer(marketplacePostingTimer);
+  }
   const status = {
     type: "MARKETPLACE_ITEM_POSTING_STATUS",
     ...partial,
+    timing: queueTimingSnapshot(marketplacePostingTimer, partial.listingId),
   } satisfies MarketplaceItemPostingStatusMessage;
   latestMarketplacePostingStatus = status;
+  if (status.status === "done" || status.status === "stopped") {
+    void chrome.storage.session.set({
+      [LAST_MARKETPLACE_POSTING_STATUS_STORAGE_KEY]: status,
+    });
+  }
   void chrome.runtime.sendMessage(status);
 }
 

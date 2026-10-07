@@ -55,6 +55,18 @@ func (q *Queries) DeleteExpiredAuthSessions(ctx context.Context) error {
 	return err
 }
 
+const deleteUser = `-- name: DeleteUser :execrows
+DELETE FROM users WHERE id = $1
+`
+
+func (q *Queries) DeleteUser(ctx context.Context, id pgtype.UUID) (int64, error) {
+	result, err := q.db.Exec(ctx, deleteUser, id)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const expireProAccess = `-- name: ExpireProAccess :one
 UPDATE users
 SET
@@ -237,6 +249,85 @@ func (q *Queries) GrantTemporaryPro(ctx context.Context, arg GrantTemporaryProPa
 		&i.UpdatedAt,
 	)
 	return i, err
+}
+
+const listUsers = `-- name: ListUsers :many
+SELECT id, google_subject, email, email_verified, display_name, avatar_url, access_tier, pro_expires_at, pro_granted_at, pro_grant_note, timezone, created_at, updated_at FROM users
+ORDER BY created_at DESC, email ASC
+`
+
+func (q *Queries) ListUsers(ctx context.Context) ([]User, error) {
+	rows, err := q.db.Query(ctx, listUsers)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []User
+	for rows.Next() {
+		var i User
+		if err := rows.Scan(
+			&i.ID,
+			&i.GoogleSubject,
+			&i.Email,
+			&i.EmailVerified,
+			&i.DisplayName,
+			&i.AvatarUrl,
+			&i.AccessTier,
+			&i.ProExpiresAt,
+			&i.ProGrantedAt,
+			&i.ProGrantNote,
+			&i.Timezone,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listUsersByEmailForUpdate = `-- name: ListUsersByEmailForUpdate :many
+SELECT id, google_subject, email, email_verified, display_name, avatar_url, access_tier, pro_expires_at, pro_granted_at, pro_grant_note, timezone, created_at, updated_at FROM users WHERE lower(email) = lower($1)
+ORDER BY id
+FOR UPDATE
+`
+
+func (q *Queries) ListUsersByEmailForUpdate(ctx context.Context, email string) ([]User, error) {
+	rows, err := q.db.Query(ctx, listUsersByEmailForUpdate, email)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []User
+	for rows.Next() {
+		var i User
+		if err := rows.Scan(
+			&i.ID,
+			&i.GoogleSubject,
+			&i.Email,
+			&i.EmailVerified,
+			&i.DisplayName,
+			&i.AvatarUrl,
+			&i.AccessTier,
+			&i.ProExpiresAt,
+			&i.ProGrantedAt,
+			&i.ProGrantNote,
+			&i.Timezone,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const revokePro = `-- name: RevokePro :one

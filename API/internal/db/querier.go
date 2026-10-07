@@ -29,6 +29,7 @@ type Querier interface {
 	DeleteGroupPostImages(ctx context.Context, groupPostID pgtype.UUID) error
 	DeleteMarketplaceListing(ctx context.Context, arg DeleteMarketplaceListingParams) (int64, error)
 	DeleteMarketplaceListingImages(ctx context.Context, listingID pgtype.UUID) error
+	DeleteUser(ctx context.Context, id pgtype.UUID) (int64, error)
 	ExpireProAccess(ctx context.Context, id pgtype.UUID) (User, error)
 	GetAuthSessionByTokenHash(ctx context.Context, tokenHash string) (AuthSession, error)
 	GetFacebookAccountBindingByUser(ctx context.Context, userID pgtype.UUID) (FacebookAccountBinding, error)
@@ -53,6 +54,8 @@ type Querier interface {
 	ListGroupPosts(ctx context.Context, userID pgtype.UUID) ([]GroupPost, error)
 	ListMarketplaceListingImages(ctx context.Context, listingID pgtype.UUID) ([]MarketplaceListingImage, error)
 	ListMarketplaceListings(ctx context.Context, userID pgtype.UUID) ([]MarketplaceListing, error)
+	ListUsers(ctx context.Context) ([]User, error)
+	ListUsersByEmailForUpdate(ctx context.Context, email string) ([]User, error)
 	LockUserForUsage(ctx context.Context, userID pgtype.UUID) (User, error)
 	MarkPostingUsageClaimSucceeded(ctx context.Context, arg MarkPostingUsageClaimSucceededParams) (PostingUsageClaim, error)
 	ReleasePostingUsageClaim(ctx context.Context, arg ReleasePostingUsageClaimParams) (PostingUsageClaim, error)

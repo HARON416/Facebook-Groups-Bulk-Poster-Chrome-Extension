@@ -51,6 +51,7 @@ export type GroupPostingStrategy = "selected_order" | "balanced";
 
 export type StartUiPostingRequest = {
   type: "START_UI_POSTING";
+  startedAt: number;
   groups: SimpleGroup[];
   posts: UiPreparedPost[];
   minimumDelaySeconds: number;
@@ -69,6 +70,16 @@ export type PauseUiPostingRequest = {
 
 export type ResumeUiPostingRequest = {
   type: "RESUME_UI_POSTING";
+};
+
+export type PostingTiming = {
+  startedAt: number;
+  updatedAt: number;
+  elapsedMs: number;
+  itemElapsedMs: number;
+  pausedMs: number;
+  isPaused: boolean;
+  isComplete: boolean;
 };
 
 export type UiPostingStatusMessage = {
@@ -96,6 +107,7 @@ export type UiPostingStatusMessage = {
   failedCount?: number;
   processedCount?: number;
   successTarget?: number;
+  timing?: PostingTiming;
   error?: string;
 };
 
@@ -174,6 +186,7 @@ export type MarketplacePostingListing =
 
 export type StartMarketplaceItemPostingRequest = {
   type: "START_MARKETPLACE_POSTING";
+  startedAt: number;
   listings: MarketplacePostingListing[];
   shareToSuggestedGroups: boolean;
   minimumDelaySeconds: number;
@@ -194,6 +207,23 @@ export type PauseMarketplacePostingRequest = {
 
 export type ResumeMarketplacePostingRequest = {
   type: "RESUME_MARKETPLACE_POSTING";
+};
+
+export type GetPostingQueueStatusRequest = {
+  type: "GET_POSTING_QUEUE_STATUS";
+};
+
+export type GeminiErrorPrompt = {
+  type: "GEMINI_ERROR_PROMPT";
+  id: string;
+  queue: "groups" | "marketplace";
+  error: string;
+};
+
+export type PostingQueueStatusResponse = {
+  geminiPrompts?: GeminiErrorPrompt[];
+  groups?: UiPostingStatusMessage;
+  marketplace?: MarketplaceItemPostingStatusMessage;
 };
 
 export type DeleteOldMarketplaceListingsRequest = {
@@ -258,6 +288,7 @@ export type MarketplaceItemPostingStatusMessage = {
   successCount: number;
   failedCount: number;
   waitSeconds?: number;
+  timing?: PostingTiming;
   error?: string;
 };
 
@@ -306,6 +337,7 @@ export type ClearStatusBannerMessage = {
 };
 
 export type ExtensionRequest =
+  | { type: "RESOLVE_GEMINI_ERROR"; id: string; action: "continue" | "stop" }
   | LoadGroupsRequest
   | StartUiPostingRequest
   | StartMarketplaceItemPostingRequest
@@ -317,4 +349,5 @@ export type ExtensionRequest =
   | ResumeMarketplacePostingRequest
   | StopUiPostingRequest
   | PauseUiPostingRequest
-  | ResumeUiPostingRequest;
+  | ResumeUiPostingRequest
+  | GetPostingQueueStatusRequest;

@@ -19,13 +19,14 @@ import (
 )
 
 const (
-	accessTierFree                    = "free"
-	accessTierPro                     = "pro"
-	freeSavedGroupPostsLimit    int64 = 5
-	freeSavedListingsLimit      int64 = 5
-	freeDailyPostingLimit       int64 = 20
-	usageKindGroupPost                = "group_post"
-	usageKindMarketplaceListing       = "marketplace_listing"
+	accessTierFree                     = "free"
+	accessTierPro                      = "pro"
+	freeSavedGroupPostsLimit     int64 = 1
+	freeSavedListingsLimit       int64 = 1
+	freeDailyGroupPostingLimit   int64 = 5
+	freeDailyListingPostingLimit int64 = 1
+	usageKindGroupPost                 = "group_post"
+	usageKindMarketplaceListing        = "marketplace_listing"
 )
 
 var (
@@ -145,14 +146,14 @@ func (h *APIHandler) accessEntitlements(ctx context.Context, user db.User) (acce
 	response.Limits = accessLimitsResponse{
 		SavedGroupPosts: int64Pointer(freeSavedGroupPostsLimit),
 		SavedListings:   int64Pointer(freeSavedListingsLimit),
-		GroupPostsToday: int64Pointer(freeDailyPostingLimit),
-		ListingsToday:   int64Pointer(freeDailyPostingLimit),
+		GroupPostsToday: int64Pointer(freeDailyGroupPostingLimit),
+		ListingsToday:   int64Pointer(freeDailyListingPostingLimit),
 	}
 	response.Remaining = accessLimitsResponse{
 		SavedGroupPosts: int64Pointer(remainingLimit(freeSavedGroupPostsLimit, groupPosts)),
 		SavedListings:   int64Pointer(remainingLimit(freeSavedListingsLimit, listings)),
-		GroupPostsToday: int64Pointer(remainingLimit(freeDailyPostingLimit, groupUsage.Used)),
-		ListingsToday:   int64Pointer(remainingLimit(freeDailyPostingLimit, listingUsage.Used)),
+		GroupPostsToday: int64Pointer(remainingLimit(freeDailyGroupPostingLimit, groupUsage.Used)),
+		ListingsToday:   int64Pointer(remainingLimit(freeDailyListingPostingLimit, listingUsage.Used)),
 	}
 	return response, nil
 }
@@ -254,11 +255,12 @@ func (h *APIHandler) ClaimPostingUsage(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	used := dualIdentityUsage(summary.Used, facebookSummary.Used)
-	if used >= freeDailyPostingLimit {
+	limit := postingLimitForKind(payload.Kind)
+	if used >= limit {
 		utils.WriteJSON(w, http.StatusTooManyRequests, accessLimitErrorResponse{
 			Error:     postingLimitMessage(payload.Kind),
 			Code:      "daily_posting_limit_reached",
-			Limit:     freeDailyPostingLimit,
+			Limit:     limit,
 			Used:      used,
 			Remaining: 0,
 			ResetAt:   timestamptzPointer(facebookSummary.ResetAt),
@@ -467,9 +469,16 @@ func timestamptzPointer(value pgtype.Timestamptz) *time.Time {
 
 func postingLimitMessage(kind string) string {
 	if kind == usageKindMarketplaceListing {
-		return "Free accounts can publish up to 20 Marketplace listings per calendar day."
+		return "Free accounts can publish up to 1 Marketplace listing per calendar day."
 	}
-	return "Free accounts can publish up to 20 Group posts per calendar day."
+	return "Free accounts can publish up to 5 Group posts per calendar day."
+}
+
+func postingLimitForKind(kind string) int64 {
+	if kind == usageKindMarketplaceListing {
+		return freeDailyListingPostingLimit
+	}
+	return freeDailyGroupPostingLimit
 }
 
 type postingDayWindow struct {
@@ -569,12 +578,12 @@ func (h *APIHandler) writeSavedContentLimitError(w http.ResponseWriter, r *http.
 	limit := freeSavedGroupPostsLimit
 	used := access.Usage.SavedGroupPosts
 	code := "saved_group_posts_limit_reached"
-	message := "Free accounts can save up to 5 Group posts. Delete one or upgrade to Pro."
+	message := "Free accounts can save up to 1 Group post. Delete it or upgrade to Pro."
 	if kind == usageKindMarketplaceListing {
 		limit = freeSavedListingsLimit
 		used = access.Usage.SavedListings
 		code = "saved_marketplace_listings_limit_reached"
-		message = "Free accounts can save up to 5 Marketplace listings. Delete one or upgrade to Pro."
+		message = "Free accounts can save up to 1 Marketplace listing. Delete it or upgrade to Pro."
 	}
 	utils.WriteJSON(w, http.StatusConflict, accessLimitErrorResponse{
 		Error:     message,

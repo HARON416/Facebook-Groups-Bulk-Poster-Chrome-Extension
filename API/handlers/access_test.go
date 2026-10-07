@@ -173,11 +173,26 @@ func TestResolveFacebookAccountBinding(t *testing.T) {
 }
 
 func TestPostingLimitMessage(t *testing.T) {
-	if got := postingLimitMessage(usageKindGroupPost); got == "" {
-		t.Fatal("Group posting limit message is empty")
+	if got, want := postingLimitForKind(usageKindGroupPost), int64(5); got != want {
+		t.Fatalf("Group posting limit = %d, want %d", got, want)
 	}
-	if got := postingLimitMessage(usageKindMarketplaceListing); got == "" {
-		t.Fatal("Marketplace posting limit message is empty")
+	if got, want := postingLimitForKind(usageKindMarketplaceListing), int64(1); got != want {
+		t.Fatalf("Marketplace posting limit = %d, want %d", got, want)
+	}
+	if got, want := postingLimitMessage(usageKindGroupPost), "Free accounts can publish up to 5 Group posts per calendar day."; got != want {
+		t.Fatalf("Group posting limit message = %q, want %q", got, want)
+	}
+	if got, want := postingLimitMessage(usageKindMarketplaceListing), "Free accounts can publish up to 1 Marketplace listing per calendar day."; got != want {
+		t.Fatalf("Marketplace posting limit message = %q, want %q", got, want)
+	}
+}
+
+func TestFreeSavedContentLimits(t *testing.T) {
+	if got, want := freeSavedGroupPostsLimit, int64(1); got != want {
+		t.Fatalf("Saved Group posts limit = %d, want %d", got, want)
+	}
+	if got, want := freeSavedListingsLimit, int64(1); got != want {
+		t.Fatalf("Saved Marketplace listings limit = %d, want %d", got, want)
 	}
 }
 

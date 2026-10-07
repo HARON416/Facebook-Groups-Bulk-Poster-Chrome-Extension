@@ -37,11 +37,36 @@ type adminAccessResponse struct {
 	ProLifetime  bool       `json:"pro_lifetime"`
 }
 
+type adminUserResponse struct {
+	ID            string     `json:"id"`
+	Email         string     `json:"email"`
+	EmailVerified bool       `json:"email_verified"`
+	DisplayName   string     `json:"display_name,omitempty"`
+	AvatarURL     string     `json:"avatar_url,omitempty"`
+	Tier          string     `json:"tier"`
+	Timezone      string     `json:"timezone"`
+	ProExpiresAt  *time.Time `json:"pro_expires_at,omitempty"`
+	ProGrantedAt  *time.Time `json:"pro_granted_at,omitempty"`
+	ProGrantNote  string     `json:"pro_grant_note,omitempty"`
+	ProLifetime   bool       `json:"pro_lifetime"`
+	CreatedAt     time.Time  `json:"created_at"`
+	UpdatedAt     time.Time  `json:"updated_at"`
+}
+
+type adminUsersResponse struct {
+	Users []adminUserResponse `json:"users"`
+	Total int                 `json:"total"`
+}
+
 type adminAccessStore interface {
 	GetUserByEmail(context.Context, string) (db.User, error)
 	GrantTemporaryPro(context.Context, db.GrantTemporaryProParams) (db.User, error)
 	GrantLifetimePro(context.Context, db.GrantLifetimeProParams) (db.User, error)
 	RevokePro(context.Context, pgtype.UUID) (db.User, error)
+}
+
+type adminUsersStore interface {
+	ListUsers(context.Context) ([]db.User, error)
 }
 
 func (h *APIHandler) RequireAdminAPIKey(next http.Handler) http.Handler {
@@ -71,6 +96,48 @@ func (h *APIHandler) GrantLifetimePro(w http.ResponseWriter, r *http.Request) {
 
 func (h *APIHandler) RevokePro(w http.ResponseWriter, r *http.Request) {
 	h.updateAdminAccess(w, r, adminAccessRevoke)
+}
+
+func (h *APIHandler) ListUsers(w http.ResponseWriter, r *http.Request) {
+	response, err := loadAdminUsers(r.Context(), h.store, time.Now())
+	if err != nil {
+		utils.Errorf("list administrator users: %v", err)
+		utils.WriteError(w, http.StatusInternalServerError, "unable to load users")
+		return
+	}
+	utils.WriteJSON(w, http.StatusOK, response)
+}
+
+func loadAdminUsers(ctx context.Context, store adminUsersStore, now time.Time) (adminUsersResponse, error) {
+	users, err := store.ListUsers(ctx)
+	if err != nil {
+		return adminUsersResponse{}, err
+	}
+	responses := adminUserResponses(users, now)
+	return adminUsersResponse{Users: responses, Total: len(responses)}, nil
+}
+
+func adminUserResponses(users []db.User, now time.Time) []adminUserResponse {
+	responses := make([]adminUserResponse, 0, len(users))
+	for _, user := range users {
+		tier := effectiveAccessTier(user, now)
+		responses = append(responses, adminUserResponse{
+			ID:            formatUUID(user.ID),
+			Email:         user.Email,
+			EmailVerified: user.EmailVerified,
+			DisplayName:   textString(user.DisplayName),
+			AvatarURL:     textString(user.AvatarUrl),
+			Tier:          tier,
+			Timezone:      normalizeUserTimezone(user.Timezone),
+			ProExpiresAt:  timestamptzPointer(user.ProExpiresAt),
+			ProGrantedAt:  timestamptzPointer(user.ProGrantedAt),
+			ProGrantNote:  textString(user.ProGrantNote),
+			ProLifetime:   tier == accessTierPro && !user.ProExpiresAt.Valid,
+			CreatedAt:     user.CreatedAt.Time.UTC(),
+			UpdatedAt:     user.UpdatedAt.Time.UTC(),
+		})
+	}
+	return responses
 }
 
 func (h *APIHandler) updateAdminAccess(w http.ResponseWriter, r *http.Request, action string) {

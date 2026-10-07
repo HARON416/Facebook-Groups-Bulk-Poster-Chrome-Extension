@@ -2,8 +2,8 @@
 	const storeUrl =
 		'https://chromewebstore.google.com/detail/kundipost/lphjckpophfkedacijahclaoenhikcgo';
 	const whatsappUrl =
-		'https://wa.me/254718448461?text=Hi%2C%20I%27m%20interested%20in%20KundiPost%20Pro';
-	const emailUrl = 'mailto:haronkibetrutoh@gmail.com?subject=KundiPost%20Pro%20upgrade';
+		'https://wa.me/254718448461?text=Hi%2C%20I%27m%20interested%20in%20Postika%20Pro';
+	const emailUrl = 'mailto:haronkibetrutoh@gmail.com?subject=Postika%20Pro%20upgrade';
 
 	const groupFeatures = [
 		'Reach more relevant communities with every campaign',
@@ -23,19 +23,19 @@
 
 	const faqs = [
 		{
-			question: 'How does KundiPost save me time and money?',
+			question: 'How does Postika save me time and money?',
 			answer:
 				'It combines Group and Marketplace publishing in one extension and lets you reuse prepared content. That means less copying, fewer repeated form entries, and less need for separate posting tools.'
 		},
 		{
-			question: 'Does KundiPost post without my permission?',
+			question: 'Does Postika post without my permission?',
 			answer:
 				'No. You choose the content, destinations, timing, and when a queue starts. Marketplace cleanup also requires your confirmation.'
 		},
 		{
 			question: 'Which Facebook account does it use?',
 			answer:
-				'It works through the Facebook account already signed in to Chrome. Saved KundiPost content is connected to the Google account used to sign in to the extension.'
+				'It works through the Facebook account already signed in to Chrome. Saved Postika content is connected to the Google account used to sign in to the extension.'
 		},
 		{
 			question: 'Does it work with every Facebook layout?',
@@ -50,34 +50,34 @@
 		{
 			question: 'Is Gemini required?',
 			answer:
-				'No. Rewriting is optional and off by default. You supply your own Gemini API key, and KundiPost uses the original copy if rewriting fails.'
+				'No. Rewriting is optional and off by default. You supply your own Gemini API key, and Postika uses the original copy if rewriting fails.'
 		}
 	];
 </script>
 
 <svelte:head>
-	<title>KundiPost — Facebook Groups Bulk Poster & Marketplace Auto Poster</title>
+	<title>Postika — Facebook Groups Bulk Poster & Marketplace Auto Poster</title>
 	<meta
 		name="description"
 		content="Save time, reach more buyers, and spend less on separate tools with a Facebook Groups bulk poster and Marketplace auto poster in one Chrome extension."
 	/>
 	<meta
 		name="keywords"
-		content="Facebook groups bulk poster, Facebook Marketplace auto poster, Facebook group posting extension, Marketplace listing tool, KundiPost"
+		content="Facebook groups bulk poster, Facebook Marketplace auto poster, Facebook group posting extension, Marketplace listing tool, Postika"
 	/>
 	<meta
 		property="og:title"
-		content="Post to Facebook Groups and Marketplace in bulk with KundiPost"
+		content="Post to Facebook Groups and Marketplace in bulk with Postika"
 	/>
 	<meta
 		property="og:description"
-		content="Reach more potential buyers while spending less time copying posts and filling listing forms. Start with KundiPost for free."
+		content="Reach more potential buyers while spending less time copying posts and filling listing forms. Start with Postika for free."
 	/>
 </svelte:head>
 
 <header class="site-header">
-	<a class="brand" href="#top" aria-label="KundiPost home">
-		<span class="brand-mark" aria-hidden="true">K</span><span>KundiPost</span>
+	<a class="brand" href="#top" aria-label="Postika home">
+		<span class="brand-mark" aria-hidden="true">P</span><span>Postika</span>
 	</a>
 	<nav aria-label="Main navigation">
 		<a href="#workflows">Benefits</a><a href="#pricing">Pricing</a><a href="#faq">FAQ</a>
@@ -107,7 +107,7 @@
 					Start Posting Free <span aria-hidden="true">→</span>
 				</a>
 				<a class="text-link" href="#how-it-works"
-					>See What KundiPost Can Do <span aria-hidden="true">↓</span></a
+					>See What Postika Can Do <span aria-hidden="true">↓</span></a
 				>
 			</div>
 			<div class="trust-row">
@@ -117,10 +117,10 @@
 			</div>
 		</div>
 
-		<div class="hero-product" aria-label="KundiPost product preview">
+		<div class="hero-product" aria-label="Postika product preview">
 			<div class="product-window">
 				<div class="window-bar">
-					<div class="window-brand"><span class="mini-mark">K</span> KUNDIPOST</div>
+					<div class="window-brand"><span class="mini-mark">P</span> Postika</div>
 					<div class="window-actions"><span></span><span></span><span></span></div>
 				</div>
 				<div class="window-tabs"><strong>GROUPS</strong><span>MARKETPLACE</span></div>
@@ -155,10 +155,10 @@
 		</div>
 	</section>
 
-	<section class="proof-strip" aria-label="KundiPost benefits">
+	<section class="proof-strip" aria-label="Postika benefits">
 		<div class="shell proof-grid">
 			<div><strong>2</strong><span>sales channels in one tool</span></div>
-			<div><strong>20 + 20</strong><span>free Group + Marketplace publications daily</span></div>
+			<div><strong>5 + 1</strong><span>free Group + Marketplace publications daily</span></div>
 			<div><strong>Hours</strong><span>saved on repetitive posting</span></div>
 			<div><strong>More</strong><span>time to respond to buyers</span></div>
 		</div>
@@ -169,7 +169,7 @@
 			<p class="eyebrow"><span></span> Work less on posting. Focus more on selling.</p>
 			<h2>Spend less time repeating tasks—and more time talking to buyers.</h2>
 			<p>
-				KundiPost removes the repetitive work between a ready-to-sell product and the people who
+				Postika removes the repetitive work between a ready-to-sell product and the people who
 				need to see it. One extension helps you save time, control costs, and get more value from
 				every promotion.
 			</p>
@@ -213,7 +213,7 @@
 
 			<div class="workflow-card">
 				<div class="workflow-copy">
-					<span class="pill">KUNDIPOST GROUPS</span>
+					<span class="pill">Postika GROUPS</span>
 					<h3>Show up in more relevant Groups without repeating the work.</h3>
 					<p>
 						Turn one prepared campaign into wider Group visibility. Keep promotions moving at a
@@ -227,14 +227,14 @@
 					<div class="screenshot-label"><span class="live-dot"></span> Real extension workflow</div>
 					<img
 						src="/images/screenshot.png"
-						alt="KundiPost side panel with loaded Facebook Groups and selectable posting targets"
+						alt="Postika side panel with loaded Facebook Groups and selectable posting targets"
 					/>
 				</div>
 			</div>
 
 			<div class="workflow-card marketplace-card">
 				<div class="workflow-copy">
-					<span class="pill pill-coral">KUNDIPOST MARKETPLACE</span>
+					<span class="pill pill-coral">Postika MARKETPLACE</span>
 					<h3>List more inventory and keep buyers seeing what matters.</h3>
 					<p>
 						Get more Item and Car/Truck listings in front of potential buyers without repeatedly
@@ -337,10 +337,10 @@
 					<span>FREE</span><strong>KSh 0</strong><small>start saving time today</small>
 				</div>
 				<ul>
-					<li><span>✓</span>Up to 5 saved Group posts</li>
-					<li><span>✓</span>Up to 5 saved Marketplace listings</li>
-					<li><span>✓</span>20 successful Group posts per day</li>
-					<li><span>✓</span>20 successful Marketplace listings per day</li>
+					<li><span>✓</span>1 saved Group post</li>
+					<li><span>✓</span>1 saved Marketplace listing</li>
+					<li><span>✓</span>5 successful Group posts per day</li>
+					<li><span>✓</span>1 successful Marketplace listing per day</li>
 					<li><span>✓</span>All core queue controls</li>
 				</ul>
 				<a class="button button-outline" href={storeUrl} target="_blank" rel="noopener noreferrer"
@@ -351,13 +351,13 @@
 				<div class="popular-tag">FOR BUSINESSES READY TO REACH MORE BUYERS</div>
 				<div class="price-heading">
 					<span>PRO</span><strong>Let’s talk</strong><small
-						>remove KundiPost limits as you grow</small
+						>remove Postika limits as you grow</small
 					>
 				</div>
 				<ul>
 					<li><span>✓</span>Unlimited saved Group posts</li>
 					<li><span>✓</span>Unlimited saved Marketplace listings</li>
-					<li><span>✓</span>No KundiPost daily publishing limit</li>
+					<li><span>✓</span>No Postika daily publishing limit</li>
 					<li><span>✓</span>All core queue controls</li>
 					<li><span>✓</span>Direct upgrade support</li>
 				</ul>
@@ -389,7 +389,7 @@
 					composer. The first selected Group must show the English
 					<strong>“Write something...”</strong> button. If a Buy & Sell or nonstandard Group does not
 					show it, place a compatible Group first and restart the queue. After that first post succeeds,
-					KundiPost can continue with the remaining selected Groups.
+					Postika can continue with the remaining selected Groups.
 				</p>
 				<p>
 					Marketplace publishing and cleanup are tested against the <strong
@@ -440,12 +440,12 @@
 <footer>
 	<div class="shell footer-inner">
 		<a class="brand" href="#top"
-			><span class="brand-mark" aria-hidden="true">K</span><span>KundiPost</span></a
+			><span class="brand-mark" aria-hidden="true">P</span><span>Postika</span></a
 		>
 		<p>Helping sellers reach more buyers with less repetitive work.</p>
 		<div><a href="/privacy-policy">Privacy Policy</a><a href={emailUrl}>Contact</a></div>
 	</div>
 	<p class="disclaimer">
-		© 2026 KundiPost. Not affiliated with, endorsed by, or sponsored by Meta or Facebook.
+		© 2026 Postika. Not affiliated with, endorsed by, or sponsored by Meta or Facebook.
 	</p>
 </footer>

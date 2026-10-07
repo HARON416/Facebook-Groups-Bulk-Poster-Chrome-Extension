@@ -21,6 +21,18 @@ SELECT * FROM users WHERE lower(email) = lower(sqlc.arg(email))
 ORDER BY created_at ASC
 LIMIT 1;
 
+-- name: ListUsers :many
+SELECT * FROM users
+ORDER BY created_at DESC, email ASC;
+
+-- name: ListUsersByEmailForUpdate :many
+SELECT * FROM users WHERE lower(email) = lower(sqlc.arg(email))
+ORDER BY id
+FOR UPDATE;
+
+-- name: DeleteUser :execrows
+DELETE FROM users WHERE id = $1;
+
 -- name: GrantTemporaryPro :one
 UPDATE users
 SET

@@ -3,9 +3,7 @@
   "version": "1.0.0",
   "description": "",
   "scripts": {
-    "build": "npm run build:dev",
-    "build:dev": "node scripts/build.mjs",
-    "build:prod": "node scripts/build.mjs --production",
+    "build": "node scripts/build.mjs",
     "watch": "node scripts/build.mjs --watch"
   },
   "keywords": [],

@@ -1,7 +1,7 @@
 "use strict";
 (() => {
   // src/auth-config.ts
-  var AUTH_API_BASE_URL = "http://localhost:4000";
+  var AUTH_API_BASE_URL = "https://api.facebook-groups-bulk-poster.softwrhq.com";
 
   // src/sidepanel.ts
   var GEMINI_API_KEY_STORAGE_KEY = "geminiApiKey";
@@ -21,7 +21,7 @@
   var PREVIOUS_MIN_SLEEP_SECONDS = 120;
   var DEFAULT_MAX_SLEEP_SECONDS = 300;
   var DEFAULT_MAX_POSTS = 200;
-  var FREE_MAX_GROUP_POSTS = 20;
+  var FREE_MAX_GROUP_POSTS = 5;
   var MIN_MAX_POSTS = 1;
   var toastRegion = document.querySelector("#toast-region");
   function showToast(message, tone = "info", durationMs = tone === "error" ? 8e3 : 5e3) {
@@ -68,16 +68,37 @@
   }
   var accessSummary = document.querySelector("#access-summary");
   var accessTierBadge = document.querySelector("#access-tier-badge");
-  var accessSavedUsage = document.querySelector(
-    "#access-saved-usage"
+  var accessUsageDashboard = document.querySelector(
+    "#access-usage-dashboard"
   );
-  var accessPublishingUsage = document.querySelector(
-    "#access-publishing-usage"
+  var accessProSummary = document.querySelector(
+    "#access-pro-summary"
   );
   var accessResetMessage = document.querySelector(
     "#access-reset-message"
   );
+  var accessResetMessageCopy = document.querySelector(
+    "#access-reset-message-copy"
+  );
   var accessUpgrade = document.querySelector("#access-upgrade");
+  var accessMeters = {
+    savedGroupPosts: {
+      value: document.querySelector("#saved-groups-value"),
+      meter: document.querySelector("#saved-groups-meter")
+    },
+    savedMarketplaceListings: {
+      value: document.querySelector("#saved-marketplace-value"),
+      meter: document.querySelector("#saved-marketplace-meter")
+    },
+    groupPostsToday: {
+      value: document.querySelector("#daily-groups-value"),
+      meter: document.querySelector("#daily-groups-meter")
+    },
+    marketplaceListingsToday: {
+      value: document.querySelector("#daily-marketplace-value"),
+      meter: document.querySelector("#daily-marketplace-meter")
+    }
+  };
   var loadGroupsButton = document.querySelector("#load-groups-btn");
   var groupsList = document.querySelector("#groups-list");
   var groupsStatusMessage = document.querySelector(
@@ -303,6 +324,21 @@
   );
   var marketplacePostingProgressRemaining = document.querySelector(
     "#marketplace-posting-progress-remaining"
+  );
+  var marketplacePostingTiming = document.querySelector(
+    "#marketplace-posting-timing"
+  );
+  var marketplacePostingTimingLabel = document.querySelector(
+    "#marketplace-posting-timing-label"
+  );
+  var marketplacePostingElapsedTime = document.querySelector(
+    "#marketplace-posting-elapsed-time"
+  );
+  var marketplacePostingItemTimingLabel = document.querySelector(
+    "#marketplace-posting-item-timing-label"
+  );
+  var marketplacePostingItemTime = document.querySelector(
+    "#marketplace-posting-item-time"
   );
   var marketplaceProgressPostedFilterButton = document.querySelector(
     "#marketplace-progress-filter-posted"
@@ -676,6 +712,17 @@
   var postingProgressRemaining = document.querySelector(
     "#posting-progress-remaining"
   );
+  var postingTiming = document.querySelector("#posting-timing");
+  var postingTimingLabel = document.querySelector(
+    "#posting-timing-label"
+  );
+  var postingElapsedTime = document.querySelector(
+    "#posting-elapsed-time"
+  );
+  var postingItemTimingLabel = document.querySelector(
+    "#posting-item-timing-label"
+  );
+  var postingItemTime = document.querySelector("#posting-item-time");
   var postingProgressCurrent = document.querySelector(
     "#posting-progress-current"
   );
@@ -690,7 +737,33 @@
   var authStatusMessage = document.querySelector(
     "#auth-status-message"
   );
+  var accountCardToggle = document.querySelector(
+    "#account-card-toggle"
+  );
+  var accountCardContent = document.querySelector(
+    "#account-card-content"
+  );
+  var accountCardExpanded = false;
+  function updateAccountCardVisibility(signedIn) {
+    if (!signedIn) accountCardExpanded = false;
+    if (accountCardToggle) {
+      accountCardToggle.hidden = !signedIn;
+      accountCardToggle.setAttribute(
+        "aria-expanded",
+        String(accountCardExpanded)
+      );
+    }
+    if (accountCardContent)
+      accountCardContent.hidden = signedIn && !accountCardExpanded;
+  }
+  accountCardToggle?.addEventListener("click", () => {
+    accountCardExpanded = !accountCardExpanded;
+    updateAccountCardVisibility(true);
+  });
   var authPanelTitle = document.querySelector("#auth-panel-title");
+  var authWelcomeArt = document.querySelector("#auth-welcome-art");
+  var authBenefits = document.querySelector("#auth-benefits");
+  var authSigninNote = document.querySelector("#auth-signin-note");
   var authSessionPill = document.querySelector("#auth-session-pill");
   var authUserEmail = document.querySelector("#auth-user-email");
   var deleteConfirmation = document.querySelector(
@@ -836,6 +909,8 @@
   var isMarketplaceCleanupActive = false;
   var groupsPostingLogFilter = "all";
   var marketplacePostingLogFilter = "all";
+  var latestGroupsPostingTiming;
+  var latestMarketplacePostingTiming;
   var editingMarketplaceListingId;
   var draggedMarketplacePhotoIndex;
   var draggedGroupPhotoIndex;
@@ -876,6 +951,7 @@
   void initializeMarketplacePostingSettings();
   void initializeMarketplaceCleanupSettings();
   void initializeApplication();
+  void restorePostingQueueStatus();
   initializeMarketplaceCategorySelect();
   initializeMarketplaceYearSelect();
   initializeMarketplaceColorSelects();
@@ -1471,7 +1547,7 @@
     const complete = isMarketplaceListingFormComplete();
     const savedLimitReached = !editingMarketplaceListingId && currentExtensionAccess?.access.remaining.saved_marketplace_listings === 0;
     saveMarketplaceListingButton.disabled = isMarketplaceListingSaving || !complete || savedLimitReached;
-    saveMarketplaceListingButton.title = savedLimitReached ? "Free accounts can save up to 5 Marketplace listings. Upgrade to add unlimited listings." : complete ? editingMarketplaceListingId ? "Update this listing" : "Save this listing" : "Complete all listing fields and add at least one photo";
+    saveMarketplaceListingButton.title = savedLimitReached ? "Free accounts can save 1 Marketplace listing. Upgrade to add unlimited listings." : complete ? editingMarketplaceListingId ? "Update this listing" : "Save this listing" : "Complete all listing fields and add at least one photo";
   }
   function updatePreparedPostSaveButtonState() {
     if (!savePreparedPostButton) {
@@ -1480,7 +1556,7 @@
     const savedLimitReached = !editingPreparedPostId && currentExtensionAccess?.access.remaining.saved_group_posts === 0;
     const hasRequiredContent = (postBodyInput?.value.trim().length ?? 0) > 0 && selectedImageFiles.length > 0;
     savePreparedPostButton.disabled = savedLimitReached || !hasRequiredContent;
-    savePreparedPostButton.title = savedLimitReached ? "Free accounts can save up to 5 prepared Group posts. Upgrade to add unlimited posts." : !hasRequiredContent ? "Add a post body and at least one image" : editingPreparedPostId ? "Update this prepared post" : "Add this prepared post";
+    savePreparedPostButton.title = savedLimitReached ? "Free accounts can save 1 prepared Group post. Upgrade to add unlimited posts." : !hasRequiredContent ? "Add a post body and at least one image" : editingPreparedPostId ? "Update this prepared post" : "Add this prepared post";
   }
   function syncMarketplaceImagesInput() {
     if (!marketplaceImagesInput) {
@@ -3910,12 +3986,14 @@
     }
     if (isPostingActive) {
       startPostingButton.disabled = true;
+      startPostingButton.title = "A Group posting queue is already running.";
       setButtonContent(startPostingButton, "Posting\u2026");
       updatePausePostingButtonState();
       return;
     }
     startPostingButton.classList.remove("start-posting-btn--stop");
     const hasPostingAllowance = currentExtensionAccess?.access.remaining.group_posts_today !== 0;
+    startPostingButton.title = hasPostingAllowance ? "" : `Your Free account has used all ${currentExtensionAccess?.access.limits.group_posts_today ?? FREE_MAX_GROUP_POSTS} Group posts for today`;
     startPostingButton.disabled = !(isAuthenticated && hasPostingAllowance && hasSelectedPreparedPosts && selectedGroupsCount > 0 && hasValidSleepTime && hasValidMaxPosts);
     setButtonContent(startPostingButton, "Start Posting");
     updatePausePostingButtonState();
@@ -3955,8 +4033,215 @@
     text.textContent = label;
     button.replaceChildren(loader, text);
   }
+  var groupsPostingTimingElements = {
+    container: postingTiming,
+    elapsedLabel: postingTimingLabel,
+    elapsedValue: postingElapsedTime,
+    itemLabel: postingItemTimingLabel,
+    itemValue: postingItemTime
+  };
+  var marketplacePostingTimingElements = {
+    container: marketplacePostingTiming,
+    elapsedLabel: marketplacePostingTimingLabel,
+    elapsedValue: marketplacePostingElapsedTime,
+    itemLabel: marketplacePostingItemTimingLabel,
+    itemValue: marketplacePostingItemTime
+  };
+  function livePostingDuration(timing, value) {
+    const liveDelta = timing.isPaused || timing.isComplete ? 0 : Math.max(0, Date.now() - timing.updatedAt);
+    return Math.max(0, timing[value] + liveDelta);
+  }
+  function formatPostingDurationClock(durationMs) {
+    const totalSeconds = Math.max(0, Math.floor(durationMs / 1e3));
+    const hours = Math.floor(totalSeconds / 3600);
+    const minutes = Math.floor(totalSeconds % 3600 / 60);
+    const seconds = totalSeconds % 60;
+    const minuteText = String(minutes).padStart(2, "0");
+    const secondText = String(seconds).padStart(2, "0");
+    return hours > 0 ? `${hours}:${minuteText}:${secondText}` : `${minuteText}:${secondText}`;
+  }
+  function formatPostingDurationSummary(durationMs) {
+    const totalSeconds = Math.max(0, Math.round(durationMs / 1e3));
+    if (totalSeconds < 1) {
+      return "under 1s";
+    }
+    const hours = Math.floor(totalSeconds / 3600);
+    const minutes = Math.floor(totalSeconds % 3600 / 60);
+    const seconds = totalSeconds % 60;
+    return [
+      hours > 0 ? `${hours}h` : "",
+      minutes > 0 ? `${minutes}m` : "",
+      `${seconds}s`
+    ].filter(Boolean).join(" ");
+  }
+  function renderPostingTiming(timing, elements) {
+    if (!timing) {
+      return;
+    }
+    const elapsedMs = livePostingDuration(timing, "elapsedMs");
+    const itemElapsedMs = livePostingDuration(timing, "itemElapsedMs");
+    if (elements.elapsedValue) {
+      elements.elapsedValue.textContent = formatPostingDurationClock(elapsedMs);
+    }
+    if (elements.itemValue) {
+      elements.itemValue.textContent = formatPostingDurationClock(itemElapsedMs);
+    }
+    if (elements.elapsedLabel) {
+      elements.elapsedLabel.textContent = timing.isComplete ? "Active time" : timing.isPaused ? "Paused at" : "Elapsed";
+    }
+    if (elements.itemLabel) {
+      elements.itemLabel.textContent = timing.isComplete ? "Last item" : "Current item";
+    }
+    elements.container?.classList.toggle(
+      "posting-timing--paused",
+      timing.isPaused
+    );
+    elements.container?.classList.toggle(
+      "posting-timing--complete",
+      timing.isComplete
+    );
+  }
+  function resetPostingTiming(elements) {
+    if (elements.elapsedLabel) elements.elapsedLabel.textContent = "Elapsed";
+    if (elements.elapsedValue) elements.elapsedValue.textContent = "00:00";
+    if (elements.itemLabel) elements.itemLabel.textContent = "Current item";
+    if (elements.itemValue) elements.itemValue.textContent = "00:00";
+    elements.container?.classList.remove(
+      "posting-timing--paused",
+      "posting-timing--complete"
+    );
+  }
+  function createPendingPostingTiming(startedAt) {
+    return {
+      startedAt,
+      updatedAt: startedAt,
+      elapsedMs: 0,
+      itemElapsedMs: 0,
+      pausedMs: 0,
+      isPaused: false,
+      isComplete: false
+    };
+  }
+  function finishPendingPostingTiming(timing) {
+    const now = Date.now();
+    const liveDelta = Math.max(0, now - timing.updatedAt);
+    return {
+      ...timing,
+      updatedAt: now,
+      elapsedMs: timing.elapsedMs + liveDelta,
+      itemElapsedMs: timing.itemElapsedMs + liveDelta,
+      isComplete: true
+    };
+  }
+  function renderAllPostingTimers() {
+    renderPostingTiming(latestGroupsPostingTiming, groupsPostingTimingElements);
+    renderPostingTiming(
+      latestMarketplacePostingTiming,
+      marketplacePostingTimingElements
+    );
+  }
+  window.setInterval(renderAllPostingTimers, 1e3);
+  var geminiDialogs = /* @__PURE__ */ new Map();
+  function syncGeminiPrompts(prompts) {
+    for (const [id, dialog] of geminiDialogs) {
+      if (!prompts.some((prompt) => prompt.id === id)) {
+        dialog.close();
+        dialog.remove();
+        geminiDialogs.delete(id);
+      }
+    }
+    prompts.forEach(showGeminiPrompt);
+  }
+  function showGeminiPrompt(prompt) {
+    if (geminiDialogs.has(prompt.id)) return;
+    const dialog = document.createElement("dialog");
+    dialog.className = "gemini-error-dialog";
+    dialog.setAttribute("aria-labelledby", `gemini-title-${prompt.id}`);
+    const title = document.createElement("h2");
+    title.id = `gemini-title-${prompt.id}`;
+    title.textContent = `Gemini error \u2014 ${prompt.queue === "groups" ? "Groups" : "Marketplace"}`;
+    const detail = document.createElement("p");
+    detail.textContent = prompt.error;
+    const explanation = document.createElement("p");
+    explanation.textContent = "Posting is waiting. Continue with the original descriptions for the rest of this queue, or stop and correct your Gemini settings.";
+    const actions = document.createElement("div");
+    const feedback = document.createElement("p");
+    feedback.setAttribute("role", "status");
+    for (const action of ["continue", "stop"]) {
+      const button = document.createElement("button");
+      button.type = "button";
+      button.textContent = action === "continue" ? "Continue without Gemini" : "Stop";
+      button.addEventListener("click", async () => {
+        const buttons = actions.querySelectorAll("button");
+        buttons.forEach((item) => {
+          item.disabled = true;
+        });
+        try {
+          const response = await chrome.runtime.sendMessage({
+            type: "RESOLVE_GEMINI_ERROR",
+            id: prompt.id,
+            action
+          });
+          if (!response?.ok) {
+            await restorePostingQueueStatus();
+            throw new Error("This prompt is no longer active.");
+          }
+          dialog.close();
+          dialog.remove();
+          geminiDialogs.delete(prompt.id);
+        } catch {
+          feedback.textContent = "Unable to apply your choice. Please try again.";
+          buttons.forEach((item) => {
+            item.disabled = false;
+          });
+        }
+      });
+      actions.append(button);
+    }
+    dialog.addEventListener("cancel", (event) => event.preventDefault());
+    dialog.append(title, detail, explanation, actions, feedback);
+    document.body.append(dialog);
+    geminiDialogs.set(prompt.id, dialog);
+    dialog.showModal();
+  }
+  window.setInterval(() => {
+    void chrome.runtime.sendMessage({ type: "GET_POSTING_QUEUE_STATUS" }).then(
+      (response) => syncGeminiPrompts(response?.geminiPrompts ?? [])
+    ).catch(() => {
+    });
+  }, 1e4);
+  async function restorePostingQueueStatus() {
+    try {
+      const response = await chrome.runtime.sendMessage({ type: "GET_POSTING_QUEUE_STATUS" });
+      syncGeminiPrompts(response?.geminiPrompts ?? []);
+      if (response?.groups) {
+        updateUiPostingStatus(response.groups);
+      }
+      if (response?.marketplace) {
+        updateMarketplaceItemPostingStatus(response.marketplace);
+      }
+    } catch {
+    }
+  }
+  function postingTimingLogMeta(timing, scope) {
+    if (!timing) {
+      return "";
+    }
+    const duration = scope === "queue" ? timing.elapsedMs : timing.itemElapsedMs;
+    const parts = [
+      `${scope === "queue" ? "Active time" : "Item time"} ${formatPostingDurationSummary(duration)}`
+    ];
+    if (scope === "queue" && timing.pausedMs >= 1e3) {
+      parts.push(`paused ${formatPostingDurationSummary(timing.pausedMs)}`);
+    }
+    return parts.join(" \xB7 ");
+  }
+  function postingPausedTimeMeta(timing) {
+    return timing && timing.pausedMs >= 1e3 ? `Paused ${formatPostingDurationSummary(timing.pausedMs)}` : "";
+  }
   chrome.runtime.onMessage.addListener(
     (message) => {
+      if (message.type === "GEMINI_ERROR_PROMPT") showGeminiPrompt(message);
       if (message.type === "GROUP_EXTRACTION_STATUS") {
         updateGroupsStatus(message.message, message.loadedCount);
       }
@@ -4093,6 +4378,10 @@
     }
   }
   function updateMarketplaceItemPostingStatus(message) {
+    if (message.timing) {
+      latestMarketplacePostingTiming = message.timing;
+      renderPostingTiming(message.timing, marketplacePostingTimingElements);
+    }
     if (marketplacePostingProgressCard) {
       marketplacePostingProgressCard.hidden = false;
     }
@@ -4167,12 +4456,17 @@
     const text = document.createElement("span");
     text.className = "posting-progress__log-text";
     text.textContent = message.message;
+    const hasMarketplaceCompletionSummary = message.status === "done" && !message.error && Boolean(message.timing);
+    if (hasMarketplaceCompletionSummary && message.timing) {
+      text.textContent = `Completed ${message.successCount} Marketplace ${message.successCount === 1 ? "listing" : "listings"} in ${formatPostingDurationSummary(message.timing.elapsedMs)}${message.failedCount > 0 ? ` \xB7 ${message.failedCount} failed` : ""}.`;
+    }
     body.append(text);
     const count = message.current > 0 && message.total > 0 ? `${message.current}/${message.total}` : "";
-    if (count || message.error) {
+    const timingMeta = message.status === "done" || message.status === "stopped" ? hasMarketplaceCompletionSummary ? postingPausedTimeMeta(message.timing) : postingTimingLogMeta(message.timing, "queue") : message.status === "posted" || message.status === "failed" ? postingTimingLogMeta(message.timing, "item") : "";
+    if (count || message.error || timingMeta) {
       const meta = document.createElement("span");
       meta.className = "posting-progress__log-meta";
-      meta.textContent = [count, message.error].filter(Boolean).join(" \xB7 ");
+      meta.textContent = [count, timingMeta, message.error].filter(Boolean).join(" \xB7 ");
       body.append(meta);
     }
     item.replaceChildren(badge, body);
@@ -4234,6 +4528,10 @@
     );
   }
   function updateUiPostingStatus(message) {
+    if (message.timing) {
+      latestGroupsPostingTiming = message.timing;
+      renderPostingTiming(message.timing, groupsPostingTimingElements);
+    }
     if (message.status === "posting" || message.status === "waiting" || message.status === "paused" || message.status === "posted" || message.status === "pending" || message.status === "failed") {
       isPostingActive = true;
       isPostingPaused = message.status === "paused";
@@ -4242,15 +4540,6 @@
       }
     }
     updatePostingProgress(message);
-    if (groupsStatusMessage) {
-      groupsStatusMessage.textContent = message.error ? `${message.message}: ${message.error}` : message.message;
-    }
-    if (groupsStatusCount) {
-      const acceptedCount = message.successCount ?? 0;
-      const pendingCount = message.pendingCount ?? 0;
-      const postedCount = Math.max(acceptedCount - pendingCount, 0);
-      groupsStatusCount.textContent = message.successTarget !== void 0 ? `${acceptedCount}/${message.successTarget} accepted \xB7 ${postedCount} posted \xB7 ${pendingCount} pending` : `${postedCount} posted \xB7 ${pendingCount} pending`;
-    }
     if (message.status === "stopped" || message.status === "done" || message.status === "rate_limited") {
       isPostingActive = false;
       isPostingPaused = false;
@@ -4330,6 +4619,12 @@
     const text = document.createElement("span");
     text.className = "posting-progress__log-text";
     text.textContent = message.message;
+    const hasGroupsCompletionSummary = message.status === "done" && !message.error && Boolean(message.timing);
+    if (hasGroupsCompletionSummary && message.timing) {
+      const completedCount = message.successCount ?? 0;
+      const failedCount = message.failedCount ?? 0;
+      text.textContent = `Completed ${completedCount} Group ${completedCount === 1 ? "post" : "posts"} in ${formatPostingDurationSummary(message.timing.elapsedMs)}${failedCount > 0 ? ` \xB7 ${failedCount} failed` : ""}.`;
+    }
     body.append(text);
     if (message.detail) {
       const detail = document.createElement("span");
@@ -4337,10 +4632,11 @@
       detail.textContent = message.detail;
       body.append(detail);
     }
-    if (count || message.error) {
+    const timingMeta = message.status === "done" || message.status === "stopped" || message.status === "rate_limited" ? hasGroupsCompletionSummary ? postingPausedTimeMeta(message.timing) : postingTimingLogMeta(message.timing, "queue") : message.status === "posted" || message.status === "pending" || message.status === "failed" ? postingTimingLogMeta(message.timing, "item") : "";
+    if (count || message.error || timingMeta) {
       const meta = document.createElement("span");
       meta.className = "posting-progress__log-meta";
-      meta.textContent = [count, message.error].filter(Boolean).join(" \xB7 ");
+      meta.textContent = [count, timingMeta, message.error].filter(Boolean).join(" \xB7 ");
       body.append(meta);
     }
     const copyResponseButton = message.responseBody ? createFacebookResponseCopyButton(message.responseBody) : void 0;
@@ -5315,6 +5611,7 @@
     if (!postingStrategy) {
       return;
     }
+    const postingStartedAt = Date.now();
     const orderedPostingGroups = postingStrategy === "selected_order" && shuffleGroupsToggle?.checked ? shuffleItems(selectedGroups) : selectedGroups;
     const postingGroups = orderedPostingGroups;
     const postingPreparedPosts = shuffleItems(selectedPreparedPosts);
@@ -5325,11 +5622,14 @@
     updatePostingButtonState();
     updateGroupsStatus("Preparing GraphQL posting...", 0);
     resetPostingProgress(postingGroups.length, maxPosts);
+    latestGroupsPostingTiming = createPendingPostingTiming(postingStartedAt);
+    renderPostingTiming(latestGroupsPostingTiming, groupsPostingTimingElements);
     scrollPostingProgressIntoView();
     try {
       await Promise.all([saveGeminiCustomPrompt(), saveGeminiIncludeHashtags()]);
       const request = {
         type: "START_UI_POSTING",
+        startedAt: postingStartedAt,
         groups: postingGroups.map((group) => ({
           id: group.id,
           name: group.name,
@@ -5350,6 +5650,15 @@
         throw new Error(response?.error ?? "Unable to start GraphQL posting.");
       }
     } catch (error) {
+      if (latestGroupsPostingTiming) {
+        latestGroupsPostingTiming = finishPendingPostingTiming(
+          latestGroupsPostingTiming
+        );
+        renderPostingTiming(
+          latestGroupsPostingTiming,
+          groupsPostingTimingElements
+        );
+      }
       isPostingActive = false;
       isPostingPaused = false;
       isStopRequestPending = false;
@@ -5392,7 +5701,7 @@
       }
       if (storage[AUTH_SIGNED_OUT_STORAGE_KEY] === true) {
         showSignedOut(
-          "Continue with Google to access your saved posts and listings."
+          "Bulk-post to Facebook Groups and auto-post Marketplace listings\u2014all from one streamlined workspace."
         );
         return;
       }
@@ -5417,7 +5726,7 @@
     const googleToken = typeof result === "string" ? result : result?.token?.trim();
     if (!googleToken) {
       throw new Error(
-        interactive ? "We couldn't complete Google sign-in. Please try again." : "Continue with Google to access your saved posts and listings."
+        interactive ? "We couldn't complete Google sign-in. Please try again." : "Bulk-post to Facebook Groups and auto-post Marketplace listings\u2014all from one streamlined workspace."
       );
     }
     currentGoogleAccessToken = googleToken;
@@ -5555,7 +5864,28 @@
     return payload.access;
   }
   function formatAccessUsage(used, limit) {
-    return limit === null ? `${used}` : `${used}/${limit}`;
+    return limit === null ? "Unlimited" : `${used} of ${limit}`;
+  }
+  function renderAccessMeter(elements, used, limit) {
+    const { value, meter } = elements;
+    if (value) {
+      value.textContent = formatAccessUsage(used, limit);
+    }
+    if (!meter) {
+      return;
+    }
+    const percentage = limit === null ? 100 : limit <= 0 ? used > 0 ? 100 : 0 : Math.min(100, Math.max(0, used / limit * 100));
+    meter.style.setProperty("--access-progress", `${percentage}%`);
+    meter.classList.toggle("access-meter__track--warning", percentage >= 80);
+    meter.classList.toggle("access-meter__track--full", percentage >= 100);
+    meter.setAttribute("aria-valuemin", "0");
+    meter.setAttribute("aria-valuenow", String(used));
+    meter.setAttribute("aria-valuetext", formatAccessUsage(used, limit));
+    if (limit === null) {
+      meter.removeAttribute("aria-valuemax");
+    } else {
+      meter.setAttribute("aria-valuemax", String(limit));
+    }
   }
   function formatAccessResetTime(value) {
     const timezone = currentExtensionAccess?.user.timezone ?? "UTC";
@@ -5589,39 +5919,58 @@
     if (accessTierBadge) {
       accessTierBadge.textContent = access.tier.toUpperCase();
     }
-    if (access.tier === "pro") {
-      if (accessSavedUsage) {
-        accessSavedUsage.textContent = "Unlimited saved content and publishing";
-      }
-      if (accessPublishingUsage) {
-        accessPublishingUsage.textContent = "No daily posting limits.";
-      }
-    } else {
-      if (accessSavedUsage) {
-        accessSavedUsage.textContent = `Saved: Groups ${formatAccessUsage(access.usage.saved_group_posts, access.limits.saved_group_posts)} \xB7 Marketplace ${formatAccessUsage(access.usage.saved_marketplace_listings, access.limits.saved_marketplace_listings)}`;
-      }
-      if (accessPublishingUsage) {
-        accessPublishingUsage.textContent = `Today: Groups ${formatAccessUsage(access.usage.group_posts_today, access.limits.group_posts_today)} \xB7 Marketplace ${formatAccessUsage(access.usage.marketplace_listings_today, access.limits.marketplace_listings_today)}`;
-      }
+    accessSummary?.classList.toggle("access-summary--pro", access.tier === "pro");
+    if (accessUsageDashboard) {
+      accessUsageDashboard.hidden = access.tier === "pro";
+    }
+    if (accessProSummary) {
+      accessProSummary.hidden = access.tier !== "pro";
+    }
+    if (access.tier !== "pro") {
+      renderAccessMeter(
+        accessMeters.savedGroupPosts,
+        access.usage.saved_group_posts,
+        access.limits.saved_group_posts
+      );
+      renderAccessMeter(
+        accessMeters.savedMarketplaceListings,
+        access.usage.saved_marketplace_listings,
+        access.limits.saved_marketplace_listings
+      );
+      renderAccessMeter(
+        accessMeters.groupPostsToday,
+        access.usage.group_posts_today,
+        access.limits.group_posts_today
+      );
+      renderAccessMeter(
+        accessMeters.marketplaceListingsToday,
+        access.usage.marketplace_listings_today,
+        access.limits.marketplace_listings_today
+      );
     }
     const nextReset = [
       access.remaining.group_posts_today === 0 ? access.reset_at.group_posts_today : void 0,
       access.remaining.marketplace_listings_today === 0 ? access.reset_at.marketplace_listings_today : void 0
     ].filter((value) => Boolean(value)).map((value) => new Date(value)).filter((value) => !Number.isNaN(value.getTime())).sort((left, right) => left.getTime() - right.getTime())[0];
-    if (accessResetMessage) {
+    if (accessResetMessage && accessResetMessageCopy) {
       const timezone = currentExtensionAccess?.user.timezone ?? "UTC";
+      accessResetMessage.classList.toggle(
+        "access-summary__reset--pro",
+        access.tier === "pro"
+      );
       if (access.tier === "pro") {
         accessResetMessage.hidden = false;
-        accessResetMessage.textContent = access.pro_lifetime ? "Lifetime Pro access." : access.pro_expires_at ? `Pro access expires ${formatAccessResetTime(access.pro_expires_at)}.` : "Pro access.";
+        accessResetMessageCopy.textContent = access.pro_lifetime ? "Lifetime Pro access." : access.pro_expires_at ? `Pro access expires ${formatAccessResetTime(access.pro_expires_at)}.` : "Pro access.";
       } else {
         accessResetMessage.hidden = false;
-        accessResetMessage.textContent = nextReset ? `Daily limits reset at midnight (${timezone}). Your allowance resets ${formatAccessResetTime(nextReset.toISOString())}.` : `Daily limits reset at midnight (${timezone}).`;
+        accessResetMessageCopy.textContent = nextReset ? `Daily limits reset at midnight (${timezone}). Your allowance resets ${formatAccessResetTime(nextReset.toISOString())}.` : `Daily limits reset at midnight (${timezone}).`;
       }
     }
   }
   function updateExtensionAccessUi() {
     const access = currentExtensionAccess;
     const active = access?.active === true;
+    updateAccountCardVisibility(active);
     if (createForm) {
       createForm.hidden = !active;
     }
@@ -5633,15 +5982,23 @@
     }
     if (authPanelTitle) {
       authPanelTitle.hidden = false;
-      authPanelTitle.textContent = active ? `Welcome${access.user.displayName ? `, ${access.user.displayName}` : ""}.` : "Welcome";
+      authPanelTitle.textContent = active ? `Welcome${access.user.displayName ? `, ${access.user.displayName}` : ""}.` : "Bulk posting, minus the busywork.";
+    }
+    if (authWelcomeArt) {
+      authWelcomeArt.hidden = active;
+    }
+    if (authBenefits) {
+      authBenefits.hidden = active;
+    }
+    if (authSigninNote) {
+      authSigninNote.hidden = active;
     }
     if (authStatusMessage) {
-      authStatusMessage.textContent = active ? "Your saved Groups posts and Marketplace listings are connected to this Google account." : "Connect your Google account to continue.";
+      authStatusMessage.textContent = active ? "Your saved Groups posts and Marketplace listings are connected to this Google account." : "Bulk-post to Facebook Groups and auto-post Marketplace listings\u2014all from one streamlined workspace.";
     }
     if (authLoginButton) {
       authLoginButton.hidden = active;
       authLoginButton.disabled = false;
-      authLoginButton.textContent = "Continue with Google";
     }
     if (authLogoutButton) {
       authLogoutButton.hidden = !active;
@@ -5663,9 +6020,9 @@
         maxPostsInput.min = String(FREE_MAX_GROUP_POSTS);
         maxPostsInput.max = String(FREE_MAX_GROUP_POSTS);
         maxPostsInput.disabled = true;
-        maxPostsInput.title = "Free accounts can publish up to 20 successful Group posts per day.";
+        maxPostsInput.title = "Free accounts can publish up to 5 successful Group posts per day.";
         if (maxPostsNote) {
-          maxPostsNote.textContent = "Free accounts are fixed at 20 successful Group posts per day. Failed attempts do not count.";
+          maxPostsNote.textContent = "Free accounts are fixed at 5 successful Group posts per day. Failed attempts do not count.";
         }
       } else {
         maxPostsInput.disabled = false;
@@ -5685,12 +6042,22 @@
     updateMarketplaceSaveListingButtonState();
   }
   function showSignedOut(message) {
+    updateAccountCardVisibility(false);
     if (createForm) {
       createForm.hidden = true;
     }
     if (authPanelTitle) {
       authPanelTitle.hidden = false;
-      authPanelTitle.textContent = "Welcome";
+      authPanelTitle.textContent = "Bulk posting, minus the busywork.";
+    }
+    if (authWelcomeArt) {
+      authWelcomeArt.hidden = false;
+    }
+    if (authBenefits) {
+      authBenefits.hidden = false;
+    }
+    if (authSigninNote) {
+      authSigninNote.hidden = false;
     }
     if (authStatusMessage) {
       authStatusMessage.textContent = message;
@@ -5705,7 +6072,6 @@
     if (authLoginButton) {
       authLoginButton.hidden = false;
       authLoginButton.disabled = false;
-      authLoginButton.textContent = "Continue with Google";
     }
     if (authLogoutButton) {
       authLogoutButton.hidden = true;
@@ -5715,12 +6081,22 @@
     updatePostingReadiness();
   }
   function setAccessBusyState(message) {
+    updateAccountCardVisibility(false);
     if (createForm) {
       createForm.hidden = true;
     }
     if (authPanelTitle) {
       authPanelTitle.hidden = false;
       authPanelTitle.textContent = "Checking your Google account...";
+    }
+    if (authWelcomeArt) {
+      authWelcomeArt.hidden = true;
+    }
+    if (authBenefits) {
+      authBenefits.hidden = true;
+    }
+    if (authSigninNote) {
+      authSigninNote.hidden = true;
     }
     if (authStatusMessage) {
       authStatusMessage.textContent = message;
@@ -5744,7 +6120,7 @@
       return "Sign-in was cancelled. Continue with Google whenever you're ready.";
     }
     if (!interactive) {
-      return "Continue with Google to access your saved posts and listings.";
+      return "Bulk-post to Facebook Groups and auto-post Marketplace listings\u2014all from one streamlined workspace.";
     }
     return "We couldn't complete Google sign-in. Please try again.";
   }
@@ -5971,7 +6347,7 @@
         postButton.textContent = "Post to Facebook";
         const postingLimitReached = currentExtensionAccess?.access.remaining.marketplace_listings_today === 0;
         postButton.disabled = isMarketplacePostingActive || isMarketplaceCleanupActive || postingLimitReached;
-        postButton.title = postingLimitReached ? "Your Free account has used its 20 Marketplace posts for today" : "Post this listing to Facebook Marketplace";
+        postButton.title = postingLimitReached ? "Your Free account has used its Marketplace post for today" : "Post this listing to Facebook Marketplace";
         postButton.addEventListener("click", () => {
           void postMarketplaceItem(listing, postButton);
         });
@@ -6017,7 +6393,7 @@
     if (postSelectedMarketplaceItemsButton) {
       const postingLimitReached = currentExtensionAccess?.access.remaining.marketplace_listings_today === 0;
       postSelectedMarketplaceItemsButton.disabled = selectedCount === 0 || isMarketplacePostingActive || isMarketplaceCleanupActive || postingLimitReached;
-      postSelectedMarketplaceItemsButton.title = postingLimitReached ? "Your Free account has used its 20 Marketplace posts for today" : "Post the selected listings to Facebook Marketplace";
+      postSelectedMarketplaceItemsButton.title = postingLimitReached ? "Your Free account has used its Marketplace post for today" : "Post the selected listings to Facebook Marketplace";
     }
   }
   async function postMarketplaceItem(listing, button) {
@@ -6058,12 +6434,13 @@
     if (shareToSuggestedGroups === void 0) {
       return false;
     }
+    const postingStartedAt = Date.now();
     const access = await refreshAccessEntitlements();
     const remaining = access.remaining.marketplace_listings_today;
     if (remaining !== null && selectedListings.length > remaining) {
       const nextSlot = access.reset_at.marketplace_listings_today ? ` The allowance resets ${formatAccessResetTime(access.reset_at.marketplace_listings_today)}.` : "";
       throw new Error(
-        remaining === 0 ? `Your Free account has used all 20 Marketplace posts for today.${nextSlot}` : `Your Free account has ${remaining} Marketplace ${remaining === 1 ? "post" : "posts"} remaining today. Select no more than ${remaining}.${nextSlot}`
+        remaining === 0 ? `Your Free account has used its Marketplace post for today.${nextSlot}` : `Your Free account has ${remaining} Marketplace ${remaining === 1 ? "post" : "posts"} remaining today. Select no more than ${remaining}.${nextSlot}`
       );
     }
     if (marketplaceGeminiRewriteToggle?.checked && !marketplaceGeminiApiKeyInput?.value.trim()) {
@@ -6074,6 +6451,13 @@
     isMarketplaceStopRequestPending = false;
     isMarketplacePauseRequestPending = false;
     setMarketplacePostingActive(true);
+    latestMarketplacePostingTiming = void 0;
+    resetPostingTiming(marketplacePostingTimingElements);
+    latestMarketplacePostingTiming = createPendingPostingTiming(postingStartedAt);
+    renderPostingTiming(
+      latestMarketplacePostingTiming,
+      marketplacePostingTimingElements
+    );
     if (marketplacePostingProgressCard) {
       marketplacePostingProgressCard.hidden = false;
     }
@@ -6123,6 +6507,7 @@
       }
       const response = await chrome.runtime.sendMessage({
         type: "START_MARKETPLACE_POSTING",
+        startedAt: postingStartedAt,
         listings,
         shareToSuggestedGroups,
         minimumDelaySeconds,
@@ -6139,6 +6524,15 @@
       }
       return true;
     } catch (error) {
+      if (latestMarketplacePostingTiming) {
+        latestMarketplacePostingTiming = finishPendingPostingTiming(
+          latestMarketplacePostingTiming
+        );
+        renderPostingTiming(
+          latestMarketplacePostingTiming,
+          marketplacePostingTimingElements
+        );
+      }
       setMarketplacePostingActive(false);
       throw error;
     }
@@ -6711,6 +7105,8 @@
     }
   }
   function resetPostingProgress(total, successTarget) {
+    latestGroupsPostingTiming = void 0;
+    resetPostingTiming(groupsPostingTimingElements);
     if (postingProgress) {
       postingProgress.hidden = false;
     }

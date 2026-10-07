@@ -107,9 +107,9 @@ DELETE /api/marketplace-listings/{listingID}
 Group and Marketplace writes are multipart requests. Images stream to Bunny,
 while ordered URLs and associated form fields are stored in PostgreSQL.
 
-New accounts default to Free. Free accounts can store up to five prepared
-Group posts and five Marketplace listings, and can publish up to 20 of each per
-calendar day in their fixed account timezone. The first Free-tier publishing
+New accounts default to Free. Free accounts can store one prepared Group post
+and one Marketplace listing, and can publish up to five Group posts and one
+Marketplace listing per calendar day in their fixed account timezone. The first Free-tier publishing
 claim creates a one-to-one binding between the Google user and the Facebook
 account active in Chrome. Both identities are checked inside the same database
 transaction, so switching Chrome profiles or attempting concurrent claims does
@@ -148,7 +148,7 @@ For a 30-day grant, the user receives exactly 720 hours of Pro access beginning
 at the grant time. The account card displays the exact expiry in the user's
 stored timezone or “Lifetime Pro.”
 
-### Private Pro-access endpoints
+### Private administrator endpoints
 
 The number of temporary days is dynamic; replace `30` with any positive whole
 number. A new temporary grant replaces the previous expiry and starts from the
@@ -158,6 +158,18 @@ trusted terminal:
 ```bash
 export ADMIN_API_KEY='your-server-admin-api-key'
 ```
+
+List all users, ordered by newest account first:
+
+```bash
+curl --request GET \
+  --url 'https://api.facebook-groups-bulk-poster.softwrhq.com/api/admin/users' \
+  --header "Authorization: Bearer ${ADMIN_API_KEY}"
+```
+
+The response includes the total and an array of account-management details,
+including email, display name, effective tier, timezone, Pro grant information,
+and account timestamps. Google subject identifiers are not exposed.
 
 Grant temporary Pro:
 
@@ -192,3 +204,30 @@ curl --request POST \
 The API returns `401` for a missing or incorrect key, `404` when the Google
 user does not exist, and `400` for invalid input. Successful responses return
 the effective tier, stored timezone, and temporary expiry or lifetime status.
+
+Delete a user by email, including their stored Facebook account binding and
+all Bunny folders and files:
+
+```bash
+curl --request DELETE \
+  --url 'https://api.facebook-groups-bulk-poster.softwrhq.com/api/admin/users' \
+  --header "Authorization: Bearer ${ADMIN_API_KEY}" \
+  --header 'Content-Type: application/json' \
+  --data '{"email":"user@example.com"}'
+```
+
+Email matching is case-insensitive and surrounding whitespace is removed.
+Success returns `200` with `{"id":"<user UUID>","email":"user@example.com","deleted":true}`.
+The deletion removes the user's sessions, Facebook account binding, posting
+usage and statistics, saved group posts, marketplace listings, and image
+records through database cascades. It recursively deletes the complete Bunny
+`users/<user UUID>/` directory, including untracked files and empty folders.
+This deletes the application's Facebook binding, not the account on Facebook
+or posts already published there. A later Google sign-in can create a fresh user.
+
+Missing users return `404`; multiple accounts matching the same email return
+`409` without deleting anything. Bunny cleanup failures return `502` and roll
+back the database deletion so the request can be retried. A missing Bunny
+directory is treated as already deleted. Database changes commit only after
+storage cleanup succeeds. Storage deletion cannot be rolled back, so assets
+may already be removed if cleanup or the final database commit fails.

@@ -1,0 +1,16 @@
+/* Inter 4.1 — bundled under the SIL Open Font License in ../fonts/inter/LICENSE.txt. */
+@font-face {
+  font-family: "Inter";
+  src: url("../fonts/inter/InterVariable.woff2") format("woff2");
+  font-style: normal;
+  font-weight: 100 900;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "Inter";
+  src: url("../fonts/inter/InterVariable-Italic.woff2") format("woff2");
+  font-style: italic;
+  font-weight: 100 900;
+  font-display: swap;
+}

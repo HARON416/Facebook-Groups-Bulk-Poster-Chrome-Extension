@@ -3,6 +3,29 @@
 Chrome extension, API, and landing page for managing Facebook Group posts and
 Marketplace listings.
 
+## Administrator user deletion
+
+Delete a user by email with the server's `ADMIN_API_KEY`:
+
+```bash
+export ADMIN_API_KEY='your-server-admin-api-key'
+
+curl --request DELETE \
+  --url 'https://api.facebook-groups-bulk-poster.softwrhq.com/api/admin/users' \
+  --header "Authorization: Bearer ${ADMIN_API_KEY}" \
+  --header 'Content-Type: application/json' \
+  --data '{"email":"user@example.com"}'
+```
+
+Replace `user@example.com` with the user's email. This permanently removes the
+user, their stored Facebook binding, sessions, saved posts and listings, usage
+records, and their complete Bunny folder and files. It does not delete the
+account on Facebook or published Facebook posts. Keep the administrator key
+in a trusted terminal; never put it in the extension.
+
+See [API administrator documentation](API/README.md#private-administrator-endpoints)
+for response codes and retry behavior.
+
 ## Google authentication
 
 The Manifest V3 extension uses `chrome.identity.getAuthToken()` with the Chrome
@@ -19,59 +42,59 @@ No Google client secret belongs in the extension or API for this Chrome
 extension OAuth client. The downloaded `client_secret_*.json` file is not a
 runtime dependency and must not be packaged with `public`.
 
-## Extension build modes
+## Extension build
 
-The extension API URL and matching API host permission are generated at build
-time. `manifest.base.json` supplies the manifest defaults; each build writes
-the environment-specific manifest to `public/manifest.json`. The extension
-`name` is preserved from the existing `public/manifest.json`, so changing that
-field is not undone by a development or production build. Set `EXTENSION_NAME`
-to a non-empty value when you want a build to override the preserved name. Run
-the command for the environment you want before loading or packaging the
-extension.
+`public/manifest.json` is the extension manifest and the only source of truth
+for its version, name, permissions, and other metadata. The build does not
+modify it.
 
-### Local development
+The API URL is the `AUTH_API_BASE_URL` constant in `src/auth-config.ts`.
+`npm run build` always embeds the exact URL currently written there; it does
+not choose between local development and production automatically.
 
-```bash
-make build-dev
+For production, use:
+
+```ts
+export const AUTH_API_BASE_URL =
+  "https://api.facebook-groups-bulk-poster.softwrhq.com";
 ```
 
-This points the extension to `http://localhost:4000`. Start the local API on
-port 4000, reload the unpacked extension from `chrome://extensions`, and use
-the Google account configured as an OAuth test user. The generated development
-manifest grants `http://localhost/*` and `http://127.0.0.1/*` host access.
+For local development, use:
 
-You can also run `npm run build:dev` directly.
-
-### Production
-
-```bash
-make build-prod
+```ts
+export const AUTH_API_BASE_URL = "http://localhost:4000";
 ```
 
-This points the extension to
-`https://api.facebook-groups-bulk-poster.softwrhq.com`. The generated
-production manifest grants that API host and does not contain localhost host
-permissions.
+Whenever the API host changes, update `host_permissions` in
+`public/manifest.json` to match. Production needs:
 
-To change the extension name as part of a build:
-
-```bash
-EXTENSION_NAME='My Extension Name' make build-prod
+```json
+"https://api.facebook-groups-bulk-poster.softwrhq.com/*"
 ```
 
-Reload the unpacked extension after building, or package the generated
-`public` directory for Chrome Web Store. Do not run a development build after
-the production build when preparing a release because it replaces the embedded
-API URL with localhost.
+Local development needs:
 
-## Custom API URL
-
-Either build mode can be overridden temporarily:
-
-```bash
-AUTH_API_BASE_URL=https://api.example.com npm run build:prod
+```json
+"http://localhost/*"
 ```
 
-Generated extension scripts are written to `public/dist`, and the generated
-manifest is written to `public/manifest.json`.
+After setting both values, build the extension:
+
+```bash
+npm run build
+```
+
+For a Chrome Web Store release, increment the version directly in
+`public/manifest.json`, build, and package the contents of `public` so
+`manifest.json` is at the ZIP root:
+
+```bash
+npm run build
+rm -f public.zip
+cd public
+zip -r ../public.zip .
+cd ..
+```
+
+Generated extension scripts are written to `public/dist`. The build leaves
+`public/manifest.json` unchanged.

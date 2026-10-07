@@ -2,8 +2,10 @@ package handlers
 
 import (
 	"context"
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
@@ -18,6 +20,14 @@ type fakeAdminAccessStore struct {
 	temporaryParams db.GrantTemporaryProParams
 	lifetimeParams  db.GrantLifetimeProParams
 	revokedID       pgtype.UUID
+}
+
+type fakeAdminUsersStore struct {
+	users []db.User
+}
+
+func (f *fakeAdminUsersStore) ListUsers(context.Context) ([]db.User, error) {
+	return f.users, nil
 }
 
 func (f *fakeAdminAccessStore) GetUserByEmail(context.Context, string) (db.User, error) {
@@ -120,5 +130,59 @@ func TestApplyAdminAccessLifetimeAndRevoke(t *testing.T) {
 	}
 	if store.revokedID != userID {
 		t.Fatalf("revoked ID = %#v, want %#v", store.revokedID, userID)
+	}
+}
+
+func TestLoadAdminUsersReturnsSafeEffectiveAccountDetails(t *testing.T) {
+	now := time.Date(2026, time.August, 28, 9, 0, 0, 0, time.UTC)
+	createdAt := now.Add(-48 * time.Hour)
+	updatedAt := now.Add(-time.Hour)
+	store := &fakeAdminUsersStore{users: []db.User{
+		{
+			ID:            pgtype.UUID{Bytes: [16]byte{3}, Valid: true},
+			GoogleSubject: "private-google-subject",
+			Email:         "pro@example.com",
+			EmailVerified: true,
+			DisplayName:   pgtype.Text{String: "Pro User", Valid: true},
+			AvatarUrl:     pgtype.Text{String: "https://example.com/avatar.jpg", Valid: true},
+			AccessTier:    accessTierPro,
+			ProGrantedAt:  pgtype.Timestamptz{Time: updatedAt, Valid: true},
+			ProGrantNote:  pgtype.Text{String: "Lifetime customer", Valid: true},
+			Timezone:      "Africa/Nairobi",
+			CreatedAt:     pgtype.Timestamptz{Time: createdAt, Valid: true},
+			UpdatedAt:     pgtype.Timestamptz{Time: updatedAt, Valid: true},
+		},
+	}}
+
+	response, err := loadAdminUsers(context.Background(), store, now)
+	if err != nil {
+		t.Fatalf("loadAdminUsers(): %v", err)
+	}
+	if response.Total != 1 || len(response.Users) != 1 {
+		t.Fatalf("response counts = total %d, users %d", response.Total, len(response.Users))
+	}
+	user := response.Users[0]
+	if user.Email != "pro@example.com" || user.Tier != accessTierPro || !user.ProLifetime {
+		t.Fatalf("user = %#v", user)
+	}
+	if user.DisplayName != "Pro User" || user.Timezone != "Africa/Nairobi" || user.ProGrantNote != "Lifetime customer" {
+		t.Fatalf("user details = %#v", user)
+	}
+	payload, err := json.Marshal(response)
+	if err != nil {
+		t.Fatalf("marshal response: %v", err)
+	}
+	if strings.Contains(string(payload), "private-google-subject") || strings.Contains(string(payload), "google_subject") {
+		t.Fatalf("response exposed Google subject: %s", payload)
+	}
+}
+
+func TestLoadAdminUsersReturnsEmptyArray(t *testing.T) {
+	response, err := loadAdminUsers(context.Background(), &fakeAdminUsersStore{}, time.Now())
+	if err != nil {
+		t.Fatalf("loadAdminUsers(): %v", err)
+	}
+	if response.Total != 0 || response.Users == nil || len(response.Users) != 0 {
+		t.Fatalf("response = %#v", response)
 	}
 }

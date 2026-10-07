@@ -33,6 +33,8 @@ func Router(apiHandler *handlers.APIHandler) *chi.Mux {
 	r.Post("/api/auth/google", apiHandler.AuthenticateGoogle)
 	r.Group(func(r chi.Router) {
 		r.Use(apiHandler.RequireAdminAPIKey)
+		r.Get("/api/admin/users", apiHandler.ListUsers)
+		r.Delete("/api/admin/users", apiHandler.DeleteUser)
 		r.Post("/api/admin/access/temporary", apiHandler.GrantTemporaryPro)
 		r.Post("/api/admin/access/lifetime", apiHandler.GrantLifetimePro)
 		r.Post("/api/admin/access/revoke", apiHandler.RevokePro)
