@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "name": "Postika – Facebook Groups & Marketplace Auto Poster",
   "short_name": "Postika",
-  "version": "1.6.38",
+  "version": "1.6.40",
   "description": "Bulk post to Facebook Groups and Marketplace using reusable posts and listings, paced queues, optional AI rewriting, and cleanup.",
   "icons": {
     "48": "images/icon-48.png",

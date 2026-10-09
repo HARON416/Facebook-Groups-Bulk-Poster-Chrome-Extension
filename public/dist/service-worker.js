@@ -1,11 +1,503 @@
 "use strict";
 (() => {
+  // src/group-posting-order.ts
+  function shuffleGroups(groups, random = Math.random) {
+    const shuffled = [...groups];
+    for (let index = shuffled.length - 1; index > 0; index -= 1) {
+      const swapIndex = Math.floor(random() * (index + 1));
+      [shuffled[index], shuffled[swapIndex]] = [shuffled[swapIndex], shuffled[index]];
+    }
+    return shuffled;
+  }
+
+  // src/page-readiness.ts
+  function inspectPageReadinessInPage(expectedUrlPart) {
+    const page = window;
+    const cleanup = () => {
+      page.__postikaPageReadiness?.observer.disconnect();
+      delete page.__postikaPageReadiness;
+    };
+    if (!location.href.includes(expectedUrlPart) || document.readyState !== "complete" || !document.body) {
+      cleanup();
+      return false;
+    }
+    const target = document.querySelector('[role="main"]') ?? document.body;
+    let observation = page.__postikaPageReadiness;
+    if (!observation || observation.target !== target || observation.url !== location.href) {
+      cleanup();
+      observation = {
+        target,
+        url: location.href,
+        lastChangedAt: Date.now(),
+        observer: new MutationObserver(() => {
+          if (page.__postikaPageReadiness) {
+            page.__postikaPageReadiness.lastChangedAt = Date.now();
+          }
+        })
+      };
+      observation.observer.observe(target, {
+        subtree: true,
+        childList: true,
+        characterData: true,
+        attributes: true,
+        attributeFilter: ["aria-busy", "aria-hidden", "hidden", "disabled"]
+      });
+      page.__postikaPageReadiness = observation;
+    }
+    const busy = Array.from(target.querySelectorAll('[aria-busy="true"]'));
+    if (target.getAttribute("aria-busy") === "true") busy.push(target);
+    const visiblyBusy = busy.some((element) => {
+      const rect = element.getBoundingClientRect();
+      const style = getComputedStyle(element);
+      return rect.width > 0 && rect.height > 0 && style.display !== "none" && style.visibility !== "hidden";
+    });
+    if (visiblyBusy || Date.now() - observation.lastChangedAt < 1500) return false;
+    cleanup();
+    return true;
+  }
+
   // src/config.ts
   var JOINED_GROUPS_URL = "https://web.facebook.com/groups/joins/?nav_source=tab&ordering=viewer_added";
   var GROUPS_QUERY_FRIENDLY_NAME = "GroupsCometAllJoinedGroupsSectionPaginationQuery";
 
   // src/auth-config.ts
   var AUTH_API_BASE_URL = "https://api.facebook-groups-bulk-poster.softwrhq.com";
+
+  // src/group-comment-setup.ts
+  function inspectPostPermalinkLoadInPage(expectedPath) {
+    return {
+      loaded: location.pathname.replace(/\/+$/, "") === expectedPath.replace(/\/+$/, "") && document.readyState === "complete" && Boolean(document.body),
+      documentId: performance.timeOrigin
+    };
+  }
+  function inspectPublishedPostPageInPage(expectedPath, cleanup = false) {
+    const key = "__postikaCommentSetupDomObserver";
+    const scope = globalThis;
+    const empty = {
+      loaded: false,
+      stable: false,
+      dialogFound: false,
+      commentFormFound: false,
+      commentEditorFound: false,
+      submitButtonFound: false
+    };
+    if (cleanup) {
+      scope[key]?.observer.disconnect();
+      delete scope[key];
+      return empty;
+    }
+    if (location.pathname.replace(/\/+$/, "") !== expectedPath.replace(/\/+$/, "") || document.readyState !== "complete" || !document.body) {
+      scope[key]?.observer.disconnect();
+      delete scope[key];
+      return empty;
+    }
+    const visible = (element) => {
+      const style = getComputedStyle(element);
+      return !element.closest('[hidden], [aria-hidden="true"]') && style.display !== "none" && style.visibility !== "hidden" && element.getClientRects().length > 0;
+    };
+    const dialogs = Array.from(document.querySelectorAll('[role="dialog"][aria-modal="true"]'));
+    const postDialogs = dialogs.filter((candidate) => visible(candidate) && candidate.querySelector("h2") && candidate.querySelector('[aria-posinset], [role="article"], [data-virtualized]'));
+    const dialog = postDialogs.length === 1 ? postDialogs[0] : void 0;
+    const target = dialog ?? document.body;
+    let observation = scope[key];
+    if (!observation || observation.path !== expectedPath || observation.target !== target) {
+      observation?.observer.disconnect();
+      const now2 = Date.now();
+      observation = {
+        path: expectedPath,
+        target,
+        startedAt: now2,
+        lastChangedAt: now2,
+        observer: new MutationObserver(() => {
+          if (scope[key]) scope[key].lastChangedAt = Date.now();
+        })
+      };
+      scope[key] = observation;
+      observation.observer.observe(target, {
+        childList: true,
+        subtree: true,
+        characterData: true,
+        attributes: true,
+        // Ignore animated styles and classes; track content and accessibility
+        // changes that affect whether the post and comment controls are ready.
+        attributeFilter: ["aria-busy", "aria-hidden", "role", "contenteditable", "aria-label", "aria-disabled"]
+      });
+    }
+    const now = Date.now();
+    const busy = target.matches('[aria-busy="true"]') || Boolean(target.querySelector('[aria-busy="true"]'));
+    const stable = !busy && now - observation.startedAt >= 3e3 && now - observation.lastChangedAt >= 1500;
+    const editors = Array.from(dialog?.querySelectorAll(
+      '[role="textbox"][contenteditable="true"][data-lexical-editor="true"]'
+    ) ?? []).filter((element) => visible(element) && !element.closest('[role="article"]'));
+    const eligibleEditors = editors.filter((editor) => {
+      const form = editor.closest("form");
+      return form?.getAttribute("role") === "presentation" && dialog?.contains(form) && editor.getAttribute("aria-disabled") !== "true";
+    });
+    let commentFormFound = false;
+    let submitButtonFound = false;
+    let reason = !dialog ? "Could not find the opened post." : "No comment box is available on this post.";
+    for (const editor of editors) {
+      const form = editor.closest("form");
+      if (!form || form.getAttribute("role") !== "presentation" || !dialog?.contains(form)) {
+        reason = "A comment box appeared, but Facebook has not made it ready for posting.";
+        continue;
+      }
+      const buttons = form.querySelectorAll(
+        '#focused-state-composer-submit [role="button"], #focused-state-composer-submit button'
+      );
+      const submit = buttons.length === 1 ? buttons[0] : void 0;
+      submitButtonFound = Boolean(submit && visible(submit));
+      if (editor.getAttribute("aria-disabled") === "true") {
+        reason = "Facebook has disabled comments on this post.";
+        continue;
+      }
+      if (eligibleEditors.length !== 1) {
+        reason = "More than one comment box is available. Postika could not identify the main comment form.";
+        continue;
+      }
+      commentFormFound = true;
+      break;
+    }
+    return {
+      loaded: true,
+      stable,
+      dialogFound: Boolean(dialog),
+      commentFormFound,
+      commentEditorFound: editors.length > 0,
+      submitButtonFound,
+      reason: commentFormFound ? void 0 : reason
+    };
+  }
+  async function interactWithPostCommentFormInPage(expectedPath, comment, action) {
+    const key = "__postikaFirstCommentUiSubmission";
+    const scope = globalThis;
+    if (action === "cleanup") {
+      delete scope[key];
+      return { state: "unavailable" };
+    }
+    const path = expectedPath.replace(/\/+$/, "");
+    if (location.pathname.replace(/\/+$/, "") !== path || document.readyState !== "complete") {
+      return { state: "unavailable" };
+    }
+    if (!comment.trim()) return { state: "failed", error: "Your first comment is blank. Add some text before posting." };
+    if (scope[key]?.path === path && scope[key]?.clicked) return { state: "submitted" };
+    const visible = (element) => {
+      const style = getComputedStyle(element);
+      return !element.closest('[hidden], [aria-hidden="true"]') && style.display !== "none" && style.visibility !== "hidden" && element.getClientRects().length > 0;
+    };
+    const dialogs = Array.from(document.querySelectorAll('[role="dialog"][aria-modal="true"]'));
+    const postDialogs = dialogs.filter((dialog2) => visible(dialog2) && dialog2.querySelector("h2") && dialog2.querySelector('[aria-posinset], [role="article"], [data-virtualized]'));
+    if (postDialogs.length !== 1) return { state: "unavailable" };
+    const dialog = postDialogs[0];
+    const editors = Array.from(dialog.querySelectorAll(
+      '[role="textbox"][contenteditable="true"][data-lexical-editor="true"]'
+    )).filter((candidate) => {
+      if (!visible(candidate) || candidate.getAttribute("aria-disabled") === "true" || candidate.closest('[role="article"]')) return false;
+      const form2 = candidate.closest("form");
+      return form2?.getAttribute("role") === "presentation" && dialog.contains(form2);
+    });
+    const editor = editors.length === 1 ? editors[0] : void 0;
+    const form = editor?.closest("form");
+    const findSubmit = () => {
+      const buttons = form?.querySelectorAll(
+        '#focused-state-composer-submit [role="button"], #focused-state-composer-submit button'
+      );
+      return buttons?.length === 1 ? buttons[0] : void 0;
+    };
+    if (!editor) return { state: "unavailable" };
+    const normalized = (text) => text.replace(/\r\n/g, "\n").trim();
+    const editorText = normalized(editor.innerText || editor.textContent || "");
+    const expectedText = normalized(comment);
+    if (action === "prepare") {
+      if (editorText && editorText !== expectedText) {
+        return { state: "failed", error: "The comment box already contains another draft. It was left unchanged." };
+      }
+      scope[key] = { path, comment, clicked: false };
+      if (!editorText) {
+        editor.focus();
+        editor.click();
+        const selection = document.getSelection();
+        if (selection) {
+          const range = document.createRange();
+          range.selectNodeContents(editor);
+          range.collapse(false);
+          selection.removeAllRanges();
+          selection.addRange(range);
+        }
+        await new Promise((resolve) => setTimeout(resolve, 500));
+        const data = new DataTransfer();
+        data.setData("text/plain", comment);
+        data.setData("text/html", comment.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/\r?\n/g, "<br>"));
+        editor.dispatchEvent(new ClipboardEvent("paste", { bubbles: true, cancelable: true, clipboardData: data }));
+        await new Promise((resolve) => setTimeout(resolve, 300));
+        if (!normalized(editor.innerText || editor.textContent || "")) {
+          editor.focus();
+          document.execCommand("insertText", false, comment);
+          await new Promise((resolve) => setTimeout(resolve, 300));
+        }
+      }
+      const actualText = normalized(editor.innerText || editor.textContent || "");
+      if (actualText === expectedText) {
+        editor.click();
+        editor.focus();
+        await new Promise((resolve) => setTimeout(resolve, 300));
+      }
+      const verifiedText = normalized(editor.innerText || editor.textContent || "");
+      return { state: "preparing", textEntered: verifiedText === expectedText, editorEmpty: !verifiedText };
+    }
+    if (editorText !== expectedText) return { state: "preparing", textEntered: false, editorEmpty: !editorText };
+    let submit = findSubmit();
+    if (document.activeElement !== editor || !submit || !visible(submit)) {
+      editor.click();
+      editor.focus();
+      await new Promise((resolve) => setTimeout(resolve, 100));
+      submit = findSubmit();
+      const activatedText = normalized(editor.innerText || editor.textContent || "");
+      if (activatedText !== expectedText) {
+        return { state: "preparing", textEntered: false, editorEmpty: !activatedText };
+      }
+    }
+    if (!submit || !visible(submit) || submit.getAttribute("aria-disabled") === "true" || submit.hasAttribute("disabled")) {
+      return { state: "preparing", textEntered: true, editorEmpty: false };
+    }
+    if (action === "check") return { state: "ready", textEntered: true };
+    scope[key] = { path, comment, clicked: true };
+    submit.click();
+    return { state: "submitted" };
+  }
+  function groupPostPermalink(result, groupId) {
+    if (!result?.success || !result.postUrl) return void 0;
+    try {
+      const url = new URL(result.postUrl);
+      const match = url.pathname.match(/^\/groups\/([^/]+)\/(?:permalink|posts)\/\d+\/?$/);
+      if (url.protocol !== "https:" || url.username || url.password || !(url.hostname === "facebook.com" || url.hostname.endsWith(".facebook.com")) || !match || match[1] !== groupId) return void 0;
+      return url.href;
+    } catch {
+      return void 0;
+    }
+  }
+
+  // src/group-comment-replay.ts
+  var COMMENT_MUTATION_FRIENDLY_NAME = "useCometUFICreateCommentMutation";
+  function installCommentRequestCaptureInPage(groupId, comment, sourcePostId, expectedFeedbackId) {
+    const scope = globalThis;
+    const key = "__postikaCommentRequestCapture";
+    scope[key]?.restore?.();
+    const state = {};
+    scope[key] = state;
+    const capture = (url, body, headers) => {
+      if (state.template) return false;
+      const target = new URL(url, location.href);
+      if (target.origin !== location.origin || target.pathname !== "/api/graphql/") return false;
+      const formData = Object.fromEntries(new URLSearchParams(body));
+      if (formData.fb_api_req_friendly_name !== "useCometUFICreateCommentMutation" && headers["x-fb-friendly-name"] !== "useCometUFICreateCommentMutation") return false;
+      try {
+        const variables = JSON.parse(formData.variables);
+        if (variables.groupID !== groupId || variables.input?.message?.text !== comment) return false;
+        const feedbackId = variables.input?.feedback_id;
+        let matchesPost = expectedFeedbackId ? feedbackId === expectedFeedbackId : false;
+        if (!expectedFeedbackId && typeof feedbackId === "string") {
+          try {
+            matchesPost = atob(feedbackId) === `feedback:${sourcePostId}`;
+          } catch {
+            matchesPost = false;
+          }
+        }
+        if (!matchesPost) {
+          state.error = "The captured comment targets a different or unverifiable post. Comment replay stopped.";
+          return false;
+        }
+      } catch {
+        return false;
+      }
+      state.template = { url: target.href, method: "POST", body, headers, formData };
+      return true;
+    };
+    const originalFetch = scope.fetch;
+    const wrappedFetch = async (resource, init) => {
+      let matched = false;
+      try {
+        const request = new Request(resource, init);
+        if (request.method === "POST" && request.url.includes("/api/graphql/")) {
+          matched = capture(request.url, await request.clone().text(), Object.fromEntries(request.headers.entries()));
+        }
+      } catch {
+      }
+      try {
+        const response = await originalFetch.call(scope, resource, init);
+        if (matched) {
+          state.status = response.status;
+          void response.clone().text().then((text) => {
+            state.responseText = text;
+          }).catch(() => {
+            state.error = "The UI comment response could not be read.";
+          });
+        }
+        return response;
+      } catch (error) {
+        if (matched) state.error = "The UI comment request failed. Its outcome is unknown; it will not be retried.";
+        throw error;
+      }
+    };
+    scope.fetch = wrappedFetch;
+    const prototype = XMLHttpRequest.prototype;
+    const originalOpen = prototype.open;
+    const originalSend = prototype.send;
+    const originalSetHeader = prototype.setRequestHeader;
+    const requests = /* @__PURE__ */ new WeakMap();
+    const wrappedOpen = function(...args) {
+      requests.set(this, { url: String(args[1]), method: String(args[0]), headers: {} });
+      return originalOpen.apply(this, args);
+    };
+    const wrappedSetHeader = function(name, value) {
+      const request = requests.get(this);
+      if (request) request.headers[name.toLowerCase()] = value;
+      return originalSetHeader.call(this, name, value);
+    };
+    const wrappedSend = function(body) {
+      const request = requests.get(this);
+      const matched = request?.method.toUpperCase() === "POST" && (typeof body === "string" || body instanceof URLSearchParams) && capture(request.url, String(body), { ...request.headers });
+      if (matched) this.addEventListener("loadend", () => {
+        state.status = this.status;
+        try {
+          state.responseText = this.responseType === "json" ? JSON.stringify(this.response) : this.responseText;
+          if (!this.status) state.error = "The UI comment request failed. Its outcome is unknown; it will not be retried.";
+        } catch {
+          state.error = "The UI comment response could not be read.";
+        }
+      }, { once: true });
+      return originalSend.call(this, body);
+    };
+    prototype.open = wrappedOpen;
+    prototype.setRequestHeader = wrappedSetHeader;
+    prototype.send = wrappedSend;
+    state.restore = () => {
+      if (scope.fetch === wrappedFetch) scope.fetch = originalFetch;
+      if (prototype.open === wrappedOpen) prototype.open = originalOpen;
+      if (prototype.send === wrappedSend) prototype.send = originalSend;
+      if (prototype.setRequestHeader === wrappedSetHeader) prototype.setRequestHeader = originalSetHeader;
+    };
+  }
+  function readCommentRequestCaptureInPage(cleanup) {
+    const scope = globalThis;
+    const key = "__postikaCommentRequestCapture";
+    const state = scope[key];
+    const result = state ? { template: state.template, responseText: state.responseText, status: state.status, error: state.error } : {};
+    if (cleanup) {
+      state?.restore?.();
+      delete scope[key];
+    }
+    return result;
+  }
+  function validateCommentTemplate(template) {
+    const url = new URL(template.url);
+    if (url.protocol !== "https:" || !["www.facebook.com", "web.facebook.com"].includes(url.hostname) || url.pathname !== "/api/graphql/" || url.username || url.password || url.port || template.method !== "POST" || !/^\d+$/.test(template.formData.doc_id ?? "")) {
+      throw new Error("The captured comment request is not a valid Facebook comment mutation.");
+    }
+    const variables = JSON.parse(template.formData.variables);
+    if ((template.formData.fb_api_req_friendly_name ?? template.headers["x-fb-friendly-name"]) !== COMMENT_MUTATION_FRIENDLY_NAME || !variables.input?.feedback_id || typeof variables.input?.message?.text !== "string" || !variables.groupID || !template.formData.fb_dtsg || !template.formData.lsd || !/^\d+$/.test(template.formData.__user ?? "")) {
+      throw new Error("The UI comment request is missing required session or comment values.");
+    }
+    if (template.headers["x-fb-lsd"] && template.headers["x-fb-lsd"] !== template.formData.lsd) {
+      throw new Error("The captured comment has conflicting LSD session tokens. Restart the queue to capture fresh values.");
+    }
+    if (template.headers["x-fb-friendly-name"] && template.headers["x-fb-friendly-name"] !== COMMENT_MUTATION_FRIENDLY_NAME) {
+      throw new Error("The captured comment has a conflicting mutation header.");
+    }
+  }
+  function validateCommentSessionBinding(template, expectedActorId) {
+    validateCommentTemplate(template);
+    const variables = JSON.parse(template.formData.variables);
+    const actorIds = [template.formData.__user, template.formData.av, variables.input.actor_id].filter((value) => value !== void 0);
+    if (!actorIds.every((value) => String(value) === expectedActorId)) {
+      throw new Error("The comment request belongs to a different Facebook account or actor. Restart posting with the intended account.");
+    }
+  }
+  function commentFeedbackId(session, post, groupId) {
+    let postId = /^\d+$/.test(post.postId ?? "") ? post.postId : void 0;
+    if (post.postUrl) {
+      try {
+        const url = new URL(post.postUrl);
+        const match = url.pathname.match(/^\/groups\/([^/]+)\/(?:permalink|posts)\/(\d+)\/?$/);
+        if (url.protocol !== "https:" || !["www.facebook.com", "web.facebook.com"].includes(url.hostname) || match?.[1] !== groupId) return void 0;
+        if (postId && postId !== match[2]) return void 0;
+        postId = match[2];
+      } catch {
+        return void 0;
+      }
+    }
+    if (post.feedbackId) {
+      try {
+        const decoded = atob(post.feedbackId);
+        if (postId && /^feedback:\d+$/.test(decoded) && decoded !== `feedback:${postId}`) return void 0;
+      } catch {
+      }
+      return post.feedbackId;
+    }
+    if (!postId) return void 0;
+    const original = JSON.parse(session.template.formData.variables).input.feedback_id;
+    try {
+      if (atob(original) === `feedback:${session.sourcePostId}`) return btoa(`feedback:${postId}`);
+    } catch {
+    }
+    return void 0;
+  }
+  function buildCommentVariables(session, groupId, feedbackId, text) {
+    validateCommentSessionBinding(session.template, session.browserSession.actorId);
+    if (!text.trim() || !/^\d+$/.test(groupId) || !feedbackId) throw new Error("The new comment target or text is missing.");
+    const variables = JSON.parse(session.template.formData.variables);
+    variables.groupID = groupId;
+    variables.input.feedback_id = feedbackId;
+    variables.input.message = { text, ranges: [] };
+    variables.input.attachments = null;
+    variables.input.client_mutation_id = String(++session.sequence);
+    const tokenPrefix = typeof variables.input.idempotence_token === "string" && variables.input.idempotence_token.startsWith("client:") ? "client:" : "";
+    variables.input.idempotence_token = tokenPrefix + crypto.randomUUID();
+    variables.input.tracking = [];
+    variables.input.is_tracking_encrypted = false;
+    variables.focusCommentID = null;
+    return JSON.stringify(variables);
+  }
+  function parseCommentResponse(text) {
+    try {
+      const normalized = text.trim().replace(/^for\s*\(;;\);\s*/, "");
+      const objects = [];
+      let start = 0, depth = 0, quoted = false, escaped = false;
+      for (let i = 0; i < normalized.length; i++) {
+        const char = normalized[i];
+        if (quoted) {
+          if (escaped) escaped = false;
+          else if (char === "\\") escaped = true;
+          else if (char === '"') quoted = false;
+          continue;
+        }
+        if (char === '"') quoted = true;
+        else if (char === "{") {
+          if (!depth) start = i;
+          depth++;
+        } else if (char === "}") {
+          depth--;
+          if (!depth) objects.push(JSON.parse(normalized.slice(start, i + 1)));
+        }
+      }
+      let commentId;
+      const visit = (value) => {
+        if (!value || typeof value !== "object") return;
+        if (value.errors?.length || value.error || value.errorSummary) throw new Error(value.errors?.[0]?.message ?? value.errorSummary ?? "Facebook rejected the comment.");
+        if (value.comment_create) {
+          const created = value.comment_create;
+          const id = created.feedback_comment_edge?.node?.id ?? created.comment?.id;
+          if (typeof id === "string" && id) commentId = id;
+        }
+        for (const entry of Object.values(value)) visit(entry);
+      };
+      objects.forEach(visit);
+      if (!commentId) return { success: false, error: "Facebook did not confirm a created comment. Its outcome is unknown; it will not be retried." };
+      return { success: true, commentId };
+    } catch (error) {
+      return { success: false, error: error instanceof Error ? error.message : "The comment response could not be parsed." };
+    }
+  }
 
   // src/background.ts
   var POST_MUTATION_FRIENDLY_NAME = "ComposerStoryCreateMutation";
@@ -19,12 +511,10 @@
   var GEMINI_API_KEY_STORAGE_KEYS = ["geminiApiKey", "GEMINI_API_KEY"];
   var GEMINI_REWRITE_ENABLED_STORAGE_KEY = "geminiRewriteEnabled";
   var GEMINI_CUSTOM_PROMPT_STORAGE_KEY = "geminiCustomPrompt";
-  var GEMINI_INCLUDE_HASHTAGS_STORAGE_KEY = "geminiIncludeHashtags";
   var GEMINI_MODEL = "gemini-2.5-flash";
   var GEMINI_TIMEOUT_MS = 3e4;
   var MIN_POSTING_DELAY_SECONDS = 60;
   var AUTH_SESSION_STORAGE_KEY = "googleAuthSession";
-  var GROUP_STARTER_EXCLUSIONS_STORAGE_KEY = "balancedStarterExcludedGroupIds";
   var LOG_PREFIX = "[Facebook Groups Bulk Poster]";
   var PostingAccessError = class extends Error {
     constructor(message) {
@@ -35,7 +525,7 @@
   var MissingFirstGroupComposerError = class extends Error {
     constructor(groupName) {
       super(
-        `Postika could not find \u201CWrite something...\u201D in ${groupName}. Start posting again and Postika will try another selected Group first.`
+        `Postika could not find the post composer in ${groupName}. Postika will skip it and try the next selected Group.`
       );
       this.name = "MissingFirstGroupComposerError";
     }
@@ -87,136 +577,10 @@
     }
     return sessionToken;
   }
-  async function createBalancedGroupPostingPlan(groups, facebookActorId, maximumPosts, failedGroupIds, starterExcludedGroupIds) {
-    const sessionToken = await getKundiPostSessionToken();
-    const response = await fetch(
-      `${AUTH_API_BASE_URL}/api/group-posting-stats/plan`,
-      {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${sessionToken}`,
-          "Content-Type": "application/json"
-        },
-        body: JSON.stringify({
-          facebook_actor_id: facebookActorId,
-          groups: groups.map(({ id, name }) => ({ id, name })),
-          maximum_posts: maximumPosts,
-          failed_group_ids: failedGroupIds,
-          starter_excluded_group_ids: starterExcludedGroupIds
-        })
-      }
-    );
-    const payload = await response.json().catch(() => ({}));
-    if (!response.ok) {
-      if (payload.code === "no_eligible_balanced_group") {
-        return [];
-      }
-      throw new PostingAccessError(
-        payload.error ?? "Unable to create a balanced Group posting plan."
-      );
-    }
-    return payload.plan ?? [];
-  }
-  async function getGroupStarterExcludedIds(facebookActorId) {
-    const actorKey = await hashLocalIdentifier(facebookActorId);
-    const stored = await chrome.storage.session.get(
-      GROUP_STARTER_EXCLUSIONS_STORAGE_KEY
-    );
-    const exclusions = stored[GROUP_STARTER_EXCLUSIONS_STORAGE_KEY];
-    const values = exclusions?.[actorKey];
-    return Array.isArray(values) ? values.filter(
-      (value) => typeof value === "string" && /^\d{5,32}$/.test(value)
-    ) : [];
-  }
-  async function rememberGroupStarterExclusion(facebookActorId, groupId) {
-    const actorKey = await hashLocalIdentifier(facebookActorId);
-    const stored = await chrome.storage.session.get(
-      GROUP_STARTER_EXCLUSIONS_STORAGE_KEY
-    );
-    const exclusions = {
-      ...stored[GROUP_STARTER_EXCLUSIONS_STORAGE_KEY] ?? {}
-    };
-    const existing = Array.isArray(exclusions[actorKey]) ? exclusions[actorKey].filter(
-      (value) => typeof value === "string"
-    ) : [];
-    exclusions[actorKey] = Array.from(/* @__PURE__ */ new Set([...existing, groupId]));
-    await chrome.storage.session.set({
-      [GROUP_STARTER_EXCLUSIONS_STORAGE_KEY]: exclusions
-    });
-  }
-  function moveFirstAvailableStarterToFront(groups, excludedGroupIds) {
-    const excluded = new Set(excludedGroupIds);
-    const starterIndex = groups.findIndex((group) => !excluded.has(group.id));
-    if (starterIndex < 0) {
-      return [];
-    }
-    if (starterIndex === 0) {
-      return [...groups];
-    }
-    return [
-      groups[starterIndex],
-      ...groups.slice(0, starterIndex),
-      ...groups.slice(starterIndex + 1)
-    ];
-  }
-  async function hashLocalIdentifier(value) {
-    const digest = await crypto.subtle.digest(
-      "SHA-256",
-      new TextEncoder().encode(value)
-    );
-    return Array.from(
-      new Uint8Array(digest),
-      (byte) => byte.toString(16).padStart(2, "0")
-    ).join("");
-  }
   function isMissingFirstGroupComposerError(error) {
     return error instanceof Error && (error instanceof MissingFirstGroupComposerError || /write something(?:\.\.\.)?.*(?:not found|could not find)/i.test(
       error.message
     ));
-  }
-  async function recordAcceptedGroupPost(facebookActorId, group, operationId) {
-    const sessionToken = await getKundiPostSessionToken();
-    for (let attempt = 1; attempt <= 3; attempt += 1) {
-      try {
-        const response = await fetch(
-          `${AUTH_API_BASE_URL}/api/group-posting-stats/accepted`,
-          {
-            method: "POST",
-            headers: {
-              Authorization: `Bearer ${sessionToken}`,
-              "Content-Type": "application/json"
-            },
-            body: JSON.stringify({
-              facebook_actor_id: facebookActorId,
-              group_id: group.id,
-              group_name: group.name,
-              operation_id: operationId
-            })
-          }
-        );
-        const payload = await response.json().catch(() => ({}));
-        if (response.ok) {
-          return true;
-        }
-        if (response.status < 500 || attempt === 3) {
-          debugWarn("Unable to update Group posting history.", {
-            groupId: group.id,
-            status: response.status,
-            error: payload.error
-          });
-          return false;
-        }
-      } catch (error) {
-        if (attempt === 3) {
-          debugWarn("Unable to update Group posting history.", {
-            groupId: group.id,
-            error: error instanceof Error ? error.message : String(error)
-          });
-          return false;
-        }
-      }
-    }
-    return false;
   }
   async function claimPostingUsage(kind, facebookActorId) {
     const operationId = crypto.randomUUID();
@@ -243,7 +607,7 @@
     const tab = await chrome.tabs.get(tabId);
     if (!tab.url || !isFacebookUrl(tab.url)) {
       throw new PostingAccessError(
-        "Open Facebook and sign in before starting a posting queue."
+        "Open Facebook and sign in before starting to post."
       );
     }
     const cookie = await chrome.cookies.get({
@@ -318,7 +682,7 @@
       throw new Error(MANUAL_STOP_MESSAGE);
     }
     geminiBypassed[queue] = true;
-    log("Continuing without Gemini for this queue. Using original descriptions.");
+    log("Continuing with your original text for the remaining posts.");
   }
   var activeGeminiRequestController;
   var latestUiPostingStatus;
@@ -656,7 +1020,7 @@
         if (activePosting) {
           sendResponse({
             ok: false,
-            error: "A posting queue is already running."
+            error: "Posting is already in progress."
           });
           return false;
         }
@@ -678,12 +1042,12 @@
         void runMarketplaceItemPostingQueue(request).catch((error) => {
           notifyMarketplaceItemPostingStatus({
             status: "done",
-            message: "Marketplace posting queue stopped.",
+            message: "Marketplace posting stopped.",
             current: 0,
             total: request.listings.length,
             successCount: 0,
             failedCount: request.listings.length,
-            error: error instanceof Error ? error.message : "Unable to run Marketplace posting queue."
+            error: error instanceof Error ? error.message : "Could not complete Marketplace posting."
           });
         }).finally(() => {
           activeMarketplaceItemPosting = false;
@@ -730,7 +1094,7 @@
       }
       if (request.type === "STOP_MARKETPLACE_POSTING") {
         if (!activeMarketplaceItemPosting) {
-          sendResponse({ ok: false, error: "No Marketplace queue is running." });
+          sendResponse({ ok: false, error: "Marketplace posting is not running." });
           return false;
         }
         marketplaceStopPostingRequested = true;
@@ -750,7 +1114,7 @@
       }
       if (request.type === "PAUSE_MARKETPLACE_POSTING") {
         if (!activeMarketplaceItemPosting) {
-          sendResponse({ ok: false, error: "No Marketplace queue is running." });
+          sendResponse({ ok: false, error: "Marketplace posting is not running." });
           return false;
         }
         marketplacePausePostingRequested = true;
@@ -765,7 +1129,7 @@
       }
       if (request.type === "RESUME_MARKETPLACE_POSTING") {
         if (!activeMarketplaceItemPosting) {
-          sendResponse({ ok: false, error: "No Marketplace queue is running." });
+          sendResponse({ ok: false, error: "Marketplace posting is not running." });
           return false;
         }
         marketplacePausePostingRequested = false;
@@ -780,7 +1144,7 @@
       }
       if (request.type === "STOP_UI_POSTING") {
         if (!activePosting) {
-          sendResponse({ ok: false, error: "No posting queue is running." });
+          sendResponse({ ok: false, error: "Posting is not running." });
           return false;
         }
         stopPostingRequested = true;
@@ -799,27 +1163,27 @@
       }
       if (request.type === "PAUSE_UI_POSTING") {
         if (!activePosting) {
-          sendResponse({ ok: false, error: "No posting queue is running." });
+          sendResponse({ ok: false, error: "Posting is not running." });
           return false;
         }
         pausePostingRequested = true;
         pauseNotificationSent = true;
         pauseQueueTimer(groupsPostingTimer);
         sendContentPostingControl("PAUSE_CREATE_POST");
-        notifyPostingControlStatus("paused", "Posting queue paused.");
+        notifyPostingControlStatus("paused", "Posting paused.");
         sendResponse({ ok: true });
         return false;
       }
       if (request.type === "RESUME_UI_POSTING") {
         if (!activePosting) {
-          sendResponse({ ok: false, error: "No posting queue is running." });
+          sendResponse({ ok: false, error: "Posting is not running." });
           return false;
         }
         pausePostingRequested = false;
         pauseNotificationSent = false;
         resumeQueueTimer(groupsPostingTimer);
         sendContentPostingControl("RESUME_CREATE_POST");
-        notifyPostingControlStatus("posting", "Posting queue resumed.");
+        notifyPostingControlStatus("posting", "Posting resumed.");
         sendResponse({ ok: true });
         return false;
       }
@@ -990,14 +1354,15 @@
         "Changing joined groups sort to trigger Facebook groups request...",
         0
       );
+      capturedGroupsRequest = void 0;
       await triggerJoinedGroupsSortRequest(tab.id);
       notifyGroupsStatus("Waiting for fresh Facebook groups request...", 0);
-      const capturedRequest = await waitForCapturedGroupsRequest();
+      const capturedRequest = await waitForCapturedGroupsRequest(tab.id);
       notifyGroupsStatus("Captured groups request. Preparing extraction...", 0);
       const config = updateFetchGroupsConfigFromCapturedRequest(capturedRequest);
       notifyGroupsStatus("Fetching groups page 1...", 0);
       const groups = await extractAllGroups(tab.id, config);
-      const uniqueGroups = dedupeGroups(groups);
+      const uniqueGroups = shuffleGroups(dedupeGroups(groups));
       notifyGroupsStatus(
         `Finished loading ${uniqueGroups.length} groups.`,
         uniqueGroups.length,
@@ -1042,26 +1407,23 @@
     await chrome.tabs.update(tabId, { url: JOINED_GROUPS_URL });
     await waitForJoinedGroupsPage(tabId);
     await waitForPageDomReady(tabId, "/groups/joins/");
-    await sleep(2e3);
   }
   async function waitForJoinedGroupsPage(tabId) {
-    const startedAt = Date.now();
-    while (Date.now() - startedAt < 3e4) {
+    while (true) {
       const tab = await chrome.tabs.get(tabId);
       if (tab.status === "complete" && tab.url?.includes("/groups/joins/")) {
         return;
       }
       await sleep(250);
     }
-    throw new Error("Facebook joined groups page took too long to load.");
   }
   async function waitForPageDomReady(tabId, urlIncludes) {
-    const startedAt = Date.now();
-    while (Date.now() - startedAt < 3e4) {
+    while (true) {
+      await chrome.tabs.get(tabId);
       try {
         const [result] = await chrome.scripting.executeScript({
           target: { tabId },
-          func: (expectedUrlPart) => window.location.href.includes(expectedUrlPart) && document.readyState === "complete" && Boolean(document.body),
+          func: inspectPageReadinessInPage,
           args: [urlIncludes]
         });
         if (result?.result) {
@@ -1071,7 +1433,6 @@
       }
       await sleep(250);
     }
-    throw new Error("Facebook page DOM took too long to finish loading.");
   }
   async function prepareMarketplacePostingPage(listing) {
     const [activeTab] = await chrome.tabs.query({
@@ -1198,7 +1559,6 @@
             enabled: request.rewriteDescriptions,
             apiKey: request.geminiApiKey,
             customPrompt: request.customPrompt,
-            includeHashtags: request.includeHashtags,
             destination: `Facebook Marketplace ${listing.listingType}`
           }
         );
@@ -1327,7 +1687,7 @@
     }
     notifyMarketplaceItemPostingStatus({
       status: "done",
-      message: `Marketplace queue complete: ${successCount} posted, ${failedCount} failed.`,
+      message: `Marketplace posting finished: ${successCount} posted, ${failedCount} failed.`,
       current: total,
       total,
       successCount,
@@ -1379,7 +1739,7 @@
     if (needsFallback) {
       notifyMarketplaceCleanupStatus({
         status: "scanning",
-        message: "Scrolling Marketplace to capture the active listings request\u2026",
+        message: "Finding your active Marketplace listings\u2026",
         processed: 0,
         total: 0,
         deletedCount: 0,
@@ -1539,77 +1899,84 @@
         })
       );
     };
-    const waitForElement = async (selector, timeoutMs = 1e4) => {
-      const startedAt = Date.now();
-      while (Date.now() - startedAt < timeoutMs) {
-        const element = Array.from(document.querySelectorAll(selector)).find(
-          isVisible
-        );
-        if (element) {
-          return element;
+    let lastChangedAt = Date.now();
+    const observer = new MutationObserver(() => {
+      lastChangedAt = Date.now();
+    });
+    observer.observe(document.body, {
+      subtree: true,
+      childList: true,
+      characterData: true,
+      attributes: true,
+      attributeFilter: ["aria-busy", "aria-expanded", "aria-hidden", "aria-checked", "hidden", "disabled"]
+    });
+    const waitForStableDom = async () => {
+      while (document.readyState !== "complete" || Array.from(document.querySelectorAll('[aria-busy="true"]')).some(isVisible) || Date.now() - lastChangedAt < 1500) {
+        await wait(250);
+      }
+    };
+    const findSortTrigger = () => {
+      const root = document.querySelector('[role="main"]') ?? document;
+      const candidates = Array.from(root.querySelectorAll(
+        '[role="button"][tabindex="0"][aria-haspopup="menu"][aria-expanded]'
+      )).filter((button) => {
+        if (!isVisible(button) || button.getAttribute("aria-disabled") === "true" || button.closest('article, [role="article"], [role="dialog"], [role="navigation"], [role="banner"]') || button.querySelector('svg, img, i, a, input, [contenteditable="true"]')) return false;
+        const label = button.querySelector(":scope > span");
+        const overlay = button.querySelector(':scope > [role="none"][data-visualcompletion="ignore"]');
+        return Boolean(label?.textContent?.trim()) && Boolean(overlay) && label?.textContent?.trim() === button.textContent?.trim();
+      });
+      if (candidates.length === 1) return candidates[0];
+      const matches = candidates.filter(
+        (button) => button.querySelector(":scope > span.x6prxxf.xvq8zen.xo1l8bm.x1fey0fg")
+      );
+      return matches.length === 1 ? matches[0] : void 0;
+    };
+    const visibleOptions = () => Array.from(
+      document.querySelectorAll('[role="menuitemradio"]')
+    ).filter(isVisible);
+    try {
+      let trigger;
+      while (!trigger) {
+        await waitForStableDom();
+        trigger = findSortTrigger();
+        if (!trigger) await wait(250);
+      }
+      const previousOptions = new Set(visibleOptions());
+      clickElement(trigger);
+      lastChangedAt = Date.now();
+      while (true) {
+        await waitForStableDom();
+        if (!trigger.isConnected) {
+          throw new Error("The joined groups sort control changed. Please load groups again.");
+        }
+        const options = visibleOptions().filter((option) => !previousOptions.has(option));
+        const menus = new Set(options.map((option) => option.closest('[role="menu"]')));
+        if (trigger.getAttribute("aria-expanded") === "true" && options.length >= 2 && menus.size === 1) {
+          const sortOption = options.find((option) => option.getAttribute("aria-checked") === "false");
+          if (sortOption) {
+            clickElement(sortOption);
+            return { ok: true };
+          }
         }
         await wait(250);
       }
-      return void 0;
-    };
-    try {
-      const menuTriggers = Array.from(
-        document.querySelectorAll('div[aria-haspopup="menu"]')
-      ).filter(isVisible);
-      if (menuTriggers.length === 0) {
-        return {
-          ok: false,
-          error: "Could not find the joined groups sort menu button."
-        };
-      }
-      let sortCard;
-      for (const menuTrigger of menuTriggers) {
-        clickElement(menuTrigger);
-        await wait(3e3);
-        sortCard = await waitForElement(
-          'div[aria-label="Sort joined groups"]',
-          1500
-        );
-        if (sortCard) {
-          break;
-        }
-      }
-      if (!sortCard) {
-        return {
-          ok: false,
-          error: "Could not find the joined groups sort menu."
-        };
-      }
-      const sortOption = Array.from(
-        sortCard.querySelectorAll('div[role="menuitemradio"]')
-      ).find(isVisible);
-      if (!sortOption) {
-        return {
-          ok: false,
-          error: "Could not find a joined groups sort option."
-        };
-      }
-      clickElement(sortOption);
-      await wait(2e3);
-      return { ok: true };
     } catch (error) {
       return {
         ok: false,
         error: error instanceof Error ? error.message : "Unable to trigger joined groups sort."
       };
+    } finally {
+      observer.disconnect();
     }
   }
-  async function waitForCapturedGroupsRequest() {
-    const startedAt = Date.now();
-    while (Date.now() - startedAt < 2e4) {
+  async function waitForCapturedGroupsRequest(tabId) {
+    while (true) {
       if (capturedGroupsRequest) {
         return capturedGroupsRequest;
       }
+      await chrome.tabs.get(tabId);
       await sleep(250);
     }
-    throw new Error(
-      "Could not capture Facebook groups request. Try again while logged into Facebook."
-    );
   }
   function updateFetchGroupsConfigFromCapturedRequest(capturedRequest) {
     const formData = { ...capturedRequest.formData };
@@ -1721,10 +2088,9 @@
         }
         cursor = tabGroupsList.page_info.end_cursor;
         notifyGroupsStatus2(
-          `Waiting before next page. ${allGroups.length} groups loaded.`,
+          `Fetching next page. ${allGroups.length} groups loaded.`,
           allGroups.length
         );
-        await new Promise((resolve) => setTimeout(resolve, 2e3));
       }
       notifyGroupsStatus2(
         `Finished loading ${allGroups.length} groups.`,
@@ -1772,7 +2138,7 @@
       if (!pauseNotificationSent) {
         notifyUiPostingStatus({
           status: "paused",
-          message: statusContext.groupName ? `Posting paused before ${statusContext.groupName}.` : "Posting queue paused.",
+          message: statusContext.groupName ? `Posting paused before ${statusContext.groupName}.` : "Posting paused.",
           current: statusContext.current,
           total: statusContext.total,
           groupId: statusContext.groupId,
@@ -1831,10 +2197,14 @@
   }
   async function runGraphqlPostingQueue(request) {
     const requestedMaxPosts = Number.isInteger(request.maxPosts) ? Math.max(request.maxPosts, 1) : request.groups.length;
-    const balancedPosting = request.postingStrategy === "balanced";
+    const commentOptions = request.groupCommentOptions?.filter((option) => option.trim()) ?? [];
+    const firstComment = commentOptions[0] ?? "";
+    let commentSession;
+    let commentIndex = 0;
+    const needsUiCommentSetup = () => Boolean(request.groupCommentEnabled && !commentSession);
     const maxPosts = requestedMaxPosts;
-    const selectedGroups = request.groups;
-    let groups = selectedGroups;
+    const selectedGroups = shuffleGroups(request.groups);
+    let groups = [...selectedGroups];
     const requestedPosts = request.posts.filter(
       (post) => post.body.trim().length > 0 && post.images.length > 0
     );
@@ -1850,6 +2220,7 @@
     const requestedMaximumDelay = Number(request.maximumDelaySeconds);
     const maximumDelaySeconds = Number.isInteger(requestedMaximumDelay) && requestedMaximumDelay >= minimumDelaySeconds ? requestedMaximumDelay : minimumDelaySeconds;
     debugLog("Starting posting queue.", {
+      mode: request.groupCommentEnabled ? "UI posting until a usable comment form" : "UI capture followed by GraphQL posting",
       requestedGroups: request.groups.length,
       groups: groups.length,
       maxPosts,
@@ -1862,13 +2233,13 @@
     if (activePosting) {
       notifyUiPostingStatus({
         status: "failed",
-        message: "A posting queue is already running.",
+        message: "Posting is already in progress.",
         current: 0,
         total: groups.length,
         successCount: 0,
         failedCount: 0,
         processedCount: 0,
-        error: "Wait for the current queue to finish before starting another."
+        error: "Wait for the current posts to finish, or stop posting before starting again."
       });
       return;
     }
@@ -1884,16 +2255,20 @@
     pauseNotificationSent = false;
     let successCount = 0;
     let failedCount = 0;
-    const failedBalancedGroupIds = /* @__PURE__ */ new Set();
-    const total = balancedPosting ? maxPosts : groups.length;
+    const failedGroupIds = /* @__PURE__ */ new Set();
+    const total = groups.length;
     let postingTabId;
+    let queueBrowserSession;
     try {
       throwIfPostingStopped();
       if (total === 0) {
         throw new Error("Select at least one group before posting.");
       }
       if (posts.length === 0) {
-        throw new Error("Select at least one prepared post before posting.");
+        throw new Error("Select at least one reusable post before posting.");
+      }
+      if (request.groupCommentEnabled && !firstComment.trim()) {
+        throw new Error("Enter at least one comment option before starting.");
       }
       const postingTab = await getActiveTabForPosting();
       postingTabId = postingTab.id;
@@ -1902,46 +2277,13 @@
       }
       activePostingTabId = postingTabId;
       const facebookActorId = await getFacebookActorId(postingTabId);
-      const starterExcludedGroupIds = new Set(
-        await getGroupStarterExcludedIds(facebookActorId)
-      );
-      if (balancedPosting) {
-        groups = await createBalancedGroupPostingPlan(
-          selectedGroups,
-          facebookActorId,
-          maxPosts,
-          [],
-          Array.from(starterExcludedGroupIds)
-        );
-        if (groups.length === 0) {
-          throw new Error(
-            "None of the selected Groups can start posting in this browser session. Select another standard Group with a visible \u201CWrite something...\u201D button."
-          );
-        }
-        notifyUiPostingStatus({
-          status: "posting",
-          message: `Ready to spread ${groups.length} posts across ${selectedGroups.length} selected Groups, starting with Groups you have posted to the least.`,
-          current: 0,
-          total,
-          successCount,
-          failedCount,
-          processedCount: 0,
-          successTarget: maxPosts
-        });
-      } else {
-        groups = moveFirstAvailableStarterToFront(
-          selectedGroups,
-          Array.from(starterExcludedGroupIds)
-        );
-        if (groups.length === 0) {
-          throw new Error(
-            "None of the selected Groups can start posting in this browser session. Select another standard Group with a visible \u201CWrite something...\u201D button."
-          );
-        }
+      if (request.groupCommentEnabled) {
+        queueBrowserSession = await readCommentBrowserSession(postingTabId);
+        if (queueBrowserSession.actorId !== facebookActorId) throw new Error("Your Facebook account changed before posting began. Start posting again with the account you want to use.");
       }
       notifyUiPostingStatus({
         status: "posting",
-        message: "Preparing the first post...",
+        message: request.groupCommentEnabled ? "Comments are on. Posting on Facebook until a post allows comments." : "Preparing the first post...",
         current: 1,
         total,
         groupId: groups[0].id,
@@ -1960,6 +2302,7 @@
           facebookActorId
         );
         try {
+          if (queueBrowserSession) await assertCommentBrowserSession({ browserSession: queueBrowserSession });
           templates = await ensurePostingTemplates(
             postingTabId,
             groups,
@@ -1979,36 +2322,17 @@
             throw error;
           }
           const incompatibleStarter = groups[0];
-          starterExcludedGroupIds.add(incompatibleStarter.id);
-          try {
-            await rememberGroupStarterExclusion(
-              facebookActorId,
-              incompatibleStarter.id
-            );
-          } catch (storageError) {
-            debugWarn("Unable to remember the incompatible starter Group.", {
-              groupId: incompatibleStarter.id,
-              error: storageError instanceof Error ? storageError.message : String(storageError)
-            });
-          }
-          groups = balancedPosting ? await createBalancedGroupPostingPlan(
-            selectedGroups,
-            facebookActorId,
-            maxPosts,
-            [],
-            Array.from(starterExcludedGroupIds)
-          ) : moveFirstAvailableStarterToFront(
-            selectedGroups,
-            Array.from(starterExcludedGroupIds)
-          );
+          failedGroupIds.add(incompatibleStarter.id);
+          failedCount += 1;
+          groups = groups.slice(1);
           if (groups.length === 0) {
             throw new Error(
-              "None of the selected Groups has a visible \u201CWrite something...\u201D button. Select another standard Group and try again."
+              "None of the selected Groups has a visible post composer. Select another standard Group and try again."
             );
           }
           notifyUiPostingStatus({
             status: "posting",
-            message: `${incompatibleStarter.name} cannot start the queue. Trying ${groups[0].name} instead...`,
+            message: `${incompatibleStarter.name} does not allow Postika to start posting. Trying ${groups[0].name} instead...`,
             current: 0,
             total,
             groupId: groups[0].id,
@@ -2031,11 +2355,6 @@
           "group_post",
           firstPostingUsageOperationId
         );
-        const firstHistoryRecorded = await recordAcceptedGroupPost(
-          facebookActorId,
-          groups[0],
-          firstPostingUsageOperationId
-        );
         successCount += 1;
         const firstPostPending = templates.firstPostResult?.pendingApproval === true;
         if (firstPostPending) {
@@ -2043,8 +2362,11 @@
         }
         notifyUiPostingStatus({
           status: firstPostPending ? "pending" : "posted",
-          message: firstPostPending ? "Your post is pending" : `Posted to ${groups[0].name}.`,
-          detail: firstPostPending ? "Your post is awaiting admin approval. If the admin team approves it, it'll become visible in the group." : firstHistoryRecorded ? void 0 : "The post succeeded, but Postika could not update its Group balance history.",
+          message: firstPostPending ? request.groupCommentEnabled ? `Post to ${groups[0].name} is awaiting approval. Checking whether its page allows comments.` : "Your post is pending" : `Posted to ${groups[0].name}.`,
+          detail: [
+            firstPostPending ? "Your post is awaiting admin approval. If the admin team approves it, it'll become visible in the group." : void 0,
+            needsUiCommentSetup() && !groupPostPermalink(templates.firstPostResult, groups[0].id) ? "Postika needs a post that allows comments to finish setup. It will keep posting on Facebook until it finds one or reaches your chosen number of posts." : void 0
+          ].filter(Boolean).join(" ") || void 0,
           current: 1,
           total,
           groupId: groups[0].id,
@@ -2054,10 +2376,21 @@
           processedCount: 1
         });
         throwIfPostingStopped();
+        if (needsUiCommentSetup()) {
+          commentSession = await tryFirstCommentOnPostPermalink(
+            postingTabId,
+            groups[0],
+            templates.firstPostResult,
+            { current: 1, total, successCount, failedCount, processedCount: 1 },
+            firstComment,
+            queueBrowserSession
+          );
+          if (commentSession) commentIndex = 1;
+        }
         if (successCount >= maxPosts) {
           notifyUiPostingStatus({
             status: "done",
-            message: `Maximum of ${maxPosts} accepted submissions reached. Queue stopped.`,
+            message: needsUiCommentSetup() ? `Your chosen number of ${maxPosts} posts was submitted. None allowed comment setup, so no comment was added.` : `Your chosen number of ${maxPosts} posts was submitted. Posting stopped.`,
             current: 1,
             total,
             successCount,
@@ -2077,7 +2410,7 @@
       const startIndex = templates.firstGroupPosted ? 1 : 0;
       notifyUiPostingStatus({
         status: "posting",
-        message: "Starting GraphQL posting queue...",
+        message: needsUiCommentSetup() ? "Continuing to post on Facebook until a post allows comments..." : "Continuing to post automatically...",
         current: startIndex,
         total,
         successCount,
@@ -2101,13 +2434,13 @@
           processedCount: startIndex
         });
       }
-      for (let attemptIndex = startIndex; successCount < maxPosts && (!balancedPosting || attemptIndex < groups.length); attemptIndex += 1) {
+      for (let attemptIndex = startIndex; successCount < maxPosts; attemptIndex += 1) {
         throwIfPostingStopped();
-        const groupIndex = balancedPosting ? attemptIndex : attemptIndex % groups.length;
-        const cycleNumber = balancedPosting ? Math.floor(attemptIndex / selectedGroups.length) + 1 : Math.floor(attemptIndex / groups.length) + 1;
+        const groupIndex = attemptIndex % groups.length;
+        const cycleNumber = Math.floor(attemptIndex / groups.length) + 1;
         const group = groups[groupIndex];
-        if (balancedPosting && failedBalancedGroupIds.has(group.id)) {
-          if (failedBalancedGroupIds.size >= selectedGroups.length) {
+        if (failedGroupIds.has(group.id)) {
+          if (failedGroupIds.size >= selectedGroups.length) {
             break;
           }
           continue;
@@ -2126,6 +2459,7 @@
           processedCount: attemptIndex
         };
         await waitWhilePostingPaused(statusContext);
+        if (queueBrowserSession) await assertCommentBrowserSession({ browserSession: queueBrowserSession });
         debugLog("Processing group.", {
           attempt: attemptIndex + 1,
           cycle: cycleNumber,
@@ -2163,7 +2497,7 @@
         });
         await waitWhilePostingPaused(statusContext);
         let photoIds = [];
-        if (hasImages) {
+        if (hasImages && !needsUiCommentSetup()) {
           notifyUiPostingStatus({
             status: "posting",
             message: `Uploading images from post ${preparedPostNumber}/${posts.length} for ${group.name}...`,
@@ -2176,14 +2510,14 @@
             processedCount: attemptIndex
           });
           if (!templates.uploadTemplate) {
-            throw new Error("Image upload template was not captured.");
+            throw new Error("Could not set up photo uploads from your first post. Please start posting again.");
           }
           photoIds = await uploadImagesForGroup(
             postingTabId,
             templates.uploadTemplate,
             preparedPost.images
           );
-        } else {
+        } else if (!needsUiCommentSetup()) {
           notifyUiPostingStatus({
             status: "posting",
             message: `Preparing text-only post ${preparedPostNumber}/${posts.length} for ${group.name}...`,
@@ -2206,7 +2540,7 @@
         await waitWhilePostingPaused(statusContext);
         notifyUiPostingStatus({
           status: "posting",
-          message: `Posting prepared post ${preparedPostNumber}/${posts.length} to ${group.name}...`,
+          message: `Posting reusable post ${preparedPostNumber}/${posts.length} to ${group.name}...`,
           current,
           total,
           groupId: group.id,
@@ -2221,22 +2555,40 @@
         );
         let postResult;
         try {
-          postResult = await createGraphqlPost(
-            postingTabId,
-            templates.postTemplate,
-            postBody,
-            photoIds,
-            group.id
-          );
+          if (needsUiCommentSetup()) {
+            templates = await ensurePostingTemplates(
+              postingTabId,
+              [group],
+              preparedPost.body,
+              postBody,
+              preparedPost.images,
+              total,
+              statusContext
+            );
+            postResult = templates.firstPostResult ?? { success: templates.firstGroupPosted };
+          } else {
+            if (commentSession) await assertCommentBrowserSession(commentSession);
+            postResult = await createGraphqlPost(
+              postingTabId,
+              templates.postTemplate,
+              postBody,
+              photoIds,
+              group.id
+            );
+          }
         } catch (error) {
-          await finalizePostingUsage(
-            "release",
-            "group_post",
-            postingUsageOperationId
-          );
-          throw error;
+          if (needsUiCommentSetup() && isMissingFirstGroupComposerError(error)) {
+            postResult = { success: false, error: error instanceof Error ? error.message : String(error) };
+          } else {
+            await finalizePostingUsage(
+              "release",
+              "group_post",
+              postingUsageOperationId
+            );
+            throw error;
+          }
         }
-        debugLog("GraphQL post result received.", {
+        debugLog(needsUiCommentSetup() ? "UI post result received." : "GraphQL post result received.", {
           groupId: group.id,
           success: postResult.success,
           pendingApproval: postResult.pendingApproval,
@@ -2255,19 +2607,17 @@
             "group_post",
             postingUsageOperationId
           );
-          const historyRecorded = await recordAcceptedGroupPost(
-            facebookActorId,
-            group,
-            postingUsageOperationId
-          );
           successCount += 1;
           if (postResult.pendingApproval) {
             activePostingPendingCount += 1;
           }
           notifyUiPostingStatus({
             status: postResult.pendingApproval ? "pending" : "posted",
-            message: postResult.pendingApproval ? "Your post is pending" : `Posted successfully to ${group.name}.`,
-            detail: postResult.pendingApproval ? "Your post is awaiting admin approval. If the admin team approves it, it'll become visible in the group." : historyRecorded ? void 0 : "The post succeeded, but Postika could not update its Group balance history.",
+            message: postResult.pendingApproval ? needsUiCommentSetup() ? `Post to ${group.name} is awaiting approval. Checking whether its page allows comments.` : "Your post is pending" : `Posted successfully to ${group.name}.`,
+            detail: [
+              postResult.pendingApproval ? "Your post is awaiting admin approval. If the admin team approves it, it'll become visible in the group." : void 0,
+              needsUiCommentSetup() && !groupPostPermalink(postResult, group.id) ? "Postika needs a post that allows comments to finish setup. It will keep posting on Facebook until it finds one or reaches your chosen number of posts." : void 0
+            ].filter(Boolean).join(" ") || void 0,
             current,
             total,
             groupId: group.id,
@@ -2276,10 +2626,32 @@
             failedCount,
             processedCount: attemptIndex + 1
           });
+          const commentProgress = { current, total, successCount, failedCount, processedCount: attemptIndex + 1, groupId: group.id, groupName: group.name };
+          if (needsUiCommentSetup()) {
+            commentSession = await tryFirstCommentOnPostPermalink(postingTabId, group, postResult, commentProgress, firstComment, queueBrowserSession);
+            if (commentSession) commentIndex = 1;
+          } else if (commentSession) {
+            if (postResult.pendingApproval) {
+              notifyUiPostingStatus({ status: "posting", message: "Comment skipped: this post is awaiting approval.", ...commentProgress });
+            } else {
+              const feedbackId = commentFeedbackId(commentSession, postResult, group.id);
+              if (!feedbackId) {
+                notifyUiPostingStatus({ status: "posting", message: "Comment skipped: Facebook did not provide the details needed to comment on this post.", ...commentProgress });
+              } else {
+                throwIfPostingStopped();
+                await waitWhilePostingPaused(commentProgress);
+                notifyUiPostingStatus({ status: "posting", message: `Posting comment option ${commentIndex % commentOptions.length + 1}/${commentOptions.length} to ${group.name}...`, ...commentProgress });
+                const commentResult = await createGraphqlComment(postingTabId, commentSession, group.id, feedbackId, commentOptions[commentIndex % commentOptions.length]);
+                if (!commentResult.success) throw new Error(`Post accepted, but its comment was not confirmed: ${commentResult.error}. The comment will not be retried.`);
+                commentIndex++;
+                notifyUiPostingStatus({ status: "posting", message: `Comment confirmed for ${group.name}.`, ...commentProgress });
+              }
+            }
+          }
           if (successCount >= maxPosts) {
             notifyUiPostingStatus({
               status: "done",
-              message: `Maximum of ${maxPosts} accepted submissions reached. Queue stopped.`,
+              message: needsUiCommentSetup() ? `Your chosen number of ${maxPosts} posts was submitted. None allowed comment setup, so no comment was added.` : `Your chosen number of ${maxPosts} posts was submitted. Posting stopped.`,
               current,
               total,
               successCount,
@@ -2296,9 +2668,7 @@
             postingUsageOperationId
           );
           failedCount += 1;
-          if (balancedPosting) {
-            failedBalancedGroupIds.add(group.id);
-          }
+          failedGroupIds.add(group.id);
           if (isRateLimitError(postResult.error, postResult.responseBody)) {
             notifyUiPostingStatus({
               status: "rate_limited",
@@ -2331,32 +2701,10 @@
           });
         }
         const nextAttemptIndex = attemptIndex + 1;
-        if (balancedPosting && failedBalancedGroupIds.size >= selectedGroups.length) {
+        if (failedGroupIds.size >= selectedGroups.length) {
           break;
         }
-        if (balancedPosting) {
-          const currentPlan = groups.slice(0, nextAttemptIndex);
-          const remainingPlan = groups.slice(nextAttemptIndex).filter(
-            (plannedGroup) => !failedBalancedGroupIds.has(plannedGroup.id)
-          );
-          const remainingTarget = maxPosts - successCount;
-          if (remainingPlan.length < remainingTarget) {
-            const replacementPlan = await createBalancedGroupPostingPlan(
-              selectedGroups,
-              facebookActorId,
-              remainingTarget,
-              Array.from(failedBalancedGroupIds),
-              []
-            );
-            groups = [...currentPlan, ...replacementPlan];
-          } else {
-            groups = [...currentPlan, ...remainingPlan];
-          }
-        }
-        if (balancedPosting && nextAttemptIndex >= groups.length) {
-          break;
-        }
-        const nextGroupIndex = balancedPosting ? nextAttemptIndex : nextAttemptIndex % groups.length;
+        const nextGroupIndex = nextAttemptIndex % groups.length;
         const nextGroup = groups[nextGroupIndex];
         const nextCurrent = nextGroupIndex + 1;
         const delaySeconds = randomIntegerBetween(
@@ -2373,18 +2721,16 @@
           processedCount: nextAttemptIndex
         });
       }
-      if (balancedPosting) {
-        notifyUiPostingStatus({
-          status: "done",
-          message: successCount >= maxPosts ? `Balanced queue reached ${successCount} accepted posts.` : `Balanced queue stopped after every selected Group failed. ${successCount} posts were accepted.`,
-          current: Math.min(successCount + failedCount, total),
-          total,
-          successCount,
-          failedCount,
-          processedCount: Math.min(successCount + failedCount, total),
-          successTarget: maxPosts
-        });
-      }
+      notifyUiPostingStatus({
+        status: "done",
+        message: needsUiCommentSetup() ? "Comment setup stopped because none of the remaining groups could accept a post on Facebook." : successCount >= maxPosts ? `Posting finished: ${successCount} posts were submitted.` : `Posting stopped because none of the selected groups could accept another post. ${successCount} posts were submitted.`,
+        current: Math.min(successCount + failedCount, total),
+        total,
+        successCount,
+        failedCount,
+        processedCount: Math.min(successCount + failedCount, total),
+        successTarget: maxPosts
+      });
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : "Unknown error";
       debugWarn("Posting queue stopped with error.", { error: errorMessage });
@@ -2424,8 +2770,8 @@
           });
         }
         notifyUiPostingStatus({
-          status: errorMessage === MANUAL_STOP_MESSAGE ? "stopped" : "done",
-          message: errorMessage === MANUAL_STOP_MESSAGE ? MANUAL_STOP_MESSAGE : "GraphQL posting stopped.",
+          status: errorMessage === MANUAL_STOP_MESSAGE ? "stopped" : commentSession ? "failed" : "done",
+          message: errorMessage === MANUAL_STOP_MESSAGE ? MANUAL_STOP_MESSAGE : needsUiCommentSetup() ? "Posting stopped while setting up comments." : "Automatic posting stopped.",
           current: Math.min(successCount + failedCount, total),
           total,
           successCount,
@@ -2435,6 +2781,7 @@
         });
       }
     } finally {
+      stopPostingTemplateCapture();
       if (postingTabId) {
         await readFirstPostResponseCapture(postingTabId, true);
       }
@@ -2453,20 +2800,329 @@
       activePostingTabId = void 0;
     }
   }
-  async function ensurePostingTemplates(tabId, groups, originalBody, body, images, total) {
+  async function readCommentBrowserSession(tabId) {
+    const tab = await chrome.tabs.get(tabId);
+    if (!tab.url || new URL(tab.url).protocol !== "https:" || !["www.facebook.com", "web.facebook.com"].includes(new URL(tab.url).hostname)) {
+      throw new Error("The posting tab is no longer on Facebook. Comment replay stopped.");
+    }
+    const stores = await chrome.cookies.getAllCookieStores();
+    const storeId = stores.find((store) => store.tabIds.includes(tabId))?.id;
+    if (!storeId) throw new Error("The browser cookie store could not be identified. Comment replay stopped.");
+    const [account, login] = await Promise.all([
+      chrome.cookies.get({ url: tab.url, name: "c_user", storeId }),
+      chrome.cookies.get({ url: tab.url, name: "xs", storeId })
+    ]);
+    if (!/^\d+$/.test(account?.value ?? "") || !login?.value) {
+      throw new Error("The Facebook login session is no longer available. Restart posting after signing in.");
+    }
+    const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(JSON.stringify([storeId, account.value, login.value])));
+    const fingerprint = Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, "0")).join("");
+    return { actorId: account.value, fingerprint, storeId, tabId };
+  }
+  var commentSessionWarnings = /* @__PURE__ */ new WeakMap();
+  async function assertCommentBrowserSession(session) {
+    const warn = (message) => {
+      let reported = commentSessionWarnings.get(session.browserSession);
+      if (!reported) {
+        reported = /* @__PURE__ */ new Set();
+        commentSessionWarnings.set(session.browserSession, reported);
+      }
+      if (reported.has(message)) return;
+      reported.add(message);
+      const warning = `Warning: ${message} Posting will continue.`;
+      debugWarn(warning);
+      if (latestUiPostingStatus) {
+        notifyUiPostingStatus({
+          ...latestUiPostingStatus,
+          status: "posting",
+          message: warning,
+          error: void 0,
+          detail: void 0,
+          responseBody: void 0
+        });
+      }
+    };
+    let current;
+    let tab;
+    try {
+      current = await readCommentBrowserSession(session.browserSession.tabId);
+      tab = await chrome.tabs.get(session.browserSession.tabId);
+    } catch {
+      warn("Postika could not verify the current Facebook account and sign-in details.");
+      return;
+    }
+    if (current.actorId !== session.browserSession.actorId) {
+      warn("Facebook is now using a different account than when posting started.");
+    }
+    if (current.storeId !== session.browserSession.storeId) {
+      warn("The browser storage used for your Facebook account changed.");
+    } else if (current.actorId === session.browserSession.actorId && current.fingerprint !== session.browserSession.fingerprint) {
+      warn("You are still on the same Facebook account, but its sign-in cookie changed. This does not mean you logged out.");
+    }
+    if (!tab.url) {
+      warn("Postika could not read the Facebook tab's address.");
+    } else if (session.template && new URL(tab.url).origin !== new URL(session.template.url).origin) {
+      const capturedHost = new URL(session.template.url).hostname;
+      const currentHost = new URL(tab.url).hostname;
+      warn(`The Facebook page address changed from ${capturedHost} to ${currentHost}.`);
+    }
+  }
+  async function tryFirstCommentOnPostPermalink(tabId, group, result, progress, firstComment, expectedBrowserSession) {
+    const permalink = groupPostPermalink(result, group.id);
+    if (!permalink) return void 0;
+    const statusContext = { ...progress, groupId: group.id, groupName: group.name };
+    throwIfPostingStopped();
+    await waitWhilePostingPaused(statusContext);
+    notifyUiPostingStatus({
+      status: "posting",
+      message: `Opening your post in ${group.name} to check whether comments are available...`,
+      detail: "Facebook provided a link to the post. Postika still needs to check whether it allows comments.",
+      ...statusContext
+    });
+    await chrome.tabs.update(tabId, { url: permalink, active: true });
+    notifyUiPostingStatus({
+      status: "posting",
+      message: "Waiting for the post page to finish loading...",
+      ...statusContext
+    });
+    const permalinkPath = new URL(permalink).pathname;
+    const initialDocumentId = await waitForPostPermalinkLoad(tabId, permalinkPath, statusContext);
+    throwIfPostingStopped();
+    await waitWhilePostingPaused(statusContext);
+    notifyUiPostingStatus({
+      status: "posting",
+      message: "Post page loaded. Refreshing it to check whether comments are available...",
+      ...statusContext
+    });
+    await chrome.tabs.reload(tabId);
+    await waitForPostPermalinkLoad(tabId, permalinkPath, statusContext, initialDocumentId);
+    notifyUiPostingStatus({
+      status: "posting",
+      message: "Post page refreshed. Waiting for the content to finish updating before checking for comments...",
+      ...statusContext
+    });
+    const inspection = await waitForPublishedPostDialog(tabId, permalinkPath, statusContext);
+    throwIfPostingStopped();
+    await waitWhilePostingPaused(statusContext);
+    if (!inspection.dialogFound || !inspection.commentFormFound) {
+      notifyUiPostingStatus({
+        status: "posting",
+        message: inspection.dialogFound ? "This post does not currently allow Postika to add a comment. Continuing to the next post." : "Could not find a place to write a comment on this post. Continuing to the next post.",
+        detail: `${inspection.reason ?? "Could not find the comment box or Post comment button."} No comment was added. Posting will still stop at your chosen number of posts.`,
+        ...statusContext
+      });
+      return void 0;
+    }
+    notifyUiPostingStatus({
+      status: "posting",
+      message: "A place to write a comment is available. Entering your first saved comment...",
+      ...statusContext
+    });
+    const path = new URL(permalink).pathname;
+    const sourcePostId = path.match(/\/(?:permalink|posts)\/(\d+)/)?.[1];
+    if (!sourcePostId) throw new Error("The first comment's source post could not be identified.");
+    const browserSession = expectedBrowserSession;
+    await assertCommentBrowserSession({ browserSession, template: { url: new URL("/api/graphql/", permalink).href } });
+    await chrome.scripting.executeScript({
+      target: { tabId },
+      world: "MAIN",
+      func: installCommentRequestCaptureInPage,
+      args: [group.id, firstComment, sourcePostId, result?.feedbackId ?? ""]
+    });
+    try {
+      const [prepared] = await chrome.scripting.executeScript({
+        target: { tabId },
+        func: interactWithPostCommentFormInPage,
+        args: [path, firstComment, "prepare"]
+      });
+      if (prepared?.result?.state === "unavailable") {
+        notifyUiPostingStatus({ status: "posting", message: "The comment box disappeared before typing. Continuing to the next post.", ...statusContext });
+        return void 0;
+      }
+      if (prepared?.result?.state === "failed") throw new Error(prepared.result.error);
+      let textVerified = prepared?.result?.textEntered === true;
+      let lastInputAttemptAt = Date.now();
+      notifyUiPostingStatus({
+        status: "posting",
+        message: textVerified ? "Your comment text is entered. Waiting for Facebook to enable the Post comment button..." : "Waiting for your comment text to appear. Postika will try typing again if the box stays empty...",
+        ...statusContext
+      });
+      while (true) {
+        throwIfPostingStopped();
+        await waitWhilePostingPaused(statusContext);
+        const [checked] = await chrome.scripting.executeScript({
+          target: { tabId },
+          func: interactWithPostCommentFormInPage,
+          args: [path, firstComment, "check"]
+        });
+        if (checked?.result?.textEntered && !textVerified) {
+          textVerified = true;
+          notifyUiPostingStatus({ status: "posting", message: "Your comment text is entered. Waiting for Facebook to enable the Post comment button...", ...statusContext });
+        }
+        if (checked?.result?.state === "ready") break;
+        if (checked?.result?.state === "unavailable") {
+          notifyUiPostingStatus({ status: "posting", message: "The comment box disappeared before posting the comment. Continuing to the next post.", ...statusContext });
+          return void 0;
+        }
+        if (checked?.result?.state === "failed") throw new Error(checked.result.error);
+        if (checked?.result?.editorEmpty && Date.now() - lastInputAttemptAt >= 2e3) {
+          throwIfPostingStopped();
+          const [retry] = await chrome.scripting.executeScript({
+            target: { tabId },
+            func: interactWithPostCommentFormInPage,
+            args: [path, firstComment, "prepare"]
+          });
+          if (retry?.result?.state === "failed") throw new Error(retry.result.error);
+          lastInputAttemptAt = Date.now();
+        }
+        await sleepWithStopChecks(250, statusContext);
+      }
+      throwIfPostingStopped();
+      await waitWhilePostingPaused(statusContext);
+      await assertCommentBrowserSession({ browserSession, template: { url: new URL("/api/graphql/", permalink).href } });
+      notifyUiPostingStatus({ status: "posting", message: "First comment entered. Clicking Post comment...", ...statusContext });
+      const [submitted] = await chrome.scripting.executeScript({
+        target: { tabId },
+        func: interactWithPostCommentFormInPage,
+        args: [path, firstComment, "submit"]
+      });
+      if (submitted?.result?.state === "unavailable") {
+        notifyUiPostingStatus({ status: "posting", message: "The comment box disappeared before posting the comment. Continuing to the next post.", ...statusContext });
+        return void 0;
+      }
+      if (submitted?.result?.state !== "submitted") {
+        throw new Error("The comment form changed before submission. No comment was submitted.");
+      }
+      notifyUiPostingStatus({ status: "posting", message: "First comment sent. Waiting for Facebook to confirm it was posted...", ...statusContext });
+      while (true) {
+        throwIfPostingStopped();
+        await waitWhilePostingPaused(statusContext);
+        const [capture] = await chrome.scripting.executeScript({
+          target: { tabId },
+          world: "MAIN",
+          func: readCommentRequestCaptureInPage,
+          args: [false]
+        });
+        const captured = capture?.result;
+        if (captured?.error) throw new Error(captured.error);
+        if (captured?.template && captured.responseText !== void 0) {
+          validateCommentSessionBinding(captured.template, browserSession.actorId);
+          await assertCommentBrowserSession({ browserSession, template: captured.template });
+          const confirmation = parseCommentResponse(captured.responseText);
+          if (!captured.status || captured.status < 200 || captured.status >= 300 || !confirmation.success) {
+            throw new Error(confirmation.error ?? "Facebook rejected the first comment.");
+          }
+          notifyUiPostingStatus({
+            status: "posting",
+            message: "First comment posted successfully. Continuing to post and add comments automatically.",
+            detail: "Your Facebook account and first comment have been checked. The next posts use your saved comments in order. Posts awaiting approval are skipped when adding comments.",
+            ...statusContext
+          });
+          return { template: captured.template, sourcePostId, sequence: Date.now(), browserSession };
+        }
+        await sleepWithStopChecks(250, statusContext);
+      }
+    } finally {
+      await chrome.scripting.executeScript({
+        target: { tabId },
+        world: "MAIN",
+        func: readCommentRequestCaptureInPage,
+        args: [true]
+      }).catch(() => void 0);
+      await chrome.scripting.executeScript({
+        target: { tabId },
+        func: interactWithPostCommentFormInPage,
+        args: [path, firstComment, "cleanup"]
+      }).catch(() => void 0);
+    }
+  }
+  async function waitForPostPermalinkLoad(tabId, expectedPath, statusContext, previousDocumentId) {
+    while (true) {
+      throwIfPostingStopped();
+      await waitWhilePostingPaused(statusContext);
+      const tab = await chrome.tabs.get(tabId);
+      if (tab.status === "complete") {
+        try {
+          const [result] = await chrome.scripting.executeScript({
+            target: { tabId },
+            func: inspectPostPermalinkLoadInPage,
+            args: [expectedPath]
+          });
+          const state = result?.result;
+          if (state?.loaded && (previousDocumentId === void 0 || state.documentId !== previousDocumentId)) return state.documentId;
+        } catch {
+        }
+      }
+      await sleepWithStopChecks(250, statusContext);
+    }
+  }
+  async function waitForPublishedPostDialog(tabId, expectedPath, statusContext) {
+    let pageLoadedAt;
+    try {
+      while (true) {
+        throwIfPostingStopped();
+        await waitWhilePostingPaused(statusContext);
+        const tab = await chrome.tabs.get(tabId);
+        if (tab.status !== "complete") {
+          await sleepWithStopChecks(250, statusContext);
+          continue;
+        }
+        const [result] = await chrome.scripting.executeScript({
+          target: { tabId },
+          func: inspectPublishedPostPageInPage,
+          args: [expectedPath]
+        });
+        const inspection = result?.result;
+        if (inspection?.loaded && pageLoadedAt === void 0) {
+          pageLoadedAt = Date.now();
+          notifyUiPostingStatus({
+            status: "posting",
+            message: "Page fully loaded. Waiting for the post dialog DOM to settle...",
+            ...statusContext
+          });
+        }
+        if (inspection?.stable && (inspection.dialogFound && inspection.commentFormFound || pageLoadedAt !== void 0 && Date.now() - pageLoadedAt >= 1e4)) {
+          notifyUiPostingStatus({
+            status: "posting",
+            message: "DOM settled. Checking for the post dialog and comment controls...",
+            ...statusContext
+          });
+          return inspection;
+        }
+        await sleepWithStopChecks(250, statusContext);
+      }
+    } finally {
+      await chrome.scripting.executeScript({
+        target: { tabId },
+        func: inspectPublishedPostPageInPage,
+        args: [expectedPath, true]
+      }).catch(() => void 0);
+    }
+  }
+  async function ensurePostingTemplates(tabId, groups, originalBody, body, images, total, progress) {
     const requiresUploadTemplate = images.length > 0;
     const firstGroup = groups[0];
     if (!firstGroup) {
       throw new Error("Select at least one group before posting.");
     }
-    debugLog("Capturing fresh templates from first group post.", {
+    const statusContext = {
+      current: 1,
+      total,
+      groupId: firstGroup.id,
+      groupName: firstGroup.name,
+      successCount: 0,
+      failedCount: 0,
+      processedCount: 0,
+      ...progress
+    };
+    debugLog("Capturing fresh templates from UI group post.", {
       groupId: firstGroup.id,
       groupName: firstGroup.name,
       requiresUploadTemplate
     });
     throwIfPostingStopped();
-    debugLog("Post body prepared for first group.", {
-      current: 1,
+    debugLog("Post body prepared for UI group post.", {
+      current: statusContext.current,
       total,
       groupId: firstGroup.id,
       groupName: firstGroup.name,
@@ -2476,32 +3132,18 @@
     });
     notifyUiPostingStatus({
       status: "posting",
-      message: "Capturing fresh Facebook request templates from the first post...",
-      current: 1,
-      total,
-      groupId: firstGroup.id,
-      groupName: firstGroup.name,
-      successCount: 0,
-      failedCount: 0,
-      processedCount: 0
+      message: "Setting up automatic posting using your first Facebook post...",
+      ...statusContext
     });
     beginPostingTemplateCapture(tabId);
     throwIfPostingStopped();
     const groupUrl = normalizeGroupUrl(firstGroup.id);
     await chrome.tabs.update(tabId, { url: groupUrl, active: true });
     await waitForTabComplete(tabId, "/groups/");
-    await sleepWithStopChecks(5e3, {
-      current: 1,
-      total,
-      groupId: firstGroup.id,
-      groupName: firstGroup.name,
-      successCount: 0,
-      failedCount: 0,
-      processedCount: 0
-    });
+    await sleepWithStopChecks(5e3, statusContext);
     await installFirstPostResponseCapture(tabId);
     const postResult = await createPostInTab(tabId, images, body);
-    if (!postResult.ok && postResult.composerFound === false && /write something button not found/i.test(postResult.error ?? "")) {
+    if (!postResult.ok && postResult.composerFound === false && postResult.error === "Group composer button not found.") {
       stopPostingTemplateCapture();
       throw new MissingFirstGroupComposerError(firstGroup.name);
     }
@@ -2522,6 +3164,11 @@
     const capturedTemplates = await waitForPostingTemplatesInternal(
       requiresUploadTemplate
     );
+    notifyUiPostingStatus({
+      status: "posting",
+      message: `Fresh ${requiresUploadTemplate ? "upload and post" : "post"} request values captured from ${firstGroup.name}.`,
+      ...statusContext
+    });
     return {
       uploadTemplate: capturedTemplates.uploadTemplate,
       postTemplate: capturedTemplates.postTemplate,
@@ -2537,21 +3184,16 @@
     });
   }
   async function waitForFirstPostResponseCapture(tabId) {
-    const startedAt = Date.now();
-    while (Date.now() - startedAt < 1e4) {
-      throwIfPostingStopped();
-      const responseText = await readFirstPostResponseCapture(tabId, false);
-      if (responseText) {
-        await readFirstPostResponseCapture(tabId, true);
-        return responseText;
+    try {
+      while (true) {
+        throwIfPostingStopped();
+        const responseText = await readFirstPostResponseCapture(tabId, false);
+        if (responseText) return responseText;
+        await sleepWithStopChecks(200);
       }
-      await sleepWithStopChecks(200);
+    } finally {
+      await readFirstPostResponseCapture(tabId, true);
     }
-    await readFirstPostResponseCapture(tabId, true);
-    debugWarn(
-      "The first post response was not available for moderation classification."
-    );
-    return void 0;
   }
   async function readFirstPostResponseCapture(tabId, cleanup) {
     try {
@@ -2563,7 +3205,7 @@
       });
       return typeof result?.result === "string" && result.result.length > 0 ? result.result : void 0;
     } catch (error) {
-      debugWarn("Unable to read the first post response capture.", error);
+      debugWarn("Unable to read the UI post response capture.", error);
       return void 0;
     }
   }
@@ -2656,32 +3298,23 @@
     postingCaptureTabId = void 0;
   }
   async function waitForPostingTemplatesInternal(requiresUploadTemplate) {
-    const startedAt = Date.now();
-    while (Date.now() - startedAt < 3e4) {
-      throwIfPostingStopped();
-      if (capturedPostTemplate && (!requiresUploadTemplate || capturedUploadTemplate)) {
-        const uploadTemplate = requiresUploadTemplate && capturedUploadTemplate ? finalizeUploadTemplate(capturedUploadTemplate, capturedPostTemplate) : void 0;
-        const postTemplate = capturedPostTemplate;
-        stopPostingTemplateCapture();
-        debugLog("Template capture complete.", {
-          hasUploadTemplate: Boolean(uploadTemplate),
-          hasPostTemplate: true
-        });
-        return { uploadTemplate, postTemplate };
+    try {
+      while (true) {
+        throwIfPostingStopped();
+        if (capturedPostTemplate && (!requiresUploadTemplate || capturedUploadTemplate)) {
+          const uploadTemplate = requiresUploadTemplate && capturedUploadTemplate ? finalizeUploadTemplate(capturedUploadTemplate, capturedPostTemplate) : void 0;
+          const postTemplate = capturedPostTemplate;
+          debugLog("Template capture complete.", {
+            hasUploadTemplate: Boolean(uploadTemplate),
+            hasPostTemplate: true
+          });
+          return { uploadTemplate, postTemplate };
+        }
+        await sleepWithStopChecks(250);
       }
-      await sleepWithStopChecks(250);
+    } finally {
+      stopPostingTemplateCapture();
     }
-    stopPostingTemplateCapture();
-    const missing = [];
-    if (requiresUploadTemplate && !capturedUploadTemplate) {
-      missing.push("upload template");
-    }
-    if (!capturedPostTemplate) {
-      missing.push("post mutation template");
-    }
-    throw new Error(
-      `The first post completed, but these templates were not captured in time: ${missing.join(", ")}.`
-    );
   }
   function finalizeUploadTemplate(uploadTemplate, postTemplate) {
     const formData = { ...uploadTemplate.formData };
@@ -2741,7 +3374,7 @@ ${responseBody ?? ""}`;
           tabId,
           request
         );
-        if (response?.ok) {
+        if (response) {
           return response;
         }
         return {
@@ -2749,7 +3382,7 @@ ${responseBody ?? ""}`;
           composerFound: false,
           composerClicked: false,
           spanCount: 0,
-          error: response?.error ?? "Unable to inspect Facebook page."
+          error: "Unable to inspect Facebook page."
         };
       } catch (error) {
         if (attempt === 19) {
@@ -2925,6 +3558,23 @@ ${responseBody ?? ""}`;
       };
     }
   }
+  async function createGraphqlComment(tabId, session, groupId, feedbackId, text) {
+    if (tabId !== session.browserSession.tabId) throw new Error("The Facebook tab used for comments changed. Please start posting again.");
+    await assertCommentBrowserSession(session);
+    const variables = buildCommentVariables(session, groupId, feedbackId, text);
+    const formData = { ...session.template.formData };
+    const capturedRequestNumber = parseInt(formData.__req ?? "0", 36);
+    formData.__req = (Number.isFinite(capturedRequestNumber) ? capturedRequestNumber + 1 : 1).toString(36);
+    session.template.formData.__req = formData.__req;
+    const [result] = await chrome.scripting.executeScript({
+      target: { tabId },
+      func: createGraphqlPostInPage,
+      args: [{ ...session.template, formData }, variables]
+    });
+    const payload = result?.result;
+    if (!payload || payload.error || !payload.ok) return { success: false, error: payload?.error ?? "Facebook returned an unsuccessful comment response" };
+    return parseCommentResponse(payload.responseText);
+  }
   async function createGraphqlPost(tabId, postTemplate, text, photoIds, groupId) {
     await logPageCookieDiagnostics(tabId, "Before GraphQL replay");
     const variables = buildPostVariables(
@@ -2948,7 +3598,7 @@ ${responseBody ?? ""}`;
     } catch (error) {
       return {
         success: false,
-        error: error instanceof Error ? error.message : "GraphQL replay script failed to execute."
+        error: error instanceof Error ? error.message : "Could not send the post to Facebook."
       };
     }
     const payload = result?.result ?? {
@@ -2956,7 +3606,7 @@ ${responseBody ?? ""}`;
       ok: false,
       responseText: "",
       contentType: "",
-      error: "GraphQL replay returned no result."
+      error: "Facebook did not confirm whether the post was submitted."
     };
     debugLog("GraphQL post response received.", {
       groupId,
@@ -3119,7 +3769,7 @@ ${responseBody ?? ""}`;
       if (!firstObject) {
         return {
           success: false,
-          error: "Facebook returned an empty JSON payload."
+          error: "Facebook returned an empty response. The post could not be confirmed."
         };
       }
       if (isRecord(firstObject) && typeof firstObject.errorSummary === "string") {
@@ -3135,7 +3785,8 @@ ${responseBody ?? ""}`;
           pendingApproval: storyCreateMatch.pendingApproval,
           actorId: storyCreateMatch.actorId,
           postId: storyCreateMatch.postId,
-          postUrl: storyCreateMatch.url
+          postUrl: storyCreateMatch.url,
+          feedbackId: storyCreateMatch.feedbackId
         };
       }
       const matches = findPostRecords(firstObject);
@@ -3143,7 +3794,7 @@ ${responseBody ?? ""}`;
       if (!lastMatch) {
         return {
           success: false,
-          error: "Facebook did not return a post permalink."
+          error: "Facebook did not provide a link to the post."
         };
       }
       return {
@@ -3182,12 +3833,14 @@ ${responseBody ?? ""}`;
       const actorId = defaultActor && typeof defaultActor.id === "string" ? defaultActor.id : void 0;
       const fallbackUrl = directUrl ?? storyUrl;
       const fallbackId = directPostId ?? storyId;
-      if (fallbackUrl && (fallbackUrl.includes("/pending_posts/") || fallbackUrl.includes("/permalink/") || fallbackUrl.includes("/posts/"))) {
+      const pendingApproval = Boolean(fallbackUrl?.includes("/pending_posts/")) || Boolean(story?.if_viewer_can_learn_more_about_pending_post) || Boolean(story?.to?.if_viewer_can_see_pending_post_in_mall);
+      if (pendingApproval || fallbackId || fallbackUrl && (fallbackUrl.includes("/permalink/") || fallbackUrl.includes("/posts/"))) {
         return {
           postId: fallbackId ?? "unknown-story-id",
           url: fallbackUrl,
-          pendingApproval: fallbackUrl.includes("/pending_posts/") || Boolean(story?.if_viewer_can_learn_more_about_pending_post) || Boolean(story?.to?.if_viewer_can_see_pending_post_in_mall),
-          actorId
+          pendingApproval,
+          actorId,
+          feedbackId: typeof story?.feedback?.id === "string" ? story.feedback.id : typeof storyCreate.feedback?.id === "string" ? storyCreate.feedback.id : void 0
         };
       }
     }
@@ -3389,7 +4042,8 @@ ${responseBody ?? ""}`;
           }
         }
         replayHeaders["content-type"] = replayHeaders["content-type"] ?? "application/x-www-form-urlencoded";
-        replayHeaders["x-fb-friendly-name"] = replayHeaders["x-fb-friendly-name"] ?? "ComposerStoryCreateMutation";
+        replayHeaders["x-fb-friendly-name"] = replayHeaders["x-fb-friendly-name"] ?? postTemplate.formData.fb_api_req_friendly_name ?? "ComposerStoryCreateMutation";
+        if (!replayHeaders["x-fb-lsd"] && postTemplate.formData.lsd) replayHeaders["x-fb-lsd"] = postTemplate.formData.lsd;
         return replayHeaders;
       };
       const formData = new URLSearchParams(postTemplate.formData);
@@ -3420,8 +4074,7 @@ ${responseBody ?? ""}`;
     const storage = await chrome.storage.local.get([
       ...GEMINI_API_KEY_STORAGE_KEYS,
       GEMINI_REWRITE_ENABLED_STORAGE_KEY,
-      GEMINI_CUSTOM_PROMPT_STORAGE_KEY,
-      GEMINI_INCLUDE_HASHTAGS_STORAGE_KEY
+      GEMINI_CUSTOM_PROMPT_STORAGE_KEY
     ]);
     const apiKey = GEMINI_API_KEY_STORAGE_KEYS.map((key) => storage[key]).find(
       (value) => typeof value === "string" && value.trim().length > 0
@@ -3431,7 +4084,6 @@ ${responseBody ?? ""}`;
       enabled: storage[GEMINI_REWRITE_ENABLED_STORAGE_KEY] === true,
       apiKey: apiKey ?? "",
       customPrompt: typeof customPromptValue === "string" ? customPromptValue.trim() : "",
-      includeHashtags: storage[GEMINI_INCLUDE_HASHTAGS_STORAGE_KEY] !== false,
       destination: "Facebook Group"
     });
   }
@@ -3454,8 +4106,6 @@ ${responseBody ?? ""}`;
       return trimmed;
     }
     const customPrompt = settings.customPrompt.trim();
-    const includeHashtags = settings.includeHashtags;
-    const hashtagRules = includeHashtags ? "- Include exactly 6 relevant hashtags based on the original description.\n- Put all 6 hashtags together at the very bottom of the finished description, even if the custom instructions omit or forbid hashtags." : "- Do not include hashtags in the finished description, even if the original or custom instructions contain them.";
     const phoneNumberRules = `- Treat every phone number as immutable verbatim text and copy every occurrence exactly as it appears in the original description.
 - Preserve the exact Unicode characters and formatting of each phone number, including ordinary digits, mathematical or styled digits, keycap emoji digits, leading zeros, country-code prefixes, spaces, punctuation, and separators.
 - Never convert a styled or emoji phone number into ordinary digits, and never convert an ordinary-digit phone number into styled text or emojis. For example, 0\uFE0F\u20E37\uFE0F\u20E31\uFE0F\u20E38\uFE0F\u20E34\uFE0F\u20E34\uFE0F\u20E38\uFE0F\u20E34\uFE0F\u20E36\uFE0F\u20E31\uFE0F\u20E3 must remain exactly 0\uFE0F\u20E37\uFE0F\u20E31\uFE0F\u20E38\uFE0F\u20E34\uFE0F\u20E34\uFE0F\u20E38\uFE0F\u20E34\uFE0F\u20E36\uFE0F\u20E31\uFE0F\u20E3.
@@ -3467,7 +4117,6 @@ Mandatory accuracy rules:
 - Preserve all important details and contact information exactly as provided.
 - Do not invent, assume, or change facts, specifications, prices, terms, locations, or contact information.
 ${phoneNumberRules}
-${hashtagRules}
 - Return only the finished rewritten description, without explanations or notes.
 
 The custom instructions control all other style and formatting choices, including structure, tone, emojis, and bullets.
@@ -3489,7 +4138,6 @@ Rules:
 - Do not use Markdown formatting, asterisks, bullet symbols, or decorative separator symbols.
 - Keep emojis natural and relevant; do not overuse them.
 ${phoneNumberRules}
-${hashtagRules}
 
 Description:
 ${trimmed}`;

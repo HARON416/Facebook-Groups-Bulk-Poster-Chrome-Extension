@@ -47,8 +47,6 @@ export type UiPreparedPost = {
   images: UiPostImage[];
 };
 
-export type GroupPostingStrategy = "selected_order" | "balanced";
-
 export type StartUiPostingRequest = {
   type: "START_UI_POSTING";
   startedAt: number;
@@ -57,7 +55,8 @@ export type StartUiPostingRequest = {
   minimumDelaySeconds: number;
   maximumDelaySeconds: number;
   maxPosts: number;
-  postingStrategy: GroupPostingStrategy;
+  groupCommentEnabled?: boolean;
+  groupCommentOptions?: string[];
 };
 
 export type StopUiPostingRequest = {
@@ -194,7 +193,6 @@ export type StartMarketplaceItemPostingRequest = {
   rewriteDescriptions: boolean;
   geminiApiKey: string;
   customPrompt: string;
-  includeHashtags: boolean;
 };
 
 export type StopMarketplacePostingRequest = {

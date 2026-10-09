@@ -25,25 +25,11 @@ type FacebookAccountBinding struct {
 	LastUsedAt pgtype.Timestamptz `json:"last_used_at"`
 }
 
-type FacebookGroupPostingEvent struct {
-	ID          pgtype.UUID        `json:"id"`
-	UserID      pgtype.UUID        `json:"user_id"`
-	ActorHash   string             `json:"actor_hash"`
-	GroupID     string             `json:"group_id"`
-	OperationID pgtype.UUID        `json:"operation_id"`
-	AcceptedAt  pgtype.Timestamptz `json:"accepted_at"`
-}
-
-type FacebookGroupPostingStat struct {
-	ID             pgtype.UUID        `json:"id"`
-	UserID         pgtype.UUID        `json:"user_id"`
-	ActorHash      string             `json:"actor_hash"`
-	GroupID        string             `json:"group_id"`
-	GroupName      string             `json:"group_name"`
-	AcceptedCount  int64              `json:"accepted_count"`
-	LastAcceptedAt pgtype.Timestamptz `json:"last_accepted_at"`
-	CreatedAt      pgtype.Timestamptz `json:"created_at"`
-	UpdatedAt      pgtype.Timestamptz `json:"updated_at"`
+type GroupCommentSetting struct {
+	UserID    pgtype.UUID        `json:"user_id"`
+	Enabled   bool               `json:"enabled"`
+	Options   []string           `json:"options"`
+	UpdatedAt pgtype.Timestamptz `json:"updated_at"`
 }
 
 type GroupPost struct {

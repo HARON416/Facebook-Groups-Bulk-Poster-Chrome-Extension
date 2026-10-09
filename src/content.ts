@@ -1,12 +1,16 @@
+import {
+  findGroupComposerButton,
+  findGroupComposerDialog,
+  findGroupComposerEditor,
+  findGroupComposerMediaInput,
+  findGroupComposerPostButton,
+} from "./group-composer";
 import type {
   CreatePostRequest,
   CreatePostResponse,
   UiPostImage,
 } from "./config";
 
-const WRITE_SOMETHING_SPAN_SELECTOR = "span.x1lliihq.x6ikm8r.x10wlt62.x1n2onr6";
-const POST_DIALOG_SELECTOR =
-  "div.x1n2onr6.x1ja2u2z.x1afcbsf.x78zum5.xdt5ytf.x1a2a7pz.x6ikm8r.x10wlt62.x71s49j.x1jx94hy.xw5cjc7.x1dmpuos.x1vsv7so.xau1kf4.x104qc98.x15o3w11.xogydr4.x1vmz7ll.x1yyrj1m.x193iq5w";
 const FACEBOOK_POST_LIMIT_PATTERN =
   /we\s+limit\s+how\s+often\s+you\s+can\s+post,\s+comment\s+or\s+do\s+other\s+things\s+in\s+a\s+given\s+amount\s+of\s+time\s+in\s+order\s+to\s+help\s+protect\s+the\s+community\s+from\s+spam\.\s+you\s+can\s+try\s+again\s+later/i;
 
@@ -54,47 +58,13 @@ async function sleepWithPostingControls(ms: number): Promise<void> {
   throwIfContentPostingStopped();
 }
 
-function findWriteSomethingButton(): HTMLElement | null {
-  const spans = document.querySelectorAll(WRITE_SOMETHING_SPAN_SELECTOR);
-  const writeSomethingSpan = Array.from(spans).find(
-    (span) => span.textContent?.trim() === "Write something...",
-  );
-
-  if (!(writeSomethingSpan instanceof HTMLElement)) {
-    return null;
-  }
-
-  return (
-    writeSomethingSpan.closest<HTMLElement>(
-      'div[role="button"][tabindex="0"], [role="button"], button, a',
-    ) ?? writeSomethingSpan
-  );
-}
-
 async function waitForDialog(): Promise<Element> {
-  // Wait 10 seconds like the Go code does after clicking write something
-  await sleepWithPostingControls(10_000);
-
-  const dialog = document.querySelector(POST_DIALOG_SELECTOR);
-  if (dialog) return dialog;
-
-  throw new Error("Post dialog did not appear in time.");
-}
-
-async function waitForElement<T extends Element>(
-  root: Element | Document,
-  selector: string,
-  timeoutMs = 5_000,
-): Promise<T> {
-  const startedAt = Date.now();
-
-  while (Date.now() - startedAt < timeoutMs) {
-    const el = root.querySelector<T>(selector);
-    if (el) return el;
+  while (true) {
+    await waitWhileContentPostingPaused();
+    const dialog = findGroupComposerDialog();
+    if (dialog) return dialog;
     await sleepWithPostingControls(250);
   }
-
-  throw new Error(`Element "${selector}" did not appear in time.`);
 }
 
 async function uiPostImageToFile(image: UiPostImage): Promise<File> {
@@ -109,64 +79,12 @@ async function insertImages(dialog: Element, files: File[]): Promise<void> {
     dt.items.add(file);
   }
 
-  let fileInput = dialog.querySelector<HTMLInputElement>(`input[type="file"]`);
-
-  if (fileInput) {
-    console.log("[Facebook Groups Bulk Poster] Dialog has file input", {
-      accept: fileInput.accept,
-      outerHTML: fileInput.outerHTML.slice(0, 300),
-    });
-  } else {
-    fileInput = document.querySelector<HTMLInputElement>(`input[type="file"]`);
-
-    if (fileInput) {
-      console.log(
-        "[Facebook Groups Bulk Poster] Page has file input (fallback)",
-        {
-          accept: fileInput.accept,
-          outerHTML: fileInput.outerHTML.slice(0, 300),
-          parentOuterHTML: fileInput.parentElement?.outerHTML?.slice(0, 300),
-          grandparentOuterHTML:
-            fileInput.parentElement?.parentElement?.outerHTML?.slice(0, 300),
-          isInDialog: dialog.contains(fileInput),
-          isVisible: fileInput.offsetParent !== null,
-          isHidden:
-            fileInput.style.display === "none" ||
-            fileInput.style.visibility === "hidden",
-        },
-      );
-    } else {
-      console.log(
-        "[Facebook Groups Bulk Poster] Dialog does not have file input",
-      );
-
-      const photoVideoButton = dialog.querySelector<HTMLElement>(
-        `div[aria-label="Photo/video"]`,
-      );
-
-      if (!photoVideoButton) {
-        console.error(
-          "[Facebook Groups Bulk Poster] Dialog does not have photo/video element",
-        );
-        throw new Error("Dialog does not have a photo/video element.");
-      }
-
-      console.log("[Facebook Groups Bulk Poster] Clicking Photo/video button");
-      photoVideoButton.click();
-
-      fileInput = await waitForElement<HTMLInputElement>(
-        dialog,
-        `input[type="file"]`,
-      );
-
-      console.log(
-        "[Facebook Groups Bulk Poster] File input appeared after clicking Photo/video",
-        {
-          accept: fileInput.accept,
-          outerHTML: fileInput.outerHTML.slice(0, 300),
-        },
-      );
-    }
+  let fileInput = findGroupComposerMediaInput(dialog);
+  while (!fileInput) {
+    await sleepWithPostingControls(250);
+    if (!dialog.isConnected)
+      throw new Error("The post composer closed before images could be added.");
+    fileInput = findGroupComposerMediaInput(dialog);
   }
 
   const dropTarget = fileInput.closest("div") ?? fileInput;
@@ -199,22 +117,7 @@ async function insertImages(dialog: Element, files: File[]): Promise<void> {
 }
 
 async function insertDescription(dialog: Element, text: string): Promise<void> {
-  let textbox = dialog.querySelector<HTMLElement>(
-    `div[role="textbox"][contenteditable="true"]`,
-  );
-
-  if (textbox) {
-    console.log(
-      "[Facebook Groups Bulk Poster] Dialog has textbox for description",
-    );
-  } else {
-    console.log(
-      "[Facebook Groups Bulk Poster] Dialog does not have textbox, trying alternative selector",
-    );
-    textbox = document.querySelector<HTMLElement>(
-      `div[aria-placeholder="Create a public post…"]`,
-    );
-  }
+  const textbox = findGroupComposerEditor(dialog);
 
   if (!textbox) {
     console.error(
@@ -273,20 +176,21 @@ function escapeHtml(value: string): string {
 }
 
 async function clickPostButton(dialog: Element): Promise<void> {
-  await waitWhileContentPostingPaused();
-  let postButton = dialog.querySelector<HTMLElement>(`div[aria-label="Post"]`);
-
-  if (postButton) {
-    console.log("[Facebook Groups Bulk Poster] Dialog has Post button");
-  } else {
-    console.log(
-      "[Facebook Groups Bulk Poster] Dialog does not have Post button, trying page level selector",
-    );
-    postButton = document.querySelector<HTMLElement>(`div[aria-label="Post"]`);
-  }
-
-  if (!postButton) {
-    throw new Error("Could not find Post button.");
+  let postButton: HTMLElement | null = null;
+  while (true) {
+    await waitWhileContentPostingPaused();
+    if (!dialog.isConnected)
+      throw new Error(
+        "The post composer closed before the post could be submitted.",
+      );
+    postButton = findGroupComposerPostButton(dialog);
+    if (
+      postButton &&
+      postButton.getAttribute("aria-disabled") !== "true" &&
+      !postButton.hasAttribute("disabled")
+    )
+      break;
+    await sleepWithPostingControls(250);
   }
 
   postButton.click();
@@ -365,16 +269,18 @@ if (isFirstContentScriptLoad)
       contentPostingPaused = false;
       contentPostingStopped = false;
 
-      const spans = document.querySelectorAll(WRITE_SOMETHING_SPAN_SELECTOR);
-      const button = findWriteSomethingButton();
+      const spanCount = document.querySelectorAll(
+        "span.x1lliihq.x6ikm8r.x10wlt62.x1n2onr6",
+      ).length;
+      const button = findGroupComposerButton();
 
       button?.scrollIntoView({ block: "center", inline: "center" });
       button?.focus();
       button?.click();
 
-      console.log("[Facebook Groups Bulk Poster] Write something click", {
+      console.log("[Facebook Groups Bulk Poster] Group composer click", {
         clicked: Boolean(button),
-        spanCount: spans.length,
+        spanCount,
       });
 
       if (!button) {
@@ -382,8 +288,8 @@ if (isFirstContentScriptLoad)
           ok: false,
           composerFound: false,
           composerClicked: false,
-          spanCount: spans.length,
-          error: "Write something button not found.",
+          spanCount,
+          error: "Group composer button not found.",
         });
         return true;
       }
@@ -413,7 +319,7 @@ if (isFirstContentScriptLoad)
             ok: true,
             composerFound: true,
             composerClicked: true,
-            spanCount: spans.length,
+            spanCount,
           });
         })
         .catch((error) => {
@@ -421,7 +327,7 @@ if (isFirstContentScriptLoad)
             ok: false,
             composerFound: true,
             composerClicked: true,
-            spanCount: spans.length,
+            spanCount,
             error:
               error instanceof Error ? error.message : "Dialog did not appear.",
           });

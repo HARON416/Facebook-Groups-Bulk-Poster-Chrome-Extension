@@ -20,51 +20,14 @@
             hidden
           >
             <span class="account-card-icon" aria-hidden="true">
-              <svg
-                xmlns="http://www.w3.org/2000/svg"
-                width="24"
-                height="24"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                stroke-width="1.8"
-                stroke-linecap="round"
-                stroke-linejoin="round"
-              >
-                <circle cx="12" cy="8" r="3.5"></circle>
-                <path d="M5 20v-1a7 7 0 0 1 14 0v1"></path>
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" fill="currentColor">
+                <path d="M246,98.73l-56-64A8,8,0,0,0,184,32H72a8,8,0,0,0-6,2.73l-56,64a8,8,0,0,0,.17,10.73l112,120a8,8,0,0,0,11.7,0l112-120A8,8,0,0,0,246,98.73ZM222.37,96H180L144,48h36.37ZM74.58,112l30.13,75.33L34.41,112Zm89.6,0L128,202.46,91.82,112ZM96,96l32-42.67L160,96Zm85.42,16h40.17l-70.3,75.33ZM75.63,48H112L76,96H33.63Z" />
               </svg>
             </span>
             <span class="account-card-label">
               <span>Account &amp; plan</span>
-              <small>Profile and usage</small>
+              <small>Click to expand or collapse</small>
             </span>
-            <svg
-              class="account-card-chevron--down"
-              xmlns="http://www.w3.org/2000/svg"
-              width="32"
-              height="32"
-              fill="currentColor"
-              viewBox="0 0 256 256"
-              aria-hidden="true"
-            >
-              <path
-                d="M213.66,101.66l-80,80a8,8,0,0,1-11.32,0l-80-80A8,8,0,0,1,53.66,90.34L128,164.69l74.34-74.35a8,8,0,0,1,11.32,11.32Z"
-              ></path>
-            </svg>
-            <svg
-              class="account-card-chevron--up"
-              xmlns="http://www.w3.org/2000/svg"
-              width="32"
-              height="32"
-              fill="currentColor"
-              viewBox="0 0 256 256"
-              aria-hidden="true"
-            >
-              <path
-                d="M213.66,165.66a8,8,0,0,1-11.32,0L128,91.31,53.66,165.66a8,8,0,0,1-11.32-11.32l80-80a8,8,0,0,1,11.32,0l80,80A8,8,0,0,1,213.66,165.66Z"
-              ></path>
-            </svg>
           </button>
           <div id="account-card-content" class="account-card-content">
             <p class="section-heading__eyebrow">Your Facebook workflow</p>
@@ -101,8 +64,8 @@
               class="auth-panel__summary"
               aria-live="polite"
             >
-              Bulk-post to Facebook Groups and auto-post Marketplace
-              listings—all from one streamlined workspace.
+              Save your posts and listings, choose where to share them, and
+              let Postika post them for you.
             </p>
             <div id="auth-benefits" class="auth-benefits">
               <p class="auth-benefits__label">Reach more people in less time</p>
@@ -124,8 +87,8 @@
                   <span>
                     <strong>Bulk-post to Facebook Groups</strong>
                     <small
-                      >Send one or multiple posts to selected groups in a
-                      queue.</small
+                      >Choose your posts and groups. Postika shares them one at a
+                      time.</small
                     >
                   </span>
                 </li>
@@ -325,7 +288,7 @@
               </div>
             </div>
             <div class="auth-panel__actions">
-              <button type="button" id="auth-login-btn" hidden>
+              <button type="button" id="auth-login-btn" hidden class="button-89">
                 <span class="auth-login-btn__icon" aria-hidden="true">
                   <svg
                     xmlns="http://www.w3.org/2000/svg"
@@ -344,7 +307,7 @@
               <button
                 type="button"
                 id="auth-logout-btn"
-                class="auth-ghost-btn"
+                class="auth-ghost-btn button-89"
                 hidden
               >
                 Sign out
@@ -370,6 +333,82 @@
       </section>
 
       <form id="create-form" class="workflow" hidden>
+        <div class="marketplace-posting-preferences-card watermark-settings-card">
+          <details id="watermark-settings" class="watermark-settings card-accordion" name="workflow-cards">
+            <summary class="card-accordion__summary">
+              <span class="card-accordion__icon" aria-hidden="true">
+                <svg viewBox="0 0 256 256" fill="currentColor">
+                  <path d="M213.66,101.66l-80,80a8,8,0,0,1-11.32,0l-80-80A8,8,0,0,1,53.66,90.34L128,164.69l74.34-74.35a8,8,0,0,1,11.32,11.32Z"></path>
+                </svg>
+              </span>
+              <span>
+                <strong>Image watermarks</strong>
+                <small>Your branding on group and Marketplace photos</small>
+              </span>
+            </summary>
+            <div class="card-accordion__content">
+              <label class="toggle-row" for="watermark-enabled">
+                <span class="toggle-row__copy">
+                  <strong>Add watermarks when posting</strong>
+                  <small>Use the same watermark for group posts and Marketplace listings.</small>
+                </span>
+                <input id="watermark-enabled" type="checkbox" />
+              </label>
+              <fieldset disabled>
+                <legend>Watermark appearance</legend>
+                <div class="field">
+                  <label for="watermark-text">Watermark text</label>
+                  <input id="watermark-text" class="marketplace-text-input" type="text" maxlength="200" placeholder="Your business name or contact details" />
+                </div>
+                <div class="watermark-settings__grid">
+                  <div class="field">
+                    <label for="watermark-position">Position</label>
+                    <select id="watermark-position" class="marketplace-text-input">
+                      <option value="top">Top</option>
+                      <option value="center">Center</option>
+                      <option value="bottom" selected>Bottom</option>
+                    </select>
+                  </div>
+                  <div class="field">
+                    <label for="watermark-height">Height (% of image)</label>
+                    <input id="watermark-height" class="marketplace-text-input" type="number" min="1" max="50" step="1" value="10" />
+                  </div>
+                  <div class="field">
+                    <label for="watermark-background-color">Background color</label>
+                    <div class="watermark-settings__color-control">
+                      <button type="button" class="watermark-settings__swatch" data-color-target="watermark-background-color" aria-label="Choose watermark background color" aria-expanded="false" aria-controls="watermark-color-picker"></button>
+                      <input id="watermark-background-color" class="marketplace-text-input" type="text" value="#000000" maxlength="7" pattern="#[0-9a-fA-F]{6}" spellcheck="false" aria-label="Background hex color" />
+                    </div>
+                  </div>
+                  <div class="field">
+                    <label for="watermark-text-color">Text color</label>
+                    <div class="watermark-settings__color-control">
+                      <button type="button" class="watermark-settings__swatch" data-color-target="watermark-text-color" aria-label="Choose watermark text color" aria-expanded="false" aria-controls="watermark-color-picker"></button>
+                      <input id="watermark-text-color" class="marketplace-text-input" type="text" value="#ffffff" maxlength="7" pattern="#[0-9a-fA-F]{6}" spellcheck="false" aria-label="Text hex color" />
+                    </div>
+                  </div>
+                  <div id="watermark-color-picker" class="watermark-settings__picker" role="group" aria-labelledby="watermark-color-picker-title" hidden>
+                    <div class="watermark-settings__picker-heading">
+                      <strong id="watermark-color-picker-title">Choose color</strong>
+                      <button type="button" id="watermark-color-picker-close" class="watermark-settings__picker-close" aria-label="Close color picker">×</button>
+                    </div>
+                    <label class="watermark-settings__channel" for="watermark-color-red"><span>Red</span><input id="watermark-color-red" type="range" min="0" max="255" data-color-channel="0" /><output for="watermark-color-red">0</output></label>
+                    <label class="watermark-settings__channel" for="watermark-color-green"><span>Green</span><input id="watermark-color-green" type="range" min="0" max="255" data-color-channel="1" /><output for="watermark-color-green">0</output></label>
+                    <label class="watermark-settings__channel" for="watermark-color-blue"><span>Blue</span><input id="watermark-color-blue" type="range" min="0" max="255" data-color-channel="2" /><output for="watermark-color-blue">0</output></label>
+                    <p class="marketplace-field__hint">Adjust the sliders or enter a hex color above.</p>
+                  </div>
+                </div>
+              </fieldset>
+              <div class="field">
+                <span class="marketplace-field__label">Sample preview</span>
+                <canvas width="600" height="360" role="img" aria-label="Sample watermark preview"></canvas>
+                <p class="marketplace-field__hint">Text automatically fits the image width. Height scales with each photo.</p>
+              </div>
+              <p class="section-note">Saved originals stay unchanged. Settings apply the next time you start posting.</p>
+              <p class="marketplace-field__hint" role="status" aria-live="polite"></p>
+            </div>
+          </details>
+        </div>
         <nav
           class="workspace-tabs"
           aria-label="Extension sections"
@@ -404,24 +443,30 @@
           role="tabpanel"
           aria-labelledby="groups-tab"
         >
-          <section class="panel-section">
-            <div class="section-heading">
-              <p class="section-heading__eyebrow">Content</p>
-              <h2 class="section-heading__title">Prepared Posts</h2>
-            </div>
-            <p class="section-note">
-              Build reusable body-and-image sets. Selected posts rotate in
-              order, one per group.
+          <section class="workflow-card panel-section">
+            <details id="reusable-posts-card" class="card-accordion" name="workflow-cards">
+              <summary class="card-accordion__summary">
+                <span class="card-accordion__icon" aria-hidden="true">
+                  <svg viewBox="0 0 256 256" fill="currentColor"><path d="M213.66,101.66l-80,80a8,8,0,0,1-11.32,0l-80-80A8,8,0,0,1,53.66,90.34L128,164.69l74.34-74.35a8,8,0,0,1,11.32,11.32Z"></path></svg>
+                </span>
+                <span><strong>Reusable posts</strong><small>Write, save and choose posts to share</small></span>
+              </summary>
+              <div class="card-accordion__content">
+                <p class="section-note">
+              Write a post, add photos if you want, then click Save. Select the
+              posts you want to share. Postika uses them in order, one per group,
+              then starts again from the first selected post. Groups follow the
+              order you select them, repeating until your chosen post limit is reached.
             </p>
 
             <div class="prepared-post-editor">
               <div class="field">
-                <label for="post-body-input">Post body</label>
+                <label for="post-body-input">Post text</label>
                 <textarea
                   id="post-body-input"
                   name="post-body"
                   rows="7"
-                  placeholder="Write the post body..."
+                  placeholder="Write what you want to share..."
                 ></textarea>
               </div>
 
@@ -470,18 +515,18 @@
               </div>
 
               <div class="prepared-post-editor__actions">
-                <button type="button" id="cancel-post-edit-btn" hidden>
+                <button type="button" id="cancel-post-edit-btn" hidden class="button-89">
                   Cancel
                 </button>
-                <button type="button" id="save-prepared-post-btn">
-                  Add Prepared Post
+                <button type="button" id="save-prepared-post-btn" class="button-89">
+                  Save
                 </button>
               </div>
             </div>
 
             <div class="prepared-posts-toolbar">
               <div id="prepared-posts-count" class="selection-count">
-                0 prepared posts
+                0 reusable posts
               </div>
               <label
                 id="prepared-posts-select-all"
@@ -496,18 +541,24 @@
               </label>
             </div>
             <div id="prepared-posts-list" class="empty-state">
-              Add your first prepared post above.
+              Add your first reusable post above.
             </div>
+              </div>
+            </details>
           </section>
 
-          <section class="panel-section">
-            <div class="section-heading">
-              <p class="section-heading__eyebrow">Audience</p>
-              <h2 class="section-heading__title">Groups</h2>
-            </div>
-            <button type="button" id="load-groups-btn">Load Groups</button>
+          <section class="workflow-card panel-section">
+            <details id="groups-card" class="card-accordion" name="workflow-cards">
+              <summary class="card-accordion__summary">
+                <span class="card-accordion__icon" aria-hidden="true">
+                  <svg viewBox="0 0 256 256" fill="currentColor"><path d="M213.66,101.66l-80,80a8,8,0,0,1-11.32,0l-80-80A8,8,0,0,1,53.66,90.34L128,164.69l74.34-74.35a8,8,0,0,1,11.32,11.32Z"></path></svg>
+                </span>
+                <span><strong>Groups</strong><small id="groups-card-summary">Find and select the groups you want to post to</small></span>
+              </summary>
+              <div class="card-accordion__content">
+                <button type="button" id="load-groups-btn" class="button-89">Find my groups</button>
             <div id="groups-status" class="status-bar" role="status">
-              <span id="groups-status-message">Ready to load groups.</span>
+              <span id="groups-status-message">Click Find my groups, then select where you want to post.</span>
               <span id="groups-status-count">0 loaded</span>
             </div>
             <label id="groups-select-all" class="select-all-toggle" hidden>
@@ -530,23 +581,80 @@
               0 groups selected
             </div>
             <div id="groups-list" class="empty-state">
-              No groups loaded yet.
+              Click Find my groups to see the groups you have joined.
             </div>
+              </div>
+            </details>
           </section>
 
-          <section class="panel-section">
-            <div class="section-heading">
-              <p class="section-heading__eyebrow">Automation</p>
-              <h2 class="section-heading__title">Queue Settings</h2>
+          <section class="workflow-card panel-section group-comments-card">
+            <details id="group-comments-card" class="card-accordion" name="workflow-cards">
+              <summary class="card-accordion__summary">
+                <span class="card-accordion__icon" aria-hidden="true">
+                  <svg viewBox="0 0 256 256" fill="currentColor"><path d="M213.66,101.66l-80,80a8,8,0,0,1-11.32,0l-80-80A8,8,0,0,1,53.66,90.34L128,164.69l74.34-74.35a8,8,0,0,1,11.32,11.32Z"></path></svg>
+                </span>
+                <span><strong>Comments on your posts</strong><small>Optional follow-up comments on published posts</small></span>
+              </summary>
+              <div class="card-accordion__content">
+                <label class="toggle-row group-comments-card__toggle checkbox-wrapper-14" for="group-comment-enabled-toggle">
+              <span class="toggle-row__copy">
+                <strong>Comment on each post</strong>
+                <small>Automatically add one of your saved comments to each published post.</small>
+              </span>
+              <input
+                type="checkbox"
+                id="group-comment-enabled-toggle"
+                class="switch"
+                name="group-comment-enabled"
+                role="switch"
+                disabled
+              />
+            </label>
+            <div class="group-comments-card__rotation">
+              <span class="group-comments-card__rotation-icon" aria-hidden="true">↻</span>
+              <div>
+                <strong>Use a different comment on each post</strong>
+                <p>Use comment 1, then comment 2, and so on. Start again after the last comment. Blank comments are skipped.</p>
+              </div>
+              <span id="group-comment-options-count" class="group-comments-card__count"></span>
             </div>
-            <div class="interval-card">
+            <div id="group-comment-options" class="group-comment-options"></div>
+            <button type="button" id="group-comment-add-btn" class="group-comment-button button-89">
+              <span aria-hidden="true">+</span> Add another comment
+            </button>
+            <p class="section-note" id="group-comment-note">
+              <span class="group-comments-card__notice">How comments work</span>
+              Postika first adds a comment on Facebook to set things up, then
+              continues posting and commenting automatically. Posts waiting for
+              group approval are skipped when adding comments.
+            </p>
+            <div class="group-comments-card__sync">
+              <span id="group-comment-sync-status" class="section-note" role="status">
+                Sign in to save comments to your account.
+              </span>
+              <button type="button" id="group-comment-retry-btn" class="group-comment-button button-89" hidden>Retry</button>
+            </div>
+              </div>
+            </details>
+          </section>
+
+          <section class="workflow-card panel-section">
+            <details id="group-posting-settings-card" class="card-accordion" name="workflow-cards">
+              <summary class="card-accordion__summary">
+                <span class="card-accordion__icon" aria-hidden="true">
+                  <svg viewBox="0 0 256 256" fill="currentColor"><path d="M213.66,101.66l-80,80a8,8,0,0,1-11.32,0l-80-80A8,8,0,0,1,53.66,90.34L128,164.69l74.34-74.35a8,8,0,0,1,11.32,11.32Z"></path></svg>
+                </span>
+                <span><strong>Posting settings</strong><small>Wait times, AI rewriting and posting limits</small></span>
+              </summary>
+              <div class="card-accordion__content">
+                <div class="interval-card">
               <div class="interval-card__heading">
-                <strong>Random Posting Interval</strong>
-                <small>A new delay is selected before every post.</small>
+                <strong>Time between posts</strong>
+                <small>Postika chooses a different wait time within your range between posts.</small>
               </div>
               <div class="number-input-grid">
                 <div class="field">
-                  <label for="post-interval-min-input">Minimum seconds</label>
+                  <label for="post-interval-min-input">Shortest wait (seconds)</label>
                   <div class="number-input-row">
                     <input
                       type="number"
@@ -560,7 +668,7 @@
                   </div>
                 </div>
                 <div class="field">
-                  <label for="post-interval-max-input">Maximum seconds</label>
+                  <label for="post-interval-max-input">Longest wait (seconds)</label>
                   <div class="number-input-row">
                     <input
                       type="number"
@@ -575,17 +683,18 @@
                 </div>
               </div>
               <p class="section-note">
-                Both values must be at least 60 seconds.
+                Both waits must be at least 60 seconds. For example, 60 to 300 means a wait of 1 to 5 minutes.
               </p>
             </div>
 
             <div class="field">
-              <label for="max-posts-input">Maximum Accepted Submissions</label>
+              <label for="max-posts-input">Number of posts to submit</label>
               <div class="number-input-row">
                 <input
                   type="number"
                   id="max-posts-input"
                   name="max-posts"
+                  aria-describedby="max-posts-note"
                   min="1"
                   step="1"
                   value="200"
@@ -593,31 +702,30 @@
                 />
               </div>
               <p class="section-note" id="max-posts-note">
-                Published posts and posts waiting for approval count. Failed
-                attempts do not. The queue cycles through selected Groups again
-                when needed.
+                Posting stops after this many submissions are accepted. Posts
+                awaiting group approval also count.
               </p>
             </div>
 
             <div class="field">
-              <label for="gemini-api-key-input">Gemini API Key</label>
+              <label for="gemini-api-key-input">Gemini access key (for AI rewriting)</label>
               <input
                 type="password"
                 id="gemini-api-key-input"
                 name="gemini-api-key"
-                placeholder="Paste Gemini API key"
+                placeholder="Paste your Gemini API key"
                 autocomplete="off"
                 spellcheck="false"
               />
               <p class="section-note">
-                Saved locally in this browser profile and used only for
-                description rewriting.
+                Optional: enter your Gemini API key to let AI rewrite your posts.
+                The key is saved in this browser and sent to Gemini when rewriting.
               </p>
             </div>
 
             <div class="field">
               <label for="gemini-custom-prompt-input">
-                Custom rewrite instructions (optional)
+                How should AI rewrite your text? (optional)
               </label>
               <textarea
                 id="gemini-custom-prompt-input"
@@ -627,18 +735,18 @@
                 spellcheck="true"
               ></textarea>
               <p class="section-note">
-                Controls the style and formatting of every Gemini rewrite.
-                Factual accuracy safeguards and the hashtag setting always
-                apply. Saved locally in this browser profile.
+                Tell Gemini the tone and style you want. Postika asks it to keep
+                your facts. These instructions
+                are saved in this browser.
               </p>
             </div>
 
             <label class="toggle-row" for="gemini-rewrite-toggle">
               <span class="toggle-row__copy">
-                <strong>Enable Gemini Rewrite</strong>
+                <strong>Rewrite posts with AI</strong>
                 <small
-                  >Rewrite the post body before posting when a saved key is
-                  available.</small
+                  >Let Gemini rewrite your post text before sharing it. Requires
+                  a Gemini access key.</small
                 >
               </span>
               <input
@@ -648,46 +756,19 @@
               />
             </label>
 
-            <label class="toggle-row" for="gemini-hashtags-toggle">
-              <span class="toggle-row__copy">
-                <strong>Include hashtags</strong>
-                <small>Add relevant hashtags to the rewritten post.</small>
-              </span>
-              <input
-                type="checkbox"
-                id="gemini-hashtags-toggle"
-                name="gemini-hashtags-toggle"
-                checked
-              />
-            </label>
-
-            <label class="toggle-row" for="shuffle-groups-toggle">
-              <span class="toggle-row__copy">
-                <strong>Shuffle Groups Before Posting</strong>
-                <small
-                  >Randomize the selected group order when the posting queue
-                  starts.</small
-                >
-              </span>
-              <input
-                type="checkbox"
-                id="shuffle-groups-toggle"
-                name="shuffle-groups-toggle"
-              />
-            </label>
 
             <div id="gemini-status" class="status-bar" role="status">
-              <span id="gemini-status-message">Gemini rewrite is off.</span>
+              <span id="gemini-status-message">AI rewriting is off.</span>
               <span id="gemini-status-count">No key</span>
             </div>
 
-            <button type="submit" id="start-posting-btn" disabled>
+            <button type="submit" id="start-posting-btn" disabled class="button-89">
               Start Posting
             </button>
 
             <div id="posting-progress" class="posting-progress" hidden>
               <div class="posting-progress__heading">
-                <p class="section-heading__eyebrow">Logs</p>
+                <p class="section-heading__eyebrow">Activity</p>
               </div>
               <div class="posting-progress__header">
                 <span id="posting-progress-title">Posting progress</span>
@@ -715,12 +796,12 @@
                   </svg>
                 </span>
                 <span class="posting-timing__metric">
-                  <small id="posting-timing-label">Elapsed</small>
+                  <small id="posting-timing-label">Time spent</small>
                   <strong id="posting-elapsed-time">00:00</strong>
                 </span>
                 <span class="posting-timing__divider" aria-hidden="true"></span>
                 <span class="posting-timing__metric">
-                  <small id="posting-item-timing-label">Current item</small>
+                  <small id="posting-item-timing-label">Current post</small>
                   <strong id="posting-item-time">00:00</strong>
                 </span>
               </div>
@@ -743,7 +824,7 @@
                   title="Show only posts waiting for approval"
                 >
                   <strong id="posting-progress-pending">0</strong>
-                  pending
+                  awaiting approval
                 </button>
                 <button
                   type="button"
@@ -757,25 +838,27 @@
                 </button>
                 <span>
                   <strong id="posting-progress-remaining">0</strong>
-                  to target
+                  left to submit
                 </span>
               </div>
               <div
                 id="posting-progress-current"
                 class="posting-progress__current"
               >
-                No posting queue running.
+                Posting has not started.
               </div>
               <ol id="posting-progress-log" class="posting-progress__log"></ol>
               <div class="posting-progress__controls">
-                <button type="button" id="pause-posting-btn" hidden>
-                  Pause posting
+                <button type="button" id="pause-posting-btn" hidden class="button-89">
+                  Pause
                 </button>
-                <button type="button" id="stop-posting-btn" hidden>
-                  Stop posting
+                <button type="button" id="stop-posting-btn" hidden class="button-89 button-89--danger">
+                  Stop
                 </button>
               </div>
             </div>
+              </div>
+            </details>
           </section>
         </div>
 
@@ -786,16 +869,16 @@
           aria-labelledby="marketplace-tab"
           hidden
         >
-          <section class="marketplace-card marketplace-create-card">
-            <div class="marketplace-card__heading">
-              <p class="section-heading__eyebrow">Marketplace</p>
-              <h1 class="marketplace-card__title">Create a new listing</h1>
-              <p class="marketplace-card__summary">
-                Start by choosing the kind of listing you want to publish.
-              </p>
-            </div>
-
-            <div class="marketplace-field">
+          <section class="workflow-card marketplace-card marketplace-create-card">
+            <details id="marketplace-create-card" class="card-accordion" name="workflow-cards">
+              <summary class="card-accordion__summary">
+                <span class="card-accordion__icon" aria-hidden="true">
+                  <svg viewBox="0 0 256 256" fill="currentColor"><path d="M213.66,101.66l-80,80a8,8,0,0,1-11.32,0l-80-80A8,8,0,0,1,53.66,90.34L128,164.69l74.34-74.35a8,8,0,0,1,11.32,11.32Z"></path></svg>
+                </span>
+                <span><strong>Create a new listing</strong><small>Choose a listing type, add details and photos</small></span>
+              </summary>
+              <div class="card-accordion__content">
+                <div class="marketplace-field">
               <span id="listing-type-label" class="marketplace-field__label">
                 Listing type
               </span>
@@ -2202,7 +2285,7 @@
                   <button
                     type="button"
                     id="save-marketplace-listing-btn"
-                    class="marketplace-save-listing__button"
+                    class="marketplace-save-listing__button button-89"
                     disabled
                     title="Complete all listing fields and add at least one photo"
                   >
@@ -2211,7 +2294,7 @@
                   <button
                     type="button"
                     id="cancel-marketplace-listing-edit-btn"
-                    class="marketplace-save-listing__cancel"
+                    class="marketplace-save-listing__cancel button-89"
                     hidden
                   >
                     Cancel edit
@@ -2226,22 +2309,24 @@
                 ></p>
               </div>
             </div>
+              </div>
+            </details>
           </section>
 
           <section
-            class="marketplace-card marketplace-saved-card saved-marketplace-listings"
+            class="workflow-card marketplace-card marketplace-saved-card saved-marketplace-listings"
             aria-labelledby="saved-marketplace-listings-title"
           >
-            <div class="saved-marketplace-listings__heading">
-              <div>
-                <p class="section-heading__eyebrow">Saved listings</p>
-                <h3 id="saved-marketplace-listings-title">
-                  Your Marketplace listings
-                </h3>
-              </div>
-              <span id="saved-marketplace-listings-count">0</span>
-            </div>
-            <p
+            <details id="marketplace-saved-card" class="card-accordion" name="workflow-cards">
+              <summary class="card-accordion__summary">
+                <span class="card-accordion__icon" aria-hidden="true">
+                  <svg viewBox="0 0 256 256" fill="currentColor"><path d="M213.66,101.66l-80,80a8,8,0,0,1-11.32,0l-80-80A8,8,0,0,1,53.66,90.34L128,164.69l74.34-74.35a8,8,0,0,1,11.32,11.32Z"></path></svg>
+                </span>
+                <span><strong id="saved-marketplace-listings-title">Your Marketplace listings</strong><small>Manage your saved listings and photos</small></span>
+              </summary>
+              <div class="card-accordion__content">
+                <div class="selection-count">Saved listings · <span id="saved-marketplace-listings-count">0</span></div>
+<p
               id="saved-marketplace-listings-status"
               class="saved-marketplace-listings__status"
               role="status"
@@ -2253,17 +2338,20 @@
               id="saved-marketplace-listings-list"
               class="saved-marketplace-listings__list"
             ></div>
+              </div>
+            </details>
           </section>
 
-          <section class="marketplace-card marketplace-cleanup-card">
-            <div class="marketplace-card__heading">
-              <p class="section-heading__eyebrow">Marketplace cleanup</p>
-              <p class="section-note">
-                Permanently remove listings from Facebook Marketplace when they
-                are older than the age you choose.
-              </p>
-            </div>
-            <div class="marketplace-cleanup-card__controls">
+          <section class="workflow-card marketplace-card marketplace-cleanup-card">
+            <details id="marketplace-cleanup-card" class="card-accordion" name="workflow-cards">
+              <summary class="card-accordion__summary">
+                <span class="card-accordion__icon" aria-hidden="true">
+                  <svg viewBox="0 0 256 256" fill="currentColor"><path d="M213.66,101.66l-80,80a8,8,0,0,1-11.32,0l-80-80A8,8,0,0,1,53.66,90.34L128,164.69l74.34-74.35a8,8,0,0,1,11.32,11.32Z"></path></svg>
+                </span>
+                <span><strong>Marketplace cleanup</strong><small>Delete listings older than the age you choose</small></span>
+              </summary>
+              <div class="card-accordion__content">
+                <div class="marketplace-cleanup-card__controls">
               <div class="field">
                 <label for="marketplace-cleanup-days-input"
                   >Delete listings older than</label
@@ -2296,7 +2384,7 @@
                 type="button"
                 id="delete-old-marketplace-listings-btn"
                 disabled
-              >
+               class="button-89 button-89--danger">
                 Delete old listings
               </button>
             </div>
@@ -2308,7 +2396,7 @@
               hidden
             >
               <div class="posting-progress__heading">
-                <p class="section-heading__eyebrow">Logs</p>
+                <p class="section-heading__eyebrow">Activity</p>
               </div>
               <div class="posting-progress__header">
                 <span id="marketplace-cleanup-count">0/0 processed</span>
@@ -2343,12 +2431,14 @@
                 aria-label="Marketplace cleanup activity"
               ></ol>
             </div>
+              </div>
+            </details>
           </section>
 
-          <div class="marketplace-posting-preferences-card">
-            <details class="marketplace-posting-preferences">
-              <summary class="marketplace-posting-preferences__summary">
-                <span class="marketplace-posting-preferences__icon">
+          <div id="marketplace-posting-preferences-card" class="marketplace-posting-preferences-card">
+            <details id="marketplace-posting-preferences" class="card-accordion" name="workflow-cards">
+              <summary class="card-accordion__summary">
+                <span class="card-accordion__icon">
                   <svg
                     width="32"
                     height="32"
@@ -2363,21 +2453,21 @@
                 </span>
                 <span>
                   <strong>Posting preferences</strong>
-                  <small>Intervals, Gemini rewrite and listing order</small>
+                  <small>Wait times, AI rewriting and listing order</small>
                 </span>
               </summary>
-              <div class="marketplace-posting-preferences__content">
+              <div class="card-accordion__content">
                 <div class="interval-card marketplace-interval-card">
                   <div class="interval-card__heading">
-                    <strong>Random interval between items</strong>
+                    <strong>Time between listings</strong>
                     <small
-                      >A fresh delay is selected after every listing.</small
+                      >Postika chooses a different wait time within your range between listings.</small
                     >
                   </div>
                   <div class="number-input-grid">
                     <div class="field">
                       <label for="marketplace-interval-min-input"
-                        >Minimum seconds</label
+                        >Shortest wait (seconds)</label
                       >
                       <div class="number-input-row">
                         <input
@@ -2392,7 +2482,7 @@
                     </div>
                     <div class="field">
                       <label for="marketplace-interval-max-input"
-                        >Maximum seconds</label
+                        >Longest wait (seconds)</label
                       >
                       <div class="number-input-row">
                         <input
@@ -2407,29 +2497,30 @@
                     </div>
                   </div>
                   <p class="section-note">
-                    Both values must be at least 60 seconds.
+                    Both waits must be at least 60 seconds. For example, 60 to 300 means a wait of 1 to 5 minutes.
                   </p>
                 </div>
 
                 <div class="field">
                   <label for="marketplace-gemini-api-key-input"
-                    >Gemini API Key</label
+                    >Gemini access key (for AI rewriting)</label
                   >
                   <input
                     type="password"
                     id="marketplace-gemini-api-key-input"
-                    placeholder="Paste Gemini API key"
+                    placeholder="Paste your Gemini API key"
                     autocomplete="off"
                     spellcheck="false"
                   />
                   <p class="section-note">
-                    Shared with Groups and saved locally in this browser.
+                    Use your Gemini API key to rewrite listing descriptions with AI.
+                    The same key is used for Groups and saved in this browser.
                   </p>
                 </div>
 
                 <div class="field">
                   <label for="marketplace-gemini-prompt-input">
-                    Custom rewrite instructions (optional)
+                    How should AI rewrite your text? (optional)
                   </label>
                   <textarea
                     id="marketplace-gemini-prompt-input"
@@ -2444,9 +2535,10 @@
                   for="marketplace-gemini-rewrite-toggle"
                 >
                   <span class="toggle-row__copy">
-                    <strong>Enable description rewrite</strong>
+                    <strong>Rewrite descriptions with AI</strong>
                     <small
-                      >Rewrite each listing description before posting.</small
+                      >Let Gemini rewrite each description before posting. Requires
+                      a Gemini access key.</small
                     >
                   </span>
                   <input
@@ -2457,31 +2549,13 @@
 
                 <label
                   class="toggle-row"
-                  for="marketplace-gemini-hashtags-toggle"
-                >
-                  <span class="toggle-row__copy">
-                    <strong>Include hashtags</strong>
-                    <small
-                      >Add six relevant hashtags to rewritten
-                      descriptions.</small
-                    >
-                  </span>
-                  <input
-                    type="checkbox"
-                    id="marketplace-gemini-hashtags-toggle"
-                    checked
-                  />
-                </label>
-
-                <label
-                  class="toggle-row"
                   for="marketplace-shuffle-items-toggle"
                 >
                   <span class="toggle-row__copy">
-                    <strong>Shuffle items before posting</strong>
+                    <strong>Post listings in a random order</strong>
                     <small
-                      >Randomize the selected listing order for each
-                      queue.</small
+                      >Change the order of your selected listings each time you
+                      start posting.</small
                     >
                   </span>
                   <input
@@ -2493,13 +2567,16 @@
             </details>
           </div>
 
-          <div class="marketplace-queue-settings">
-            <div class="marketplace-queue-settings__heading">
-              <div>
-                <p class="section-heading__eyebrow">Bulk posting</p>
-                <h3>Select and post listings</h3>
-              </div>
-              <label
+          <div class="workflow-card marketplace-queue-settings">
+            <details id="marketplace-queue-card" class="card-accordion" name="workflow-cards">
+              <summary class="card-accordion__summary">
+                <span class="card-accordion__icon" aria-hidden="true">
+                  <svg viewBox="0 0 256 256" fill="currentColor"><path d="M213.66,101.66l-80,80a8,8,0,0,1-11.32,0l-80-80A8,8,0,0,1,53.66,90.34L128,164.69l74.34-74.35a8,8,0,0,1,11.32,11.32Z"></path></svg>
+                </span>
+                <span><strong>Select and post listings</strong><small>Choose saved listings to post to Facebook</small></span>
+              </summary>
+              <div class="card-accordion__content">
+                <label
                 class="marketplace-listings-select-all"
                 for="marketplace-listings-select-all-checkbox"
               >
@@ -2509,33 +2586,39 @@
                 />
                 <span>Select all listings</span>
               </label>
-            </div>
-            <p
+<p
               id="marketplace-listings-selection-count"
               class="selection-count"
             >
-              0 items selected
+              0 listings selected
             </p>
             <button
               type="button"
               id="post-selected-marketplace-items-btn"
-              class="marketplace-post-selected"
+              class="marketplace-post-selected button-89"
               disabled
             >
               Post selected listings
             </button>
+              </div>
+            </details>
           </div>
 
           <section
             id="marketplace-posting-progress-card"
-            class="marketplace-card marketplace-progress-card"
+            class="workflow-card marketplace-card marketplace-progress-card"
             aria-label="Marketplace posting activity"
             hidden
           >
-            <div class="marketplace-card__heading">
-              <p class="section-heading__eyebrow">Logs</p>
-            </div>
-            <div
+            <details id="marketplace-activity-card" class="card-accordion" name="workflow-cards">
+              <summary class="card-accordion__summary">
+                <span class="card-accordion__icon" aria-hidden="true">
+                  <svg viewBox="0 0 256 256" fill="currentColor"><path d="M213.66,101.66l-80,80a8,8,0,0,1-11.32,0l-80-80A8,8,0,0,1,53.66,90.34L128,164.69l74.34-74.35a8,8,0,0,1,11.32,11.32Z"></path></svg>
+                </span>
+                <span><strong>Marketplace activity</strong><small>Track posting progress, pause or stop the queue</small></span>
+              </summary>
+              <div class="card-accordion__content">
+                <div
               id="marketplace-posting-progress"
               class="posting-progress"
               role="status"
@@ -2567,13 +2650,13 @@
                   </svg>
                 </span>
                 <span class="posting-timing__metric">
-                  <small id="marketplace-posting-timing-label">Elapsed</small>
+                  <small id="marketplace-posting-timing-label">Time spent</small>
                   <strong id="marketplace-posting-elapsed-time">00:00</strong>
                 </span>
                 <span class="posting-timing__divider" aria-hidden="true"></span>
                 <span class="posting-timing__metric">
                   <small id="marketplace-posting-item-timing-label"
-                    >Current item</small
+                    >Current post</small
                   >
                   <strong id="marketplace-posting-item-time">00:00</strong>
                 </span>
@@ -2608,7 +2691,7 @@
                 id="marketplace-posting-status-message"
                 class="posting-progress__current"
               >
-                No Marketplace queue running.
+                Marketplace posting has not started.
               </div>
               <ol
                 id="marketplace-posting-log"
@@ -2616,14 +2699,16 @@
                 aria-label="Marketplace posting activity"
               ></ol>
               <div class="posting-progress__controls">
-                <button type="button" id="pause-marketplace-posting-btn" hidden>
-                  Pause posting
+                <button type="button" id="pause-marketplace-posting-btn" hidden class="button-89">
+                  Pause
                 </button>
-                <button type="button" id="stop-marketplace-posting-btn" hidden>
-                  Stop posting
+                <button type="button" id="stop-marketplace-posting-btn" hidden class="button-89 button-89--danger">
+                  Stop
                 </button>
               </div>
             </div>
+              </div>
+            </details>
           </section>
         </div>
       </form>
@@ -2650,66 +2735,15 @@
             This permanently removes the saved post and its photos.
           </p>
           <div class="delete-confirmation__actions">
-            <button type="button" id="delete-confirmation-cancel">
+            <button type="button" id="delete-confirmation-cancel" class="button-89">
               Cancel
             </button>
             <button
               type="button"
               id="delete-confirmation-confirm"
-              class="delete-confirmation__confirm"
+              class="delete-confirmation__confirm button-89 button-89--danger"
             >
               Delete
-            </button>
-          </div>
-        </div>
-      </div>
-
-      <div
-        id="group-posting-strategy-choice"
-        class="delete-confirmation group-posting-strategy-choice"
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="group-posting-strategy-choice-title"
-        aria-describedby="group-posting-strategy-choice-message"
-        hidden
-      >
-        <button
-          type="button"
-          id="group-posting-strategy-choice-backdrop"
-          class="delete-confirmation__backdrop"
-          aria-label="Cancel Group posting"
-        ></button>
-        <div
-          class="delete-confirmation__dialog group-posting-strategy-choice__dialog"
-        >
-          <p class="section-heading__eyebrow">Posting preference</p>
-          <h2 id="group-posting-strategy-choice-title">
-            How do you want to post?
-          </h2>
-          <p id="group-posting-strategy-choice-message">
-            Spread your posts evenly by starting with Groups you have posted to
-            the least, or use the order in which you selected them. If a Group
-            fails, Postika skips it and continues with the others.
-          </p>
-          <div
-            class="delete-confirmation__actions group-posting-strategy-choice__actions"
-          >
-            <button type="button" id="group-posting-strategy-choice-cancel">
-              Cancel
-            </button>
-            <button
-              type="button"
-              id="group-posting-strategy-choice-selected-order"
-              class="group-posting-strategy-choice__selected-order"
-            >
-              Keep selected order
-            </button>
-            <button
-              type="button"
-              id="group-posting-strategy-choice-balanced"
-              class="group-posting-strategy-choice__balanced"
-            >
-              Spread posts evenly (Recommended)
             </button>
           </div>
         </div>
@@ -2744,20 +2778,20 @@
           <div
             class="delete-confirmation__actions marketplace-audience-choice__actions"
           >
-            <button type="button" id="marketplace-audience-choice-cancel">
+            <button type="button" id="marketplace-audience-choice-cancel" class="button-89">
               Cancel
             </button>
             <button
               type="button"
               id="marketplace-audience-choice-marketplace-only"
-              class="marketplace-audience-choice__marketplace-only"
+              class="marketplace-audience-choice__marketplace-only button-89"
             >
               Marketplace only
             </button>
             <button
               type="button"
               id="marketplace-audience-choice-with-groups"
-              class="marketplace-audience-choice__with-groups"
+              class="marketplace-audience-choice__with-groups button-89"
             >
               Marketplace + Groups
             </button>

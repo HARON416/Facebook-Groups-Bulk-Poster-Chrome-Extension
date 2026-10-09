@@ -44,6 +44,27 @@ runtime dependency and must not be packaged with `public`.
 
 ## Extension build
 
+Groups are shuffled when loaded and once at the start of each posting run.
+Reusable posts rotate in their saved order; the shuffled group sequence repeats until the post limit
+is reached. Failed groups are skipped for the rest of the run. Start Posting
+starts this flow directly, without a distribution preference dialog.
+
+Workflow cards in both tabs use expandable headers. Opening one closes the
+other workflow cards, including Image watermarks. Click a header to show or
+hide its contents; the expanded card is remembered in this Chrome profile. The
+Groups header shows the current selection count, and collapsing it keeps all
+selections. Editing a saved post or listing opens its editor, and starting a
+posting or cleanup activity opens its controls. Account & plan keeps its existing
+layout.
+
+Expand **Image watermarks** above the Groups and Marketplace tabs to enable a
+watermark and set its text, top/center/bottom position, background and text
+colors, and height (1–50% of each image). The sample preview updates as you edit.
+Settings are saved in this Chrome profile and apply to both posting workflows.
+Watermarks are rendered when posting; saved images remain unchanged, so changing
+settings or posting again does not stack watermarks. Enabled watermarks require
+nonempty text. JPEG photos remain JPEG; other formats are rendered as PNG.
+
 `public/manifest.json` is the extension manifest and the only source of truth
 for its version, name, permissions, and other metadata. The build does not
 modify it.
@@ -98,3 +119,4 @@ cd ..
 
 Generated extension scripts are written to `public/dist`. The build leaves
 `public/manifest.json` unchanged.
+

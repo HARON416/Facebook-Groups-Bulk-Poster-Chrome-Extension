@@ -15,6 +15,7 @@ type Querier interface {
 	CountGroupPostsByUser(ctx context.Context, userID pgtype.UUID) (int64, error)
 	CountMarketplaceListingsByUser(ctx context.Context, userID pgtype.UUID) (int64, error)
 	CreateAuthSession(ctx context.Context, arg CreateAuthSessionParams) (AuthSession, error)
+	CreateGroupCommentSettings(ctx context.Context, arg CreateGroupCommentSettingsParams) error
 	CreateGroupPost(ctx context.Context, arg CreateGroupPostParams) (GroupPost, error)
 	CreateGroupPostImage(ctx context.Context, arg CreateGroupPostImageParams) (GroupPostImage, error)
 	CreateMarketplaceHomeDetails(ctx context.Context, arg CreateMarketplaceHomeDetailsParams) (MarketplaceHomeDetail, error)
@@ -33,9 +34,8 @@ type Querier interface {
 	ExpireProAccess(ctx context.Context, id pgtype.UUID) (User, error)
 	GetAuthSessionByTokenHash(ctx context.Context, tokenHash string) (AuthSession, error)
 	GetFacebookAccountBindingByUser(ctx context.Context, userID pgtype.UUID) (FacebookAccountBinding, error)
-	GetFacebookGroupPostingEvent(ctx context.Context, arg GetFacebookGroupPostingEventParams) (FacebookGroupPostingEvent, error)
-	GetFacebookGroupPostingStat(ctx context.Context, arg GetFacebookGroupPostingStatParams) (FacebookGroupPostingStat, error)
 	GetFacebookPostingUsageSummary(ctx context.Context, arg GetFacebookPostingUsageSummaryParams) (GetFacebookPostingUsageSummaryRow, error)
+	GetGroupCommentSettings(ctx context.Context, userID pgtype.UUID) (GroupCommentSetting, error)
 	GetGroupPost(ctx context.Context, arg GetGroupPostParams) (GroupPost, error)
 	GetMarketplaceHomeDetails(ctx context.Context, listingID pgtype.UUID) (MarketplaceHomeDetail, error)
 	GetMarketplaceItemDetails(ctx context.Context, listingID pgtype.UUID) (MarketplaceItemDetail, error)
@@ -47,9 +47,6 @@ type Querier interface {
 	GetUserByID(ctx context.Context, id pgtype.UUID) (User, error)
 	GrantLifetimePro(ctx context.Context, arg GrantLifetimeProParams) (User, error)
 	GrantTemporaryPro(ctx context.Context, arg GrantTemporaryProParams) (User, error)
-	IncrementFacebookGroupPostingStat(ctx context.Context, arg IncrementFacebookGroupPostingStatParams) (FacebookGroupPostingStat, error)
-	InsertFacebookGroupPostingEvent(ctx context.Context, arg InsertFacebookGroupPostingEventParams) (int64, error)
-	ListFacebookGroupPostingStats(ctx context.Context, arg ListFacebookGroupPostingStatsParams) ([]FacebookGroupPostingStat, error)
 	ListGroupPostImages(ctx context.Context, groupPostID pgtype.UUID) ([]GroupPostImage, error)
 	ListGroupPosts(ctx context.Context, userID pgtype.UUID) ([]GroupPost, error)
 	ListMarketplaceListingImages(ctx context.Context, listingID pgtype.UUID) ([]MarketplaceListingImage, error)
@@ -68,6 +65,7 @@ type Querier interface {
 	UpdateMarketplaceListing(ctx context.Context, arg UpdateMarketplaceListingParams) (MarketplaceListing, error)
 	UpdateMarketplaceVehicleDetails(ctx context.Context, arg UpdateMarketplaceVehicleDetailsParams) (MarketplaceVehicleDetail, error)
 	UpsertGoogleUser(ctx context.Context, arg UpsertGoogleUserParams) (User, error)
+	UpsertGroupCommentSettings(ctx context.Context, arg UpsertGroupCommentSettingsParams) (GroupCommentSetting, error)
 }
 
 var _ Querier = (*Queries)(nil)

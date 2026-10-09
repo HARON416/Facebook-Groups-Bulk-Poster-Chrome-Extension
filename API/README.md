@@ -10,8 +10,8 @@ account ID.
 - Schema and generated data layer managed by Goose and sqlc
 - Google OAuth access-token verification and opaque application sessions
 - User-owned Group posts and Marketplace listings
+- Account-owned comment options and enabled setting, restored across browsers
 - Free and Pro entitlements with race-safe calendar-day posting usage
-- Per-Facebook-account lifetime Group posting totals for optional balanced queues
 - Streaming Bunny Storage uploads with database-backed image metadata
 - Health endpoint at `GET /health`
 
@@ -65,6 +65,18 @@ The baseline migration is
 
 ## Authentication
 
+Comment settings use authenticated `GET`, `POST`, and `PUT` requests to
+`/api/group-comment-settings`. The payload is `{"enabled":false,"options":["Comment one","Comment two"]}`.
+GET returns `{"settings":null}` for accounts without settings. POST initializes
+settings without overwriting an existing account record; PUT saves edits.
+Settings preserve option order and blank drafts, with a maximum of 50 options
+and 10,000 characters per option. Users can access only their own settings.
+
+Apply `db/migrations/20261007000000_add_group_comment_settings.sql` with
+`make migrate-up` before deploying the updated API. The extension migrates its
+existing local comments when the account has no server settings and removes
+the local copy only after loading or saving server settings successfully.
+
 The extension obtains a Google OAuth access token with `chrome.identity`, then
 exchanges it for an application session:
 
@@ -91,8 +103,6 @@ POST   /api/auth/logout
 POST   /api/posting-usage/claim
 POST   /api/posting-usage/complete
 POST   /api/posting-usage/release
-POST   /api/group-posting-stats/plan
-POST   /api/group-posting-stats/accepted
 GET    /api/group-posts
 POST   /api/group-posts
 PUT    /api/group-posts/{postID}
@@ -116,17 +126,6 @@ transaction, so switching Chrome profiles or attempting concurrent claims does
 not create another allowance. Pro accounts have no storage or publishing
 limits. The extension claims a posting slot immediately before a Facebook
 action, completes it after success, and releases it after a confirmed failure.
-
-Every accepted Group submission, whether published immediately or pending
-administrator approval, is recorded once using its posting operation ID. The
-API stores the Group ID, latest known name, unlimited lifetime accepted count,
-and last accepted time under the Google user and an HMAC of the active Facebook
-actor. Confirmed failures are not recorded. When the user chooses Balanced
-posting, the extension sends all selected Groups and the accepted-post target to
-the planning endpoint. The API returns the complete priority sequence, giving
-each eligible Group one turn per round before reuse. If a Group fails, the
-extension requests a replacement plan for the remaining target with that Group
-excluded. Normal selected-order queues remain available.
 
 Pro access may be temporary or lifetime. Temporary terms use consecutive
 24-hour periods measured from the exact grant timestamp; lifetime grants have
@@ -231,3 +230,16 @@ back the database deletion so the request can be retried. A missing Bunny
 directory is treated as already deleted. Database changes commit only after
 storage cleanup succeeds. Storage deletion cannot be rolled back, so assets
 may already be removed if cleanup or the final database commit fails.
+
+## Group posting order
+
+The extension shuffles selected groups once per posting run, rotating reusable
+posts in their saved order and repeating the shuffled selected groups until the chosen
+post limit is reached. Failed groups are skipped for the rest of that run.
+
+The even-distribution planner and accepted-post history endpoints have been
+removed. After deploying the API and extension together, run `make migrate-up`
+to apply `20261009000000_remove_balanced_group_posting.sql`, which drops the
+retired per-group history tables. Posting allowances and account limits keep
+using `posting_usage_events`. The migration's rollback recreates the retired
+tables but does not restore their previous contents.
