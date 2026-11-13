@@ -2,8 +2,8 @@
 	const storeUrl =
 		'https://chromewebstore.google.com/detail/kundipost/lphjckpophfkedacijahclaoenhikcgo';
 	const whatsappUrl =
-		'https://wa.me/254718448461?text=Hi%2C%20I%27m%20interested%20in%20Postika%20Pro';
-	const emailUrl = 'mailto:haronkibetrutoh@gmail.com?subject=Postika%20Pro%20upgrade';
+		'https://wa.me/254718448461?text=Hi%2C%20I%20have%20a%20question%20about%20Postika';
+	const emailUrl = 'mailto:haronkibetrutoh@gmail.com?subject=Postika%20question';
 
 	const groupFeatures = [
 		'Reach more relevant communities with every campaign',
@@ -35,7 +35,7 @@
 		{
 			question: 'Which Facebook account does it use?',
 			answer:
-				'It works through the Facebook account already signed in to Chrome. Saved Postika content is connected to the Google account used to sign in to the extension.'
+				'It works through the Facebook account already signed in to Chrome. No Postika account or Google sign-in is required.'
 		},
 		{
 			question: 'Does it work with every Facebook layout?',
@@ -43,14 +43,14 @@
 				'For Groups, only the first post in each queue depends on Facebook’s visible interface and requires a Group with the English “Write something...” composer. Marketplace automation is currently tested on the English Kenyan layout. Other regional layouts may need customization.'
 		},
 		{
-			question: 'What counts toward a daily limit?',
+			question: 'Does Postika limit how many times I can post?',
 			answer:
-				'Only successfully published posts and listings count. Saved drafts do not. Free usage resets at midnight in the timezone recorded for your account.'
+				'Postika has no paid tiers or app-imposed daily posting quota. Facebook’s own posting limits, policies, and Group rules still apply.'
 		},
 		{
-			question: 'Is Gemini required?',
+			question: 'Where are my drafts stored?',
 			answer:
-				'No. Rewriting is optional and off by default. You supply your own Gemini API key, and Postika uses the original copy if rewriting fails.'
+				'Your post text, selected images, and Group selections are saved in Chrome extension storage on your device. Postika does not require an account or remote backend.'
 		}
 	];
 </script>
@@ -71,7 +71,7 @@
 	/>
 	<meta
 		property="og:description"
-		content="Reach more potential buyers while spending less time copying posts and filling listing forms. Start with Postika for free."
+		content="Reach more potential buyers while spending less time copying posts and filling listing forms. No Postika-imposed daily posting quota."
 	/>
 </svelte:head>
 
@@ -80,7 +80,9 @@
 		<span class="brand-mark" aria-hidden="true">P</span><span>Postika</span>
 	</a>
 	<nav aria-label="Main navigation">
-		<a href="#workflows">Benefits</a><a href="#pricing">Pricing</a><a href="#faq">FAQ</a>
+		<a href="#workflows">Benefits</a>
+		<a href="#posting">Posting limits</a>
+		<a href="#faq">FAQ</a>
 	</nav>
 	<a
 		class="button button-small button-dark"
@@ -104,7 +106,7 @@
 			</p>
 			<div class="hero-actions">
 				<a class="button button-primary" href={storeUrl} target="_blank" rel="noopener noreferrer">
-					Start Posting Free <span aria-hidden="true">→</span>
+					Start Posting <span aria-hidden="true">→</span>
 				</a>
 				<a class="text-link" href="#how-it-works"
 					>See What Postika Can Do <span aria-hidden="true">↓</span></a
@@ -112,7 +114,7 @@
 			</div>
 			<div class="trust-row">
 				<span>Save hours of repetitive work</span><span>One tool for two sales channels</span><span
-					>Free to start</span
+					>No paid plan</span
 				>
 			</div>
 		</div>
@@ -149,8 +151,8 @@
 				<div><b>Post published</b><small>Queue continues safely</small></div>
 			</div>
 			<div class="floating-note note-bottom">
-				<span>20</span>
-				<div><b>Free daily posts</b><small>For each workflow</small></div>
+				<span>∞</span>
+				<div><b>No Postika quota</b><small>Facebook rules still apply</small></div>
 			</div>
 		</div>
 	</section>
@@ -158,7 +160,7 @@
 	<section class="proof-strip" aria-label="Postika benefits">
 		<div class="shell proof-grid">
 			<div><strong>2</strong><span>sales channels in one tool</span></div>
-			<div><strong>5 + 1</strong><span>free Group + Marketplace publications daily</span></div>
+			<div><strong>∞</strong><span>posts without a Postika daily quota</span></div>
 			<div><strong>Hours</strong><span>saved on repetitive posting</span></div>
 			<div><strong>More</strong><span>time to respond to buyers</span></div>
 		</div>
@@ -305,76 +307,44 @@
 	<section class="section highlight-section">
 		<div class="shell highlight-grid">
 			<div>
-				<p class="eyebrow light"><span></span> Optional Gemini rewrite</p>
-				<h2>Turn basic copy into buyer-ready descriptions faster.</h2>
+				<p class="eyebrow light"><span></span> Browser-only drafts</p>
+				<h2>Your draft stays with you.</h2>
 				<p>
-					Spend less time polishing every caption. Use your own Gemini API key to refresh wording
-					and add relevant hashtags while preserving important prices, locations, and contact
-					details. If rewriting fails, your original copy is still used.
+					Post text, selected images, and Group selections are saved in Chrome storage on your
+					device, so you can pick up where you left off. Content is sent directly to Facebook only
+					when you start a posting queue.
 				</p>
 			</div>
-			<div class="rewrite-demo">
-				<div class="rewrite-label"><span>ORIGINAL</span><small>Saved locally</small></div>
-				<p>Clean vehicle, well maintained. Call for viewing.</p>
-				<div class="rewrite-arrow">↓</div>
-				<div class="rewrite-label"><span>REWRITTEN</span><small>Optional</small></div>
-				<p class="rewritten">
-					Well-maintained and ready for the road. Contact us to arrange a viewing.
+			<div class="draft-storage-demo">
+				<div class="draft-storage-label">
+					<span>ON THIS DEVICE</span><small>Chrome storage</small>
+				</div>
+				<p>Post text · selected images · chosen Groups</p>
+				<div class="draft-storage-arrow">↓</div>
+				<div class="draft-storage-label">
+					<span>WHEN YOU START POSTING</span><small>Direct to Facebook</small>
+				</div>
+				<p class="draft-storage-sent">
+					Only the content and Groups you choose are sent for the posting action.
 				</p>
 			</div>
 		</div>
 	</section>
 
-	<section class="section shell" id="pricing">
+	<section class="section shell" id="posting">
 		<div class="section-heading centered compact">
-			<p class="eyebrow"><span></span> Reach more buyers without a large upfront cost</p>
-			<h2>Start selling for free. Upgrade when volume grows.</h2>
-			<p>Facebook’s own posting limits, policies, and Group rules always continue to apply.</p>
+			<p class="eyebrow"><span></span> No tiers. No Postika posting quota.</p>
+			<h2>Post without a daily cap from Postika.</h2>
+			<p>
+				Every signed-in user can use the posting workflow without a Postika-imposed daily quota or
+				paid plan. Facebook’s own limits, policies, and Group rules still apply.
+			</p>
 		</div>
-		<div class="pricing-grid">
-			<article class="price-card">
-				<div class="price-heading">
-					<span>FREE</span><strong>KSh 0</strong><small>start saving time today</small>
-				</div>
-				<ul>
-					<li><span>✓</span>1 saved Group post</li>
-					<li><span>✓</span>1 saved Marketplace listing</li>
-					<li><span>✓</span>5 successful Group posts per day</li>
-					<li><span>✓</span>1 successful Marketplace listing per day</li>
-					<li><span>✓</span>All core queue controls</li>
-				</ul>
-				<a class="button button-outline" href={storeUrl} target="_blank" rel="noopener noreferrer"
-					>Start Posting Free</a
-				>
-			</article>
-			<article class="price-card pro-card">
-				<div class="popular-tag">FOR BUSINESSES READY TO REACH MORE BUYERS</div>
-				<div class="price-heading">
-					<span>PRO</span><strong>Let’s talk</strong><small
-						>remove Postika limits as you grow</small
-					>
-				</div>
-				<ul>
-					<li><span>✓</span>Unlimited saved Group posts</li>
-					<li><span>✓</span>Unlimited saved Marketplace listings</li>
-					<li><span>✓</span>No Postika daily publishing limit</li>
-					<li><span>✓</span>All core queue controls</li>
-					<li><span>✓</span>Direct upgrade support</li>
-				</ul>
-				<div class="contact-actions">
-					<a
-						class="button button-primary"
-						href={whatsappUrl}
-						target="_blank"
-						rel="noopener noreferrer">WhatsApp</a
-					><a class="button button-outline" href={emailUrl}>Email</a>
-				</div>
-			</article>
+		<div class="hero-actions centered">
+			<a class="button button-primary" href={storeUrl} target="_blank" rel="noopener noreferrer">
+				Add Postika to Chrome <span aria-hidden="true">→</span>
+			</a>
 		</div>
-		<p class="reset-note">
-			Daily Free limits reset at midnight in your account timezone. Only successful publications
-			count.
-		</p>
 	</section>
 
 	<section class="section shell compatibility">
@@ -431,7 +401,7 @@
 				<h2>Spend less time reposting. Spend more time closing sales.</h2>
 			</div>
 			<a class="button button-light" href={storeUrl} target="_blank" rel="noopener noreferrer"
-				>Start Posting Free <span aria-hidden="true">→</span></a
+				>Start Posting <span aria-hidden="true">→</span></a
 			>
 		</div>
 	</section>

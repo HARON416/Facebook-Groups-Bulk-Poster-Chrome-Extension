@@ -1,4 +1,6 @@
 /node_modules
+/.wuchale-build
+/src/locales/.wuchale
 .codex
 .agents
 /API/.env

@@ -810,14 +810,14 @@ img {
 	font-size: 1.55rem;
 	line-height: 1.7;
 }
-.rewrite-demo {
+.draft-storage-demo {
 	padding: 2rem;
 	border: 0.1rem solid rgba(255, 255, 255, 0.25);
 	border-radius: 1.4rem;
 	background: rgba(7, 70, 130, 0.45);
 	box-shadow: 0 2rem 6rem rgba(0, 0, 0, 0.12);
 }
-.rewrite-label {
+.draft-storage-label {
 	display: flex;
 	justify-content: space-between;
 	gap: 1rem;
@@ -826,7 +826,7 @@ img {
 	font-weight: 900;
 	letter-spacing: 0.1em;
 }
-.rewrite-demo > p {
+.draft-storage-demo > p {
 	margin-top: 1rem;
 	padding: 1.4rem;
 	border-radius: 1rem;
@@ -834,11 +834,11 @@ img {
 	font-size: 1.3rem;
 	line-height: 1.55;
 }
-.rewrite-demo > p.rewritten {
+.draft-storage-demo > p.draft-storage-sent {
 	background: white;
 	color: var(--ink);
 }
-.rewrite-arrow {
+.draft-storage-arrow {
 	margin: 1rem 0;
 	color: #9ef7e6;
 	font-size: 2rem;
@@ -1266,7 +1266,7 @@ footer {
 		grid-template-columns: 1fr 1fr;
 		gap: 1.5rem;
 	}
-	.rewrite-demo {
+	.draft-storage-demo {
 		padding: 2.8rem;
 	}
 	.pricing-grid {

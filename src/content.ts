@@ -11,9 +11,6 @@ import type {
   UiPostImage,
 } from "./config";
 
-const FACEBOOK_POST_LIMIT_PATTERN =
-  /we\s+limit\s+how\s+often\s+you\s+can\s+post,\s+comment\s+or\s+do\s+other\s+things\s+in\s+a\s+given\s+amount\s+of\s+time\s+in\s+order\s+to\s+help\s+protect\s+the\s+community\s+from\s+spam\.\s+you\s+can\s+try\s+again\s+later/i;
-
 type ContentRequest =
   | CreatePostRequest
   | {
@@ -116,7 +113,11 @@ async function insertImages(dialog: Element, files: File[]): Promise<void> {
   });
 }
 
-async function insertDescription(dialog: Element, text: string): Promise<void> {
+async function insertDescription(
+  dialog: Element,
+  text: string,
+  html: string,
+): Promise<void> {
   const textbox = findGroupComposerEditor(dialog);
 
   if (!textbox) {
@@ -137,7 +138,10 @@ async function insertDescription(dialog: Element, text: string): Promise<void> {
   );
   const dt = new DataTransfer();
   dt.setData("text/plain", text);
-  dt.setData("text/html", formatTextAsHtmlWithLineBreaks(text));
+  dt.setData(
+    "text/html",
+    sanitizePostHtml(html || formatTextAsHtmlWithLineBreaks(text)),
+  );
 
   textbox.dispatchEvent(
     new ClipboardEvent("paste", {
@@ -160,6 +164,46 @@ async function insertDescription(dialog: Element, text: string): Promise<void> {
   console.log("[Facebook Groups Bulk Poster] Description inserted", {
     textboxContent: textbox.textContent?.slice(0, 100),
   });
+}
+
+function sanitizePostHtml(html: string): string {
+  const parsed = new DOMParser().parseFromString(html, "text/html");
+  const allowedTags = new Set([
+    "B",
+    "BLOCKQUOTE",
+    "BR",
+    "EM",
+    "H1",
+    "H2",
+    "I",
+    "LI",
+    "OL",
+    "P",
+    "STRONG",
+    "UL",
+  ]);
+  const output = document.createElement("div");
+  const copyNode = (source: Node, target: Node) => {
+    if (source.nodeType === Node.TEXT_NODE) {
+      const lines = (source.textContent ?? "").split(/\r\n?|\n/);
+      lines.forEach((line, index) => {
+        if (line) target.appendChild(document.createTextNode(line));
+        if (index < lines.length - 1) {
+          target.appendChild(document.createElement("br"));
+        }
+      });
+      return;
+    }
+    if (!(source instanceof HTMLElement)) return;
+    const tag = source.tagName;
+    const destination = allowedTags.has(tag)
+      ? document.createElement(tag === "EM" ? "i" : tag.toLowerCase())
+      : target;
+    if (destination !== target) target.appendChild(destination);
+    source.childNodes.forEach((child) => copyNode(child, destination));
+  };
+  parsed.body.childNodes.forEach((node) => copyNode(node, output));
+  return output.innerHTML;
 }
 
 function formatTextAsHtmlWithLineBreaks(text: string): string {
@@ -195,45 +239,6 @@ async function clickPostButton(dialog: Element): Promise<void> {
 
   postButton.click();
   console.log("[Facebook Groups Bulk Poster] Post button clicked");
-
-  // Wait for dialog to disappear (post submitted) — up to 120 * 2s = 4 minutes
-  for (let i = 0; i < 120; i += 1) {
-    await sleepWithPostingControls(2_000);
-
-    const dialogStillVisible =
-      document.contains(dialog) &&
-      (dialog as HTMLElement).offsetParent !== null;
-
-    if (dialogStillVisible) {
-      const dialogText = dialog.textContent ?? "";
-
-      if (FACEBOOK_POST_LIMIT_PATTERN.test(dialogText)) {
-        console.log(
-          "[Facebook Groups Bulk Poster] Hit posting limit. Please wait and try again later.",
-        );
-        throw new Error("Hit posting limit. Please wait and try again later.");
-      }
-
-      if (
-        dialogText.includes(
-          "You have been temporarily blocked from performing this action.",
-        )
-      ) {
-        console.log(
-          "[Facebook Groups Bulk Poster] Temporarily blocked from performing this action.",
-        );
-        throw new Error("Temporarily blocked from performing this action.");
-      }
-
-      console.log("[Facebook Groups Bulk Poster] Posting...");
-      continue;
-    }
-
-    console.log("[Facebook Groups Bulk Poster] Ad posted successfully");
-    return;
-  }
-
-  throw new Error("Post did not complete in time.");
 }
 
 if (isFirstContentScriptLoad)
@@ -309,7 +314,7 @@ if (isFirstContentScriptLoad)
           }
 
           if (request.body) {
-            await insertDescription(dialog, request.body);
+            await insertDescription(dialog, request.body, request.html);
             await sleepWithPostingControls(500);
           }
 

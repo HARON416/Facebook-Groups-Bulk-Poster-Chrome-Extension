@@ -9,465 +9,341 @@
   </head>
   <body>
     <main id="app">
-      <section id="auth-panel" class="auth-panel">
-        <div class="auth-panel__card">
+      <header class="app-header">
+        <div class="app-utility-menu">
           <button
             type="button"
-            id="account-card-toggle"
-            class="account-card-toggle"
+            id="app-menu-trigger"
+            class="app-menu-trigger"
+            aria-label="Settings &amp; support"
+            aria-haspopup="true"
             aria-expanded="false"
-            aria-controls="account-card-content"
+            aria-controls="app-menu"
+          >
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <circle cx="5" cy="12" r="1.5" />
+              <circle cx="12" cy="12" r="1.5" />
+              <circle cx="19" cy="12" r="1.5" />
+            </svg>
+          </button>
+          <section
+            id="app-menu"
+            class="app-menu"
+            aria-labelledby="app-menu-title"
             hidden
           >
-            <span class="account-card-icon" aria-hidden="true">
-              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" fill="currentColor">
-                <path d="M246,98.73l-56-64A8,8,0,0,0,184,32H72a8,8,0,0,0-6,2.73l-56,64a8,8,0,0,0,.17,10.73l112,120a8,8,0,0,0,11.7,0l112-120A8,8,0,0,0,246,98.73ZM222.37,96H180L144,48h36.37ZM74.58,112l30.13,75.33L34.41,112Zm89.6,0L128,202.46,91.82,112ZM96,96l32-42.67L160,96Zm85.42,16h40.17l-70.3,75.33ZM75.63,48H112L76,96H33.63Z" />
-              </svg>
-            </span>
-            <span class="account-card-label">
-              <span>Account &amp; plan</span>
-              <small>Click to expand or collapse</small>
-            </span>
-          </button>
-          <div id="account-card-content" class="account-card-content">
-            <p class="section-heading__eyebrow">Your Facebook workflow</p>
-            <div
-              id="auth-welcome-art"
-              class="auth-welcome-art"
-              aria-hidden="true"
+            <h2 id="app-menu-title">Settings &amp; support</h2>
+            <button
+              type="button"
+              id="theme-toggle"
+              class="app-menu__item app-menu__theme"
+              aria-pressed="false"
             >
-              <span
-                class="auth-welcome-art__tile auth-welcome-art__tile--back"
-              ></span>
-              <span
-                class="auth-welcome-art__tile auth-welcome-art__tile--front"
-              >
-                <svg
-                  xmlns="http://www.w3.org/2000/svg"
-                  width="32"
-                  height="32"
-                  fill="currentColor"
-                  viewBox="0 0 256 256"
-                >
-                  <path
-                    d="M216,48H176V40a24,24,0,0,0-24-24H104A24,24,0,0,0,80,40v8H40A24,24,0,0,0,16,72V200a24,24,0,0,0,24,24H216a24,24,0,0,0,24-24V72A24,24,0,0,0,216,48ZM96,40a8,8,0,0,1,8-8h48a8,8,0,0,1,8,8v8H96ZM224,200a8,8,0,0,1-8,8H40a8,8,0,0,1-8-8V72a8,8,0,0,1,8-8H80v8a8,8,0,0,0,16,0V64h64v8a8,8,0,0,0,16,0V64h40a8,8,0,0,1,8,8Z"
-                  ></path>
-                </svg>
+              <span class="app-menu__label">Dark mode</span>
+              <span class="app-menu__switch" aria-hidden="true">
+                <span></span>
               </span>
-              <span class="auth-welcome-art__spark">&#10022;</span>
-            </div>
-            <h1 id="auth-panel-title" class="auth-panel__title">
-              Bulk posting, minus the busywork.
-            </h1>
-            <p
-              id="auth-status-message"
-              class="auth-panel__summary"
-              aria-live="polite"
+            </button>
+            <a
+              href="https://www.postika.softwrhq.com/downloads"
+              class="app-menu__item app-menu__download"
+              target="_blank"
+              rel="noopener noreferrer"
             >
-              Save your posts and listings, choose where to share them, and
-              let Postika post them for you.
-            </p>
-            <div id="auth-benefits" class="auth-benefits">
-              <p class="auth-benefits__label">Reach more people in less time</p>
-              <ul>
-                <li>
-                  <span class="auth-benefits__icon" aria-hidden="true">
-                    <svg
-                      xmlns="http://www.w3.org/2000/svg"
-                      width="32"
-                      height="32"
-                      fill="currentColor"
-                      viewBox="0 0 256 256"
-                    >
-                      <path
-                        d="M216,48H176V40a24,24,0,0,0-24-24H104A24,24,0,0,0,80,40v8H40A24,24,0,0,0,16,72V200a24,24,0,0,0,24,24H216a24,24,0,0,0,24-24V72A24,24,0,0,0,216,48ZM96,40a8,8,0,0,1,8-8h48a8,8,0,0,1,8,8v8H96ZM224,200a8,8,0,0,1-8,8H40a8,8,0,0,1-8-8V72a8,8,0,0,1,8-8H80v8a8,8,0,0,0,16,0V64h64v8a8,8,0,0,0,16,0V64h40a8,8,0,0,1,8,8Z"
-                      ></path>
-                    </svg>
-                  </span>
-                  <span>
-                    <strong>Bulk-post to Facebook Groups</strong>
-                    <small
-                      >Choose your posts and groups. Postika shares them one at a
-                      time.</small
-                    >
-                  </span>
-                </li>
-                <li>
-                  <span class="auth-benefits__icon" aria-hidden="true">
-                    <svg
-                      xmlns="http://www.w3.org/2000/svg"
-                      width="32"
-                      height="32"
-                      fill="currentColor"
-                      viewBox="0 0 256 256"
-                    >
-                      <path
-                        d="M216,32H40A16,16,0,0,0,24,48V224a8,8,0,0,0,12,7l92-52.57L220,231a8,8,0,0,0,12-7V48A16,16,0,0,0,216,32Zm0,178.22-84-48a8,8,0,0,0-7.94,0L40,210.22V48H216Z"
-                      ></path>
-                    </svg>
-                  </span>
-                  <span>
-                    <strong>Auto-post to Marketplace</strong>
-                    <small
-                      >Publish multiple listings without repetitive work.</small
-                    >
-                  </span>
-                </li>
-                <li>
-                  <span class="auth-benefits__icon" aria-hidden="true">
-                    <svg
-                      xmlns="http://www.w3.org/2000/svg"
-                      width="32"
-                      height="32"
-                      fill="currentColor"
-                      viewBox="0 0 256 256"
-                    >
-                      <path
-                        d="M128,24A104,104,0,1,0,232,128,104.11,104.11,0,0,0,128,24Zm0,192a88,88,0,1,1,88-88A88.1,88.1,0,0,1,128,216Zm64-88a8,8,0,0,1-8,8H128a8,8,0,0,1-8-8V72a8,8,0,0,1,16,0v48h48A8,8,0,0,1,192,128Z"
-                      ></path>
-                    </svg>
-                  </span>
-                  <span>
-                    <strong>Save once, reuse anytime</strong>
-                    <small
-                      >Keep proven posts and listings ready to publish
-                      again.</small
-                    >
-                  </span>
-                </li>
-              </ul>
-            </div>
-            <div id="auth-session-pill" class="auth-session-pill" hidden>
-              Google account <strong id="auth-user-email"></strong>
-            </div>
-            <div id="access-summary" class="access-summary" hidden>
-              <div class="access-summary__heading">
-                <div>
-                  <span class="access-summary__eyebrow">Your plan</span>
-                  <strong class="access-summary__title">Usage overview</strong>
-                </div>
-                <strong
-                  id="access-tier-badge"
-                  class="access-tier-badge"
-                ></strong>
-              </div>
-
-              <div id="access-usage-dashboard" class="access-usage-dashboard">
-                <section
-                  class="access-usage-group"
-                  aria-labelledby="saved-usage-title"
-                >
-                  <h2 id="saved-usage-title">Saved content</h2>
-                  <div class="access-meter">
-                    <div class="access-meter__heading">
-                      <span>Group posts</span>
-                      <strong id="saved-groups-value"></strong>
-                    </div>
-                    <div
-                      id="saved-groups-meter"
-                      class="access-meter__track"
-                      role="progressbar"
-                      aria-label="Saved group posts"
-                    >
-                      <span class="access-meter__fill"></span>
-                    </div>
-                  </div>
-                  <div class="access-meter">
-                    <div class="access-meter__heading">
-                      <span>Marketplace listings</span>
-                      <strong id="saved-marketplace-value"></strong>
-                    </div>
-                    <div
-                      id="saved-marketplace-meter"
-                      class="access-meter__track"
-                      role="progressbar"
-                      aria-label="Saved Marketplace listings"
-                    >
-                      <span class="access-meter__fill"></span>
-                    </div>
-                  </div>
-                </section>
-
-                <section
-                  class="access-usage-group"
-                  aria-labelledby="daily-usage-title"
-                >
-                  <h2 id="daily-usage-title">Published today</h2>
-                  <div class="access-meter">
-                    <div class="access-meter__heading">
-                      <span>Group posts</span>
-                      <strong id="daily-groups-value"></strong>
-                    </div>
-                    <div
-                      id="daily-groups-meter"
-                      class="access-meter__track"
-                      role="progressbar"
-                      aria-label="Group posts published today"
-                    >
-                      <span class="access-meter__fill"></span>
-                    </div>
-                  </div>
-                  <div class="access-meter">
-                    <div class="access-meter__heading">
-                      <span>Marketplace listings</span>
-                      <strong id="daily-marketplace-value"></strong>
-                    </div>
-                    <div
-                      id="daily-marketplace-meter"
-                      class="access-meter__track"
-                      role="progressbar"
-                      aria-label="Marketplace listings published today"
-                    >
-                      <span class="access-meter__fill"></span>
-                    </div>
-                  </div>
-                </section>
-              </div>
-
-              <div id="access-pro-summary" class="access-pro-summary" hidden>
-                <span class="access-pro-summary__icon" aria-hidden="true"
-                  >&#10022;</span
-                >
-                <div>
-                  <strong>Everything is unlocked</strong>
-                  <span>Save and publish without account limits.</span>
-                </div>
-                <ul aria-label="Pro benefits">
-                  <li>Unlimited saved content</li>
-                  <li>Unlimited daily publishing</li>
-                </ul>
-              </div>
-
-              <p id="access-reset-message" class="access-summary__reset" hidden>
-                <svg
-                  xmlns="http://www.w3.org/2000/svg"
-                  width="32"
-                  height="32"
-                  fill="currentColor"
-                  viewBox="0 0 256 256"
-                  aria-hidden="true"
-                >
-                  <path
-                    d="M128,24A104,104,0,1,0,232,128,104.11,104.11,0,0,0,128,24Zm0,192a88,88,0,1,1,88-88A88.1,88.1,0,0,1,128,216Zm64-88a8,8,0,0,1-8,8H128a8,8,0,0,1-8-8V72a8,8,0,0,1,16,0v48h48A8,8,0,0,1,192,128Z"
-                  ></path>
-                </svg>
-                <span id="access-reset-message-copy"></span>
-              </p>
-              <div id="access-upgrade" class="access-upgrade" hidden>
-                <span class="access-upgrade__icon" aria-hidden="true">
-                  <svg
-                    xmlns="http://www.w3.org/2000/svg"
-                    width="32"
-                    height="32"
-                    fill="currentColor"
-                    viewBox="0 0 256 256"
-                  >
-                    <path
-                      d="M235.33,116.72,139.28,20.66a16,16,0,0,0-22.56,0l-96,96.06a16,16,0,0,0,0,22.56l96.05,96.06h0a16,16,0,0,0,22.56,0l96.05-96.06a16,16,0,0,0,0-22.56ZM128,224h0L32,128,128,32,224,128Z"
-                    ></path>
-                  </svg>
-                </span>
-                <div class="access-upgrade__copy">
-                  <strong>Do more with Pro</strong>
-                  <span>Unlimited saves and daily publishing.</span>
-                </div>
-                <div class="access-upgrade__actions">
-                  <a
-                    href="https://wa.me/254718448461?text=Hi%20Haron%2C%20I%20would%20like%20to%20upgrade%20Postika%20to%20Pro."
-                    target="_blank"
-                    rel="noopener noreferrer"
-                  >
-                    Upgrade on WhatsApp
-                  </a>
-                  <a
-                    href="mailto:haronkibetrutoh@gmail.com?subject=Postika%20Pro%20upgrade"
-                  >
-                    Email instead
-                  </a>
-                </div>
-              </div>
-            </div>
-            <div class="auth-panel__actions">
-              <button type="button" id="auth-login-btn" hidden class="button-89">
-                <span class="auth-login-btn__icon" aria-hidden="true">
-                  <svg
-                    xmlns="http://www.w3.org/2000/svg"
-                    width="32"
-                    height="32"
-                    fill="#000000"
-                    viewBox="0 0 256 256"
-                  >
-                    <path
-                      d="M224,128a96,96,0,1,1-21.95-61.09,8,8,0,1,1-12.33,10.18A80,80,0,1,0,207.6,136H128a8,8,0,0,1,0-16h88A8,8,0,0,1,224,128Z"
-                    ></path>
-                  </svg>
-                </span>
-                <span>Continue with Google</span>
-              </button>
-              <button
-                type="button"
-                id="auth-logout-btn"
-                class="auth-ghost-btn button-89"
-                hidden
-              >
-                Sign out
-              </button>
-            </div>
-            <p id="auth-signin-note" class="auth-signin-note">
               <svg
-                xmlns="http://www.w3.org/2000/svg"
-                width="32"
-                height="32"
-                fill="currentColor"
-                viewBox="0 0 256 256"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+                stroke-linecap="round"
+                stroke-linejoin="round"
                 aria-hidden="true"
               >
-                <path
-                  d="M208,80H176V56a48,48,0,0,0-96,0V80H48A16,16,0,0,0,32,96V208a16,16,0,0,0,16,16H208a16,16,0,0,0,16-16V96A16,16,0,0,0,208,80ZM96,56a32,32,0,0,1,64,0V80H96ZM208,208H48V96H208V208Zm-72-56a8,8,0,0,1-16,0V128a8,8,0,0,1,16,0Z"
-                ></path>
+                <path d="M12 3v12m0 0 4-4m-4 4-4-4M5 18v3h14v-3" />
               </svg>
-              Secure Google sign-in. No new password required.
-            </p>
+              <span class="app-menu__label">Download desktop app</span>
+            </a>
+            <a
+              href="https://wa.me/254718448461?text=Hi%2C%20I%20have%20a%20question%20about%20Postika"
+              class="app-menu__item app-menu__whatsapp"
+              target="_blank"
+              rel="noopener noreferrer"
+            >
+              WhatsApp developer
+            </a>
+            <a
+              href="mailto:haronkibetrutoh@gmail.com?subject=Postika%20question"
+              class="app-menu__item app-menu__email"
+            >
+              Email developer
+            </a>
+          </section>
+        </div>
+        <div class="language-picker">
+          <button
+            type="button"
+            id="language-trigger"
+            class="language-trigger"
+            aria-haspopup="listbox"
+            aria-expanded="false"
+            aria-controls="language-menu"
+          >
+            <span id="language-flag" aria-hidden="true">🇺🇸</span>
+            <span id="language-name">English</span>
+            <svg viewBox="0 0 256 256" aria-hidden="true">
+              <path
+                d="M213.66,101.66l-80,80a8,8,0,0,1-11.32,0l-80-80A8,8,0,0,1,53.66,90.34L128,164.69l74.34-74.35a8,8,0,0,1,11.32,11.32Z"
+              />
+            </svg>
+          </button>
+          <div id="language-menu" class="language-menu" hidden>
+            <label class="language-search">
+              <svg viewBox="0 0 20 20" fill="none" aria-hidden="true">
+                <circle cx="8.5" cy="8.5" r="5.5" />
+                <path d="m13 13 4 4" />
+              </svg>
+              <input
+                id="language-search"
+                type="search"
+                role="combobox"
+                autocomplete="off"
+                aria-label="Search languages"
+                aria-autocomplete="list"
+                aria-expanded="false"
+                aria-controls="language-options"
+                placeholder="Search languages…"
+              />
+            </label>
+            <p id="language-menu-heading">All languages</p>
+            <div
+              id="language-options"
+              role="listbox"
+              aria-label="All languages"
+            ></div>
+            <div id="language-empty" class="language-empty" hidden>
+              <strong>No languages found</strong>
+              <span>Try a different search.</span>
+            </div>
           </div>
         </div>
-      </section>
-
-      <form id="create-form" class="workflow" hidden>
-        <div class="marketplace-posting-preferences-card watermark-settings-card">
-          <details id="watermark-settings" class="watermark-settings card-accordion" name="workflow-cards">
-            <summary class="card-accordion__summary">
-              <span class="card-accordion__icon" aria-hidden="true">
-                <svg viewBox="0 0 256 256" fill="currentColor">
-                  <path d="M213.66,101.66l-80,80a8,8,0,0,1-11.32,0l-80-80A8,8,0,0,1,53.66,90.34L128,164.69l74.34-74.35a8,8,0,0,1,11.32,11.32Z"></path>
-                </svg>
-              </span>
-              <span>
-                <strong>Image watermarks</strong>
-                <small>Your branding on group and Marketplace photos</small>
-              </span>
-            </summary>
-            <div class="card-accordion__content">
-              <label class="toggle-row" for="watermark-enabled">
-                <span class="toggle-row__copy">
-                  <strong>Add watermarks when posting</strong>
-                  <small>Use the same watermark for group posts and Marketplace listings.</small>
-                </span>
-                <input id="watermark-enabled" type="checkbox" />
-              </label>
-              <fieldset disabled>
-                <legend>Watermark appearance</legend>
-                <div class="field">
-                  <label for="watermark-text">Watermark text</label>
-                  <input id="watermark-text" class="marketplace-text-input" type="text" maxlength="200" placeholder="Your business name or contact details" />
-                </div>
-                <div class="watermark-settings__grid">
-                  <div class="field">
-                    <label for="watermark-position">Position</label>
-                    <select id="watermark-position" class="marketplace-text-input">
-                      <option value="top">Top</option>
-                      <option value="center">Center</option>
-                      <option value="bottom" selected>Bottom</option>
-                    </select>
-                  </div>
-                  <div class="field">
-                    <label for="watermark-height">Height (% of image)</label>
-                    <input id="watermark-height" class="marketplace-text-input" type="number" min="1" max="50" step="1" value="10" />
-                  </div>
-                  <div class="field">
-                    <label for="watermark-background-color">Background color</label>
-                    <div class="watermark-settings__color-control">
-                      <button type="button" class="watermark-settings__swatch" data-color-target="watermark-background-color" aria-label="Choose watermark background color" aria-expanded="false" aria-controls="watermark-color-picker"></button>
-                      <input id="watermark-background-color" class="marketplace-text-input" type="text" value="#000000" maxlength="7" pattern="#[0-9a-fA-F]{6}" spellcheck="false" aria-label="Background hex color" />
-                    </div>
-                  </div>
-                  <div class="field">
-                    <label for="watermark-text-color">Text color</label>
-                    <div class="watermark-settings__color-control">
-                      <button type="button" class="watermark-settings__swatch" data-color-target="watermark-text-color" aria-label="Choose watermark text color" aria-expanded="false" aria-controls="watermark-color-picker"></button>
-                      <input id="watermark-text-color" class="marketplace-text-input" type="text" value="#ffffff" maxlength="7" pattern="#[0-9a-fA-F]{6}" spellcheck="false" aria-label="Text hex color" />
-                    </div>
-                  </div>
-                  <div id="watermark-color-picker" class="watermark-settings__picker" role="group" aria-labelledby="watermark-color-picker-title" hidden>
-                    <div class="watermark-settings__picker-heading">
-                      <strong id="watermark-color-picker-title">Choose color</strong>
-                      <button type="button" id="watermark-color-picker-close" class="watermark-settings__picker-close" aria-label="Close color picker">×</button>
-                    </div>
-                    <label class="watermark-settings__channel" for="watermark-color-red"><span>Red</span><input id="watermark-color-red" type="range" min="0" max="255" data-color-channel="0" /><output for="watermark-color-red">0</output></label>
-                    <label class="watermark-settings__channel" for="watermark-color-green"><span>Green</span><input id="watermark-color-green" type="range" min="0" max="255" data-color-channel="1" /><output for="watermark-color-green">0</output></label>
-                    <label class="watermark-settings__channel" for="watermark-color-blue"><span>Blue</span><input id="watermark-color-blue" type="range" min="0" max="255" data-color-channel="2" /><output for="watermark-color-blue">0</output></label>
-                    <p class="marketplace-field__hint">Adjust the sliders or enter a hex color above.</p>
-                  </div>
-                </div>
-              </fieldset>
-              <div class="field">
-                <span class="marketplace-field__label">Sample preview</span>
-                <canvas width="600" height="360" role="img" aria-label="Sample watermark preview"></canvas>
-                <p class="marketplace-field__hint">Text automatically fits the image width. Height scales with each photo.</p>
-              </div>
-              <p class="section-note">Saved originals stay unchanged. Settings apply the next time you start posting.</p>
-              <p class="marketplace-field__hint" role="status" aria-live="polite"></p>
-            </div>
-          </details>
-        </div>
-        <nav
-          class="workspace-tabs"
-          aria-label="Extension sections"
-          role="tablist"
-        >
-          <button
-            type="button"
-            id="groups-tab"
-            class="workspace-tab workspace-tab--active"
-            role="tab"
-            aria-selected="true"
-            aria-controls="groups-tab-panel"
-          >
-            Groups
-          </button>
-          <button
-            type="button"
-            id="marketplace-tab"
-            class="workspace-tab"
-            role="tab"
-            aria-selected="false"
-            aria-controls="marketplace-tab-panel"
-            tabindex="-1"
-          >
-            Marketplace
-          </button>
-        </nav>
-
+      </header>
+      <form id="create-form" class="workflow">
         <div
-          id="groups-tab-panel"
-          class="tab-panel groups-tab-panel"
-          role="tabpanel"
-          aria-labelledby="groups-tab"
+          id="groups-workflow"
+          class="groups-workflow"
+          aria-label="Group posting"
         >
-          <section class="workflow-card panel-section">
-            <details id="reusable-posts-card" class="card-accordion" name="workflow-cards">
-              <summary class="card-accordion__summary">
-                <span class="card-accordion__icon" aria-hidden="true">
-                  <svg viewBox="0 0 256 256" fill="currentColor"><path d="M213.66,101.66l-80,80a8,8,0,0,1-11.32,0l-80-80A8,8,0,0,1,53.66,90.34L128,164.69l74.34-74.35a8,8,0,0,1,11.32,11.32Z"></path></svg>
-                </span>
-                <span><strong>Reusable posts</strong><small>Write, save and choose posts to share</small></span>
-              </summary>
-              <div class="card-accordion__content">
-                <p class="section-note">
-              Write a post, add photos if you want, then click Save. Select the
-              posts you want to share. Postika uses them in order, one per group,
-              then starts again from the first selected post. Groups follow the
-              order you select them, repeating until your chosen post limit is reached.
-            </p>
+          <nav class="posting-steps" aria-label="Posting steps">
+            <button type="button" data-posting-step="1" aria-current="step">
+              <span>1</span><strong>Create post</strong>
+            </button>
+            <button type="button" data-posting-step="2" disabled>
+              <span>2</span><strong>Select groups</strong>
+            </button>
+            <button type="button" data-posting-step="3" disabled>
+              <span>3</span><strong>Review &amp; post</strong>
+            </button>
+          </nav>
+          <section
+            id="posting-step-1"
+            class="posting-step"
+            aria-labelledby="posting-step-heading-1"
+          >
+            <header class="posting-step-heading">
+              <small>Step 1 of 3</small>
+              <h2 id="posting-step-heading-1" tabindex="-1">
+                Create your post
+              </h2>
+            </header>
 
-            <div class="prepared-post-editor">
+            <div class="post-editor">
               <div class="field">
-                <label for="post-body-input">Post text</label>
-                <textarea
-                  id="post-body-input"
-                  name="post-body"
-                  rows="7"
-                  placeholder="Write what you want to share..."
-                ></textarea>
+                <div class="rich-text-frame">
+                  <div
+                    class="rich-text-toolbar"
+                    role="toolbar"
+                    aria-label="Text formatting"
+                  >
+                    <button
+                      type="button"
+                      data-history="undo"
+                      aria-label="Undo"
+                      title="Undo"
+                      aria-keyshortcuts="Control+Z Meta+Z"
+                      disabled
+                    >
+                      <svg
+                        aria-hidden="true"
+                        viewBox="0 0 256 256"
+                        fill="currentColor"
+                      >
+                        <path
+                          d="M232 144a64.07 64.07 0 0 1-64 64H80a8 8 0 0 1 0-16h88a48 48 0 0 0 0-96H51.31l34.35 34.34a8 8 0 0 1-11.32 11.32l-48-48a8 8 0 0 1 0-11.32l48-48a8 8 0 0 1 11.32 11.32L51.31 80H168a64.07 64.07 0 0 1 64 64Z"
+                        />
+                      </svg>
+                    </button>
+                    <button
+                      type="button"
+                      data-history="redo"
+                      aria-label="Redo"
+                      title="Redo"
+                      aria-keyshortcuts="Control+Shift+Z Meta+Shift+Z Control+Y"
+                      disabled
+                    >
+                      <svg
+                        aria-hidden="true"
+                        viewBox="0 0 256 256"
+                        fill="currentColor"
+                      >
+                        <path
+                          d="m170.34 130.34 34.35-34.34H88a48 48 0 0 0 0 96h88a8 8 0 0 1 0 16H88a64 64 0 0 1 0-128h116.69l-34.35-34.34a8 8 0 0 1 11.32-11.32l48 48a8 8 0 0 1 0 11.32l-48 48a8 8 0 0 1-11.32-11.32Z"
+                        />
+                      </svg>
+                    </button>
+                    <button
+                      type="button"
+                      data-format="bold"
+                      aria-label="Bold"
+                      title="Bold"
+                      aria-pressed="false"
+                    >
+                      <svg
+                        class="iconoir-icon"
+                        aria-hidden="true"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                      >
+                        <path
+                          d="M12 11.67H8m4 0s3.33 0 3.33-3.34S12 5 12 5H8.6a.6.6 0 0 0-.6.6v12.8c0 .33.27.6.6.6H12s4 0 4-3.67-4-3.66-4-3.66Z"
+                        />
+                      </svg>
+                    </button>
+                    <button
+                      type="button"
+                      data-format="italic"
+                      aria-label="Italic"
+                      title="Italic"
+                      aria-pressed="false"
+                    >
+                      <svg
+                        class="iconoir-icon"
+                        aria-hidden="true"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                      >
+                        <path d="M11 5h6m-3 0-4 14m-3 0h6" />
+                      </svg>
+                    </button>
+                    <details class="rich-text-toolbar__more">
+                      <summary class="rich-text-toolbar__more-trigger">
+                        <span id="rich-text-more-label">More formatting</span>
+                        <svg viewBox="0 0 24 24" aria-hidden="true">
+                          <path d="m6 9 6 6 6-6" />
+                        </svg>
+                      </summary>
+                      <div class="rich-text-toolbar__more-options">
+                        <button
+                          type="button"
+                          data-format="h1"
+                          aria-label="Heading 1"
+                          title="Heading 1"
+                          aria-pressed="false"
+                        >
+                          <svg
+                            aria-hidden="true"
+                            viewBox="0 0 256 256"
+                            fill="currentColor"
+                          >
+                            <path
+                              d="M152 56v120a8 8 0 0 1-16 0v-52H48v52a8 8 0 0 1-16 0V56a8 8 0 0 1 16 0v52h88V56a8 8 0 0 1 16 0Zm75.77 49a8 8 0 0 0-8.21.39l-24 16a8 8 0 1 0 8.88 13.32L216 127v81a8 8 0 0 0 16 0V112a8 8 0 0 0-4.23-7Z"
+                            />
+                          </svg>
+                        </button>
+                        <button
+                          type="button"
+                          data-format="h2"
+                          aria-label="Heading 2"
+                          title="Heading 2"
+                          aria-pressed="false"
+                        >
+                          <svg
+                            aria-hidden="true"
+                            viewBox="0 0 256 256"
+                            fill="currentColor"
+                          >
+                            <path
+                              d="M152 56v120a8 8 0 0 1-16 0v-52H48v52a8 8 0 0 1-16 0V56a8 8 0 0 1 16 0v52h88V56a8 8 0 0 1 16 0Zm88 144h-32l33.55-44.74a32 32 0 1 0-55.73-29.93 8 8 0 1 0 15.08 5.34 16.28 16.28 0 0 1 2.32-4.3 16 16 0 1 1 25.54 19.27L185.6 203.2A8 8 0 0 0 192 216h48a8 8 0 0 0 0-16Z"
+                            />
+                          </svg>
+                        </button>
+                        <button
+                          type="button"
+                          data-format="unordered-list"
+                          aria-label="Bulleted list"
+                          title="Bulleted list"
+                          aria-pressed="false"
+                        >
+                          <svg
+                            aria-hidden="true"
+                            viewBox="0 0 256 256"
+                            fill="currentColor"
+                          >
+                            <path
+                              d="M80 64a8 8 0 0 1 8-8h128a8 8 0 0 1 0 16H88a8 8 0 0 1-8-8Zm136 56H88a8 8 0 0 0 0 16h128a8 8 0 0 0 0-16Zm0 64H88a8 8 0 0 0 0 16h128a8 8 0 0 0 0-16ZM44 52a12 12 0 1 0 12 12 12 12 0 0 0-12-12Zm0 64a12 12 0 1 0 12 12 12 12 0 0 0-12-12Zm0 64a12 12 0 1 0 12 12 12 12 0 0 0-12-12Z"
+                            />
+                          </svg>
+                        </button>
+                        <button
+                          type="button"
+                          data-format="ordered-list"
+                          aria-label="Numbered list"
+                          title="Numbered list"
+                          aria-pressed="false"
+                        >
+                          <svg
+                            aria-hidden="true"
+                            viewBox="0 0 256 256"
+                            fill="currentColor"
+                          >
+                            <path
+                              d="M224 128a8 8 0 0 1-8 8H104a8 8 0 0 1 0-16h112a8 8 0 0 1 8 8ZM104 72h112a8 8 0 0 0 0-16H104a8 8 0 0 0 0 16Zm112 112H104a8 8 0 0 0 0 16h112a8 8 0 0 0 0-16ZM43.58 55.16 48 52.94V104a8 8 0 0 0 16 0V40a8 8 0 0 0-11.58-7.16l-16 8a8 8 0 0 0 7.16 14.32ZM79.77 156.72a23.73 23.73 0 0 0-9.6-15.95 24.86 24.86 0 0 0-34.11 4.7 23.63 23.63 0 0 0-3.57 6.46 8 8 0 1 0 15 5.47 7.84 7.84 0 0 1 1.18-2.13 8.76 8.76 0 0 1 12-1.59 7.91 7.91 0 0 1 3.26 5.32 7.64 7.64 0 0 1-1.57 5.78 1 1 0 0 0-.08.11l-28.69 38.32A8 8 0 0 0 40 216h32a8 8 0 0 0 0-16H56l19.08-25.53a23.47 23.47 0 0 0 4.69-17.75Z"
+                            />
+                          </svg>
+                        </button>
+                        <button
+                          type="button"
+                          data-format="quote"
+                          aria-label="Quote"
+                          title="Quote"
+                          aria-pressed="false"
+                        >
+                          <svg
+                            aria-hidden="true"
+                            viewBox="0 0 256 256"
+                            fill="currentColor"
+                          >
+                            <path
+                              d="M100 56H40a16 16 0 0 0-16 16v64a16 16 0 0 0 16 16h60v8a32 32 0 0 1-32 32 8 8 0 0 0 0 16 48.05 48.05 0 0 0 48-48V72a16 16 0 0 0-16-16Zm0 80H40V72h60Zm116-80h-60a16 16 0 0 0-16 16v64a16 16 0 0 0 16 16h60v8a32 32 0 0 1-32 32 8 8 0 0 0 0 16 48.05 48.05 0 0 0 48-48V72a16 16 0 0 0-16-16Zm0 80h-60V72h60Z"
+                            />
+                          </svg>
+                        </button>
+                      </div>
+                    </details>
+                  </div>
+                  <div class="rich-text-surface">
+                    <div
+                      id="post-body-input"
+                      class="rich-text-editor"
+                      contenteditable="true"
+                      role="textbox"
+                      aria-multiline="true"
+                      aria-label="Post text"
+                      aria-placeholder="Write what you want to share..."
+                      data-placeholder="Write what you want to share..."
+                      tabindex="0"
+                    ></div>
+                  </div>
+                </div>
               </div>
 
               <div class="field">
@@ -503,62 +379,65 @@
                 />
                 <p
                   id="groups-photo-status"
-                  class="marketplace-photo-status"
+                  class="photo-status"
                   role="status"
                   aria-live="polite"
                   hidden
                 ></p>
               </div>
 
-              <div id="image-preview-list" class="image-preview-list">
-                <div class="empty-state">No images selected.</div>
-              </div>
-
-              <div class="prepared-post-editor__actions">
-                <button type="button" id="cancel-post-edit-btn" hidden class="button-89">
-                  Cancel
-                </button>
-                <button type="button" id="save-prepared-post-btn" class="button-89">
-                  Save
-                </button>
-              </div>
-            </div>
-
-            <div class="prepared-posts-toolbar">
-              <div id="prepared-posts-count" class="selection-count">
-                0 reusable posts
-              </div>
-              <label
-                id="prepared-posts-select-all"
-                class="select-all-toggle"
+              <div
+                id="image-preview-list"
+                class="image-preview-list"
+                role="group"
+                aria-label="Images"
                 hidden
-              >
-                <input
-                  type="checkbox"
-                  id="prepared-posts-select-all-checkbox"
-                />
-                <span>Select all</span>
-              </label>
+              ></div>
             </div>
-            <div id="prepared-posts-list" class="empty-state">
-              Add your first reusable post above.
-            </div>
-              </div>
-            </details>
-          </section>
 
-          <section class="workflow-card panel-section">
-            <details id="groups-card" class="card-accordion" name="workflow-cards">
-              <summary class="card-accordion__summary">
-                <span class="card-accordion__icon" aria-hidden="true">
-                  <svg viewBox="0 0 256 256" fill="currentColor"><path d="M213.66,101.66l-80,80a8,8,0,0,1-11.32,0l-80-80A8,8,0,0,1,53.66,90.34L128,164.69l74.34-74.35a8,8,0,0,1,11.32,11.32Z"></path></svg>
-                </span>
-                <span><strong>Groups</strong><small id="groups-card-summary">Find and select the groups you want to post to</small></span>
-              </summary>
-              <div class="card-accordion__content">
-                <button type="button" id="load-groups-btn" class="button-89">Find my groups</button>
+            <footer class="step-actions step-actions--stacked">
+              <p
+                id="compose-next-guidance"
+                class="step-action-guidance"
+                role="status"
+                aria-live="polite"
+                hidden
+              ></p>
+              <button
+                type="button"
+                id="compose-next-btn"
+                class="button-89"
+                aria-describedby="compose-next-guidance"
+                disabled
+              >
+                Next: select groups
+              </button>
+            </footer>
+          </section>
+          <section
+            id="posting-step-2"
+            class="posting-step"
+            aria-labelledby="posting-step-heading-2"
+            hidden
+          >
+            <header class="posting-step-heading">
+              <small>Step 2 of 3</small>
+              <h2 id="posting-step-heading-2" tabindex="-1">
+                Select your groups
+              </h2>
+            </header>
+
+            <p id="groups-prerequisite" class="section-note">
+              Sign in to Facebook in a Chrome tab. Postika opens your
+              joined-groups page.
+            </p>
+            <button type="button" id="load-groups-btn" class="button-89">
+              Find my groups
+            </button>
             <div id="groups-status" class="status-bar" role="status">
-              <span id="groups-status-message">Click Find my groups, then select where you want to post.</span>
+              <span id="groups-status-message"
+                >Select the groups where you want to post.</span
+              >
               <span id="groups-status-count">0 loaded</span>
             </div>
             <label id="groups-select-all" class="select-all-toggle" hidden>
@@ -581,80 +460,87 @@
               0 groups selected
             </div>
             <div id="groups-list" class="empty-state">
-              Click Find my groups to see the groups you have joined.
+              Your groups will appear here.
             </div>
-              </div>
-            </details>
-          </section>
 
-          <section class="workflow-card panel-section group-comments-card">
-            <details id="group-comments-card" class="card-accordion" name="workflow-cards">
-              <summary class="card-accordion__summary">
-                <span class="card-accordion__icon" aria-hidden="true">
-                  <svg viewBox="0 0 256 256" fill="currentColor"><path d="M213.66,101.66l-80,80a8,8,0,0,1-11.32,0l-80-80A8,8,0,0,1,53.66,90.34L128,164.69l74.34-74.35a8,8,0,0,1,11.32,11.32Z"></path></svg>
-                </span>
-                <span><strong>Comments on your posts</strong><small>Optional follow-up comments on published posts</small></span>
-              </summary>
-              <div class="card-accordion__content">
-                <label class="toggle-row group-comments-card__toggle checkbox-wrapper-14" for="group-comment-enabled-toggle">
-              <span class="toggle-row__copy">
-                <strong>Comment on each post</strong>
-                <small>Automatically add one of your saved comments to each published post.</small>
-              </span>
-              <input
-                type="checkbox"
-                id="group-comment-enabled-toggle"
-                class="switch"
-                name="group-comment-enabled"
-                role="switch"
-                disabled
-              />
-            </label>
-            <div class="group-comments-card__rotation">
-              <span class="group-comments-card__rotation-icon" aria-hidden="true">↻</span>
-              <div>
-                <strong>Use a different comment on each post</strong>
-                <p>Use comment 1, then comment 2, and so on. Start again after the last comment. Blank comments are skipped.</p>
-              </div>
-              <span id="group-comment-options-count" class="group-comments-card__count"></span>
-            </div>
-            <div id="group-comment-options" class="group-comment-options"></div>
-            <button type="button" id="group-comment-add-btn" class="group-comment-button button-89">
-              <span aria-hidden="true">+</span> Add another comment
-            </button>
-            <p class="section-note" id="group-comment-note">
-              <span class="group-comments-card__notice">How comments work</span>
-              Postika first adds a comment on Facebook to set things up, then
-              continues posting and commenting automatically. Posts waiting for
-              group approval are skipped when adding comments.
+            <p id="groups-step-guidance" class="section-note" role="status">
+              Select at least one group to continue.
             </p>
-            <div class="group-comments-card__sync">
-              <span id="group-comment-sync-status" class="section-note" role="status">
-                Sign in to save comments to your account.
-              </span>
-              <button type="button" id="group-comment-retry-btn" class="group-comment-button button-89" hidden>Retry</button>
-            </div>
-              </div>
-            </details>
+            <footer class="step-actions">
+              <button
+                type="button"
+                data-posting-back="1"
+                class="button-89 button-89--secondary step-back"
+              >
+                Back</button
+              ><button
+                type="button"
+                id="groups-next-btn"
+                class="button-89"
+                disabled
+              >
+                Next: review post
+              </button>
+            </footer>
           </section>
-
-          <section class="workflow-card panel-section">
-            <details id="group-posting-settings-card" class="card-accordion" name="workflow-cards">
-              <summary class="card-accordion__summary">
-                <span class="card-accordion__icon" aria-hidden="true">
-                  <svg viewBox="0 0 256 256" fill="currentColor"><path d="M213.66,101.66l-80,80a8,8,0,0,1-11.32,0l-80-80A8,8,0,0,1,53.66,90.34L128,164.69l74.34-74.35a8,8,0,0,1,11.32,11.32Z"></path></svg>
-                </span>
-                <span><strong>Posting settings</strong><small>Wait times, AI rewriting and posting limits</small></span>
-              </summary>
-              <div class="card-accordion__content">
-                <div class="interval-card">
+          <section
+            id="posting-step-3"
+            class="posting-step"
+            aria-labelledby="posting-step-heading-3"
+            hidden
+          >
+            <header class="posting-step-heading">
+              <small>Step 3 of 3</small>
+              <h2 id="posting-step-heading-3" tabindex="-1">
+                Review &amp; post
+              </h2>
+            </header>
+            <div class="post-review">
+              <div class="review-summary">
+                <div class="review-summary__content">
+                  <h3>Your post</h3>
+                  <div
+                    id="review-post-summary"
+                    class="review-post-content"
+                    role="region"
+                    aria-label="Complete post text"
+                    tabindex="0"
+                  ></div>
+                  <small id="review-image-count"></small>
+                </div>
+                <button type="button" data-posting-back="1" class="review-edit">
+                  Edit post
+                </button>
+              </div>
+              <div class="review-summary">
+                <div class="review-summary__content">
+                  <h3>Groups</h3>
+                  <p id="review-groups-summary"></p>
+                  <ul
+                    id="review-groups-list"
+                    class="review-groups-list"
+                    aria-label="Selected groups"
+                    tabindex="0"
+                  ></ul>
+                </div>
+                <button type="button" data-posting-back="2" class="review-edit">
+                  Edit groups
+                </button>
+              </div>
+            </div>
+            <div class="interval-card">
               <div class="interval-card__heading">
                 <strong>Time between posts</strong>
-                <small>Postika chooses a different wait time within your range between posts.</small>
+                <small
+                  >Postika chooses a different wait time within your range
+                  between posts.</small
+                >
               </div>
               <div class="number-input-grid">
                 <div class="field">
-                  <label for="post-interval-min-input">Shortest wait (seconds)</label>
+                  <label for="post-interval-min-input"
+                    >Shortest wait (seconds)</label
+                  >
                   <div class="number-input-row">
                     <input
                       type="number"
@@ -668,7 +554,9 @@
                   </div>
                 </div>
                 <div class="field">
-                  <label for="post-interval-max-input">Longest wait (seconds)</label>
+                  <label for="post-interval-max-input"
+                    >Longest wait (seconds)</label
+                  >
                   <div class="number-input-row">
                     <input
                       type="number"
@@ -683,89 +571,62 @@
                 </div>
               </div>
               <p class="section-note">
-                Both waits must be at least 60 seconds. For example, 60 to 300 means a wait of 1 to 5 minutes.
+                Both waits must be at least 60 seconds. For example, 60 to 300
+                means a wait of 1 to 5 minutes.
               </p>
             </div>
-
-            <div class="field">
-              <label for="max-posts-input">Number of posts to submit</label>
-              <div class="number-input-row">
-                <input
-                  type="number"
-                  id="max-posts-input"
-                  name="max-posts"
-                  aria-describedby="max-posts-note"
-                  min="1"
-                  step="1"
-                  value="200"
-                  inputmode="numeric"
-                />
-              </div>
-              <p class="section-note" id="max-posts-note">
-                Posting stops after this many submissions are accepted. Posts
-                awaiting group approval also count.
-              </p>
-            </div>
-
-            <div class="field">
-              <label for="gemini-api-key-input">Gemini access key (for AI rewriting)</label>
-              <input
-                type="password"
-                id="gemini-api-key-input"
-                name="gemini-api-key"
-                placeholder="Paste your Gemini API key"
-                autocomplete="off"
-                spellcheck="false"
-              />
-              <p class="section-note">
-                Optional: enter your Gemini API key to let AI rewrite your posts.
-                The key is saved in this browser and sent to Gemini when rewriting.
-              </p>
-            </div>
-
-            <div class="field">
-              <label for="gemini-custom-prompt-input">
-                How should AI rewrite your text? (optional)
-              </label>
-              <textarea
-                id="gemini-custom-prompt-input"
-                name="gemini-custom-prompt"
-                rows="7"
-                placeholder="Example: Use a friendly Kenyan tone and emphasize delivery options."
-                spellcheck="true"
-              ></textarea>
-              <p class="section-note">
-                Tell Gemini the tone and style you want. Postika asks it to keep
-                your facts. These instructions
-                are saved in this browser.
-              </p>
-            </div>
-
-            <label class="toggle-row" for="gemini-rewrite-toggle">
-              <span class="toggle-row__copy">
-                <strong>Rewrite posts with AI</strong>
-                <small
-                  >Let Gemini rewrite your post text before sharing it. Requires
-                  a Gemini access key.</small
-                >
-              </span>
-              <input
-                type="checkbox"
-                id="gemini-rewrite-toggle"
-                name="gemini-rewrite-toggle"
-              />
-            </label>
-
-
-            <div id="gemini-status" class="status-bar" role="status">
-              <span id="gemini-status-message">AI rewriting is off.</span>
-              <span id="gemini-status-count">No key</span>
-            </div>
-
-            <button type="submit" id="start-posting-btn" disabled class="button-89">
-              Start Posting
-            </button>
-
+            <section
+              id="schedule-panel"
+              class="schedule-panel"
+              aria-labelledby="schedule-panel-heading"
+              hidden
+            >
+              <h3 id="schedule-panel-heading">Schedule your queue</h3>
+              <div
+                id="schedule-time-picker"
+                class="schedule-time-picker"
+                tabindex="-1"
+              ></div>
+              <p
+                id="schedule-timezone-note"
+                class="section-note schedule-panel__note"
+              ></p>
+            </section>
+            <footer class="step-actions">
+              <button
+                type="submit"
+                id="start-posting-btn"
+                class="button-89"
+                disabled
+              >
+                Post now
+              </button>
+              <button
+                type="button"
+                id="open-schedule-btn"
+                class="button-89 button-89--secondary"
+                disabled
+              >
+                Schedule
+              </button>
+              <button
+                type="button"
+                id="cancel-schedule-btn"
+                class="button-89 button-89--secondary"
+                hidden
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                id="confirm-schedule-btn"
+                class="button-89"
+                disabled
+                hidden
+              >
+                Confirm schedule
+              </button>
+            </footer>
             <div id="posting-progress" class="posting-progress" hidden>
               <div class="posting-progress__heading">
                 <p class="section-heading__eyebrow">Activity</p>
@@ -774,7 +635,14 @@
                 <span id="posting-progress-title">Posting progress</span>
                 <strong id="posting-progress-percent">0%</strong>
               </div>
-              <div class="posting-progress__bar" aria-hidden="true">
+              <div
+                class="posting-progress__bar"
+                role="progressbar"
+                aria-labelledby="posting-progress-title"
+                aria-valuemin="0"
+                aria-valuemax="100"
+                aria-valuenow="0"
+              >
                 <span id="posting-progress-bar"></span>
               </div>
               <div
@@ -844,1985 +712,58 @@
               <div
                 id="posting-progress-current"
                 class="posting-progress__current"
+                role="status"
+                aria-live="polite"
+                aria-atomic="true"
               >
                 Posting has not started.
               </div>
               <ol id="posting-progress-log" class="posting-progress__log"></ol>
               <div class="posting-progress__controls">
-                <button type="button" id="pause-posting-btn" hidden class="button-89">
+                <button
+                  type="button"
+                  id="pause-posting-btn"
+                  hidden
+                  class="button-89 button-89--secondary"
+                >
                   Pause
                 </button>
-                <button type="button" id="stop-posting-btn" hidden class="button-89 button-89--danger">
+                <button
+                  type="button"
+                  id="stop-posting-btn"
+                  hidden
+                  class="button-89 button-89--danger"
+                >
                   Stop
                 </button>
               </div>
             </div>
-              </div>
-            </details>
-          </section>
-        </div>
-
-        <div
-          id="marketplace-tab-panel"
-          class="tab-panel marketplace-tab-panel"
-          role="tabpanel"
-          aria-labelledby="marketplace-tab"
-          hidden
-        >
-          <section class="workflow-card marketplace-card marketplace-create-card">
-            <details id="marketplace-create-card" class="card-accordion" name="workflow-cards">
-              <summary class="card-accordion__summary">
-                <span class="card-accordion__icon" aria-hidden="true">
-                  <svg viewBox="0 0 256 256" fill="currentColor"><path d="M213.66,101.66l-80,80a8,8,0,0,1-11.32,0l-80-80A8,8,0,0,1,53.66,90.34L128,164.69l74.34-74.35a8,8,0,0,1,11.32,11.32Z"></path></svg>
-                </span>
-                <span><strong>Create a new listing</strong><small>Choose a listing type, add details and photos</small></span>
-              </summary>
-              <div class="card-accordion__content">
-                <div class="marketplace-field">
-              <span id="listing-type-label" class="marketplace-field__label">
-                Listing type
-              </span>
-              <div id="listing-type-select" class="custom-select">
-                <button
-                  type="button"
-                  id="listing-type-trigger"
-                  class="custom-select__trigger"
-                  aria-haspopup="listbox"
-                  aria-expanded="false"
-                  aria-labelledby="listing-type-label listing-type-value"
-                >
-                  <span
-                    id="listing-type-selected-icon"
-                    class="custom-select__selected-icon"
-                    aria-hidden="true"
-                  >
-                    <svg
-                      xmlns="http://www.w3.org/2000/svg"
-                      width="32"
-                      height="32"
-                      fill="currentColor"
-                      viewBox="0 0 256 256"
-                    >
-                      <path
-                        d="M224,128a8,8,0,0,1-8,8H136v80a8,8,0,0,1-16,0V136H40a8,8,0,0,1,0-16h80V40a8,8,0,0,1,16,0v80h80A8,8,0,0,1,224,128Z"
-                      ></path>
-                    </svg>
-                  </span>
-                  <span id="listing-type-value" class="custom-select__value">
-                    Select listing type
-                  </span>
-                  <span class="custom-select__chevron" aria-hidden="true"
-                    >⌄</span
-                  >
-                </button>
-
-                <div
-                  id="listing-type-options"
-                  class="custom-select__options"
-                  role="listbox"
-                  aria-labelledby="listing-type-label"
-                  hidden
-                >
-                  <div
-                    class="custom-select__option"
-                    role="option"
-                    aria-selected="false"
-                    tabindex="-1"
-                    data-value="item"
-                  >
-                    <span class="custom-select__option-icon" aria-hidden="true">
-                      <svg
-                        xmlns="http://www.w3.org/2000/svg"
-                        width="32"
-                        height="32"
-                        fill="currentColor"
-                        viewBox="0 0 256 256"
-                      >
-                        <path
-                          d="M216,40H40A16,16,0,0,0,24,56V200a16,16,0,0,0,16,16H216a16,16,0,0,0,16-16V56A16,16,0,0,0,216,40Zm0,16V72H40V56Zm0,144H40V88H216V200Zm-40-88a48,48,0,0,1-96,0,8,8,0,0,1,16,0,32,32,0,0,0,64,0,8,8,0,0,1,16,0Z"
-                        ></path>
-                      </svg>
-                    </span>
-                    <span class="custom-select__option-copy">
-                      <strong>Item for sale</strong>
-                      <small
-                        >Create a single listing for one or more items to
-                        sell.</small
-                      >
-                    </span>
-                    <span class="custom-select__check" aria-hidden="true"
-                      >✓</span
-                    >
-                  </div>
-                  <div
-                    class="custom-select__option"
-                    role="option"
-                    aria-selected="false"
-                    tabindex="-1"
-                    data-value="vehicle"
-                  >
-                    <span class="custom-select__option-icon" aria-hidden="true">
-                      <svg
-                        xmlns="http://www.w3.org/2000/svg"
-                        width="32"
-                        height="32"
-                        fill="currentColor"
-                        viewBox="0 0 256 256"
-                      >
-                        <path
-                          d="M240,104H229.2L201.42,41.5A16,16,0,0,0,186.8,32H69.2a16,16,0,0,0-14.62,9.5L26.8,104H16a8,8,0,0,0,0,16h8v80a16,16,0,0,0,16,16H64a16,16,0,0,0,16-16V184h96v16a16,16,0,0,0,16,16h24a16,16,0,0,0,16-16V120h8a8,8,0,0,0,0-16ZM69.2,48H186.8l24.89,56H44.31ZM64,200H40V184H64Zm128,0V184h24v16Zm24-32H40V120H216ZM56,144a8,8,0,0,1,8-8H80a8,8,0,0,1,0,16H64A8,8,0,0,1,56,144Zm112,0a8,8,0,0,1,8-8h16a8,8,0,0,1,0,16H176A8,8,0,0,1,168,144Z"
-                        ></path>
-                      </svg>
-                    </span>
-                    <span class="custom-select__option-copy">
-                      <strong>Vehicle for sale</strong>
-                      <small>Sell a car, truck or other type of vehicle.</small>
-                    </span>
-                    <span class="custom-select__check" aria-hidden="true"
-                      >✓</span
-                    >
-                  </div>
-                  <div
-                    class="custom-select__option"
-                    role="option"
-                    aria-selected="false"
-                    tabindex="-1"
-                    data-value="home"
-                  >
-                    <span class="custom-select__option-icon" aria-hidden="true">
-                      <svg
-                        xmlns="http://www.w3.org/2000/svg"
-                        width="32"
-                        height="32"
-                        fill="currentColor"
-                        viewBox="0 0 256 256"
-                      >
-                        <path
-                          d="M219.31,108.68l-80-80a16,16,0,0,0-22.62,0l-80,80A15.87,15.87,0,0,0,32,120v96a8,8,0,0,0,8,8h64a8,8,0,0,0,8-8V160h32v56a8,8,0,0,0,8,8h64a8,8,0,0,0,8-8V120A15.87,15.87,0,0,0,219.31,108.68ZM208,208H160V152a8,8,0,0,0-8-8H104a8,8,0,0,0-8,8v56H48V120l80-80,80,80Z"
-                        ></path>
-                      </svg>
-                    </span>
-                    <span class="custom-select__option-copy">
-                      <strong>Home for sale or rent</strong>
-                      <small>List a house or apartment for sale or rent.</small>
-                    </span>
-                    <span class="custom-select__check" aria-hidden="true"
-                      >✓</span
-                    >
-                  </div>
-                </div>
-                <input
-                  type="hidden"
-                  id="marketplace-listing-type-input"
-                  name="marketplace-listing-type"
-                  value=""
-                />
-              </div>
-              <p class="marketplace-field__hint">
-                Your selection will tailor the next steps and listing fields.
-              </p>
-            </div>
-
-            <div
-              id="marketplace-listing-fields"
-              class="marketplace-listing-fields"
-              hidden
-            >
-              <div
-                id="marketplace-photos-field"
-                class="marketplace-photos marketplace-photos--disabled"
-              >
-                <div class="marketplace-photos__heading">
-                  <strong>
-                    Photos · <span id="marketplace-photo-count">0</span> /
-                    <span id="marketplace-photo-limit">—</span>
-                  </strong>
-                  <span aria-hidden="true">-</span>
-                  <span id="marketplace-photo-guidance">
-                    Select a listing type first.
-                  </span>
-                </div>
-
-                <label
-                  id="marketplace-photo-dropzone"
-                  class="marketplace-photo-dropzone"
-                  for="marketplace-images-input"
-                  role="button"
-                  tabindex="0"
-                  aria-disabled="true"
-                >
-                  <span
-                    class="marketplace-photo-dropzone__icon"
-                    aria-hidden="true"
-                  >
-                    <svg
-                      xmlns="http://www.w3.org/2000/svg"
-                      width="32"
-                      height="32"
-                      fill="currentColor"
-                      viewBox="0 0 256 256"
-                    >
-                      <path
-                        d="M224,128a8,8,0,0,1-8,8H136v80a8,8,0,0,1-16,0V136H40a8,8,0,0,1,0-16h80V40a8,8,0,0,1,16,0v80h80A8,8,0,0,1,224,128Z"
-                      ></path>
-                    </svg>
-                  </span>
-                  <strong>Add photos</strong>
-                  <span>or drag and drop</span>
-                  <input
-                    type="file"
-                    id="marketplace-images-input"
-                    name="marketplace-images"
-                    accept="image/*"
-                    multiple
-                    disabled
-                  />
-                </label>
-
-                <p
-                  id="marketplace-photo-status"
-                  class="marketplace-photo-status"
-                  role="status"
-                  aria-live="polite"
-                  hidden
-                ></p>
-                <div
-                  id="marketplace-photo-previews"
-                  class="marketplace-photo-previews"
-                  hidden
-                ></div>
-              </div>
-
-              <div
-                id="marketplace-vehicle-type-field"
-                class="marketplace-field"
-                hidden
-              >
-                <span
-                  id="marketplace-vehicle-type-label"
-                  class="marketplace-field__label"
-                >
-                  Vehicle type
-                </span>
-                <div
-                  id="marketplace-vehicle-type-select"
-                  class="condition-select"
-                >
-                  <button
-                    type="button"
-                    id="marketplace-vehicle-type-trigger"
-                    class="condition-select__trigger"
-                    aria-haspopup="listbox"
-                    aria-expanded="false"
-                    aria-labelledby="marketplace-vehicle-type-label marketplace-vehicle-type-value"
-                  >
-                    <span
-                      id="marketplace-vehicle-type-value"
-                      class="condition-select__value"
-                    >
-                      Select vehicle type
-                    </span>
-                    <span class="condition-select__chevron" aria-hidden="true"
-                      >⌄</span
-                    >
-                  </button>
-                  <div
-                    id="marketplace-vehicle-type-options"
-                    class="condition-select__options"
-                    role="listbox"
-                    aria-labelledby="marketplace-vehicle-type-label"
-                    hidden
-                  >
-                    <div
-                      class="condition-select__option vehicle-type-select__option"
-                      role="option"
-                      aria-selected="false"
-                      tabindex="-1"
-                      data-value="car_truck"
-                    >
-                      <span>Car/Truck</span>
-                      <span class="condition-select__check" aria-hidden="true"
-                        >✓</span
-                      >
-                    </div>
-                    <div
-                      class="condition-select__option vehicle-type-select__option"
-                      role="option"
-                      aria-selected="false"
-                      tabindex="-1"
-                      data-value="motorcycle"
-                    >
-                      <span>Motorcycle</span>
-                      <span class="condition-select__check" aria-hidden="true"
-                        >✓</span
-                      >
-                    </div>
-                    <div
-                      class="condition-select__option vehicle-type-select__option"
-                      role="option"
-                      aria-selected="false"
-                      tabindex="-1"
-                      data-value="powersport"
-                    >
-                      <span>Powersport</span>
-                      <span class="condition-select__check" aria-hidden="true"
-                        >✓</span
-                      >
-                    </div>
-                    <div
-                      class="condition-select__option vehicle-type-select__option"
-                      role="option"
-                      aria-selected="false"
-                      tabindex="-1"
-                      data-value="rv_camper"
-                    >
-                      <span>RV/Camper</span>
-                      <span class="condition-select__check" aria-hidden="true"
-                        >✓</span
-                      >
-                    </div>
-                    <div
-                      class="condition-select__option vehicle-type-select__option"
-                      role="option"
-                      aria-selected="false"
-                      tabindex="-1"
-                      data-value="trailer"
-                    >
-                      <span>Trailer</span>
-                      <span class="condition-select__check" aria-hidden="true"
-                        >✓</span
-                      >
-                    </div>
-                    <div
-                      class="condition-select__option vehicle-type-select__option"
-                      role="option"
-                      aria-selected="false"
-                      tabindex="-1"
-                      data-value="boat"
-                    >
-                      <span>Boat</span>
-                      <span class="condition-select__check" aria-hidden="true"
-                        >✓</span
-                      >
-                    </div>
-                    <div
-                      class="condition-select__option vehicle-type-select__option"
-                      role="option"
-                      aria-selected="false"
-                      tabindex="-1"
-                      data-value="commercial_industrial"
-                    >
-                      <span>Commercial/Industrial</span>
-                      <span class="condition-select__check" aria-hidden="true"
-                        >✓</span
-                      >
-                    </div>
-                    <div
-                      class="condition-select__option vehicle-type-select__option"
-                      role="option"
-                      aria-selected="false"
-                      tabindex="-1"
-                      data-value="other"
-                    >
-                      <span>Other</span>
-                      <span class="condition-select__check" aria-hidden="true"
-                        >✓</span
-                      >
-                    </div>
-                  </div>
-                  <input
-                    type="hidden"
-                    id="marketplace-vehicle-type-input"
-                    name="marketplace-vehicle-type"
-                    value=""
-                  />
-                </div>
-              </div>
-
-              <div id="marketplace-year-field" class="marketplace-field" hidden>
-                <span
-                  id="marketplace-year-label"
-                  class="marketplace-field__label"
-                >
-                  Year
-                </span>
-                <div id="marketplace-year-select" class="condition-select">
-                  <button
-                    type="button"
-                    id="marketplace-year-trigger"
-                    class="condition-select__trigger"
-                    aria-haspopup="listbox"
-                    aria-expanded="false"
-                    aria-labelledby="marketplace-year-label marketplace-year-value"
-                  >
-                    <span
-                      id="marketplace-year-value"
-                      class="condition-select__value"
-                    >
-                      Select year
-                    </span>
-                    <span class="condition-select__chevron" aria-hidden="true"
-                      >⌄</span
-                    >
-                  </button>
-                  <div
-                    id="marketplace-year-options"
-                    class="condition-select__options"
-                    role="listbox"
-                    aria-labelledby="marketplace-year-label"
-                    hidden
-                  ></div>
-                  <input
-                    type="hidden"
-                    id="marketplace-year-input"
-                    name="marketplace-year"
-                    value=""
-                  />
-                </div>
-              </div>
-
-              <div
-                id="marketplace-vehicle-details-fields"
-                class="marketplace-vehicle-details-fields"
-                hidden
-              >
-                <div class="marketplace-field">
-                  <label
-                    for="marketplace-vehicle-make-input"
-                    class="marketplace-field__label"
-                  >
-                    Make
-                  </label>
-                  <input
-                    type="text"
-                    id="marketplace-vehicle-make-input"
-                    class="marketplace-text-input"
-                    name="marketplace-vehicle-make"
-                    placeholder="Enter vehicle make"
-                    autocomplete="off"
-                    spellcheck="false"
-                    aria-describedby="marketplace-vehicle-make-hint"
-                  />
-                  <span
-                    id="marketplace-vehicle-make-hint"
-                    class="marketplace-field__hint"
-                  >
-                    Enter the manufacturer name. It will be typed or matched to
-                    Facebook's available options for the current account.
-                  </span>
-                </div>
-
-                <div class="marketplace-field">
-                  <label
-                    for="marketplace-vehicle-model-input"
-                    class="marketplace-field__label"
-                  >
-                    Model
-                  </label>
-                  <input
-                    type="text"
-                    id="marketplace-vehicle-model-input"
-                    class="marketplace-text-input"
-                    name="marketplace-vehicle-model"
-                    placeholder="Enter vehicle model"
-                    autocomplete="off"
-                    spellcheck="false"
-                  />
-                </div>
-
-                <div
-                  id="marketplace-vehicle-mileage-field"
-                  class="marketplace-field"
-                >
-                  <label
-                    for="marketplace-vehicle-mileage-input"
-                    class="marketplace-field__label"
-                  >
-                    Mileage
-                  </label>
-                  <input
-                    type="text"
-                    id="marketplace-vehicle-mileage-input"
-                    class="marketplace-text-input"
-                    name="marketplace-vehicle-mileage"
-                    placeholder="Enter mileage"
-                    inputmode="numeric"
-                    pattern="[0-9]*"
-                    autocomplete="off"
-                    spellcheck="false"
-                    aria-describedby="marketplace-vehicle-mileage-hint"
-                  />
-                  <span
-                    id="marketplace-vehicle-mileage-hint"
-                    class="marketplace-field__hint"
-                  >
-                    Please add mileage between 300 and 1,000,000 kilometers.
-                  </span>
-                </div>
-
-                <div class="marketplace-field" data-vehicle-extra>
-                  <span
-                    id="marketplace-body-style-label"
-                    class="marketplace-field__label"
-                  >
-                    Body style
-                  </span>
-                  <div
-                    id="marketplace-body-style-select"
-                    class="condition-select"
-                  >
-                    <button
-                      type="button"
-                      id="marketplace-body-style-trigger"
-                      class="condition-select__trigger"
-                      aria-haspopup="listbox"
-                      aria-expanded="false"
-                      aria-labelledby="marketplace-body-style-label marketplace-body-style-value"
-                    >
-                      <span
-                        id="marketplace-body-style-value"
-                        class="condition-select__value"
-                      >
-                        Select body style
-                      </span>
-                      <span class="condition-select__chevron" aria-hidden="true"
-                        >⌄</span
-                      >
-                    </button>
-                    <div
-                      id="marketplace-body-style-options"
-                      class="condition-select__options"
-                      role="listbox"
-                      aria-labelledby="marketplace-body-style-label"
-                      hidden
-                    >
-                      <div
-                        class="condition-select__option body-style-select__option"
-                        role="option"
-                        aria-selected="false"
-                        tabindex="-1"
-                        data-value="coupe"
-                      >
-                        <span>Coupe / Coupé</span>
-                      </div>
-                      <div
-                        class="condition-select__option body-style-select__option"
-                        role="option"
-                        aria-selected="false"
-                        tabindex="-1"
-                        data-value="truck"
-                      >
-                        <span>Truck / Van</span>
-                      </div>
-                      <div
-                        class="condition-select__option body-style-select__option"
-                        role="option"
-                        aria-selected="false"
-                        tabindex="-1"
-                        data-value="sedan"
-                      >
-                        <span>Sedan / Saloon</span>
-                      </div>
-                      <div
-                        class="condition-select__option body-style-select__option"
-                        role="option"
-                        aria-selected="false"
-                        tabindex="-1"
-                        data-value="hatchback"
-                      >
-                        <span>Hatchback</span>
-                      </div>
-                      <div
-                        class="condition-select__option body-style-select__option"
-                        role="option"
-                        aria-selected="false"
-                        tabindex="-1"
-                        data-value="suv"
-                      >
-                        <span>SUV / 4×4</span>
-                      </div>
-                      <div
-                        class="condition-select__option body-style-select__option"
-                        role="option"
-                        aria-selected="false"
-                        tabindex="-1"
-                        data-value="convertible"
-                      >
-                        <span>Convertible</span>
-                      </div>
-                      <div
-                        class="condition-select__option body-style-select__option"
-                        role="option"
-                        aria-selected="false"
-                        tabindex="-1"
-                        data-value="wagon"
-                      >
-                        <span>Wagon / Estate</span>
-                      </div>
-                      <div
-                        class="condition-select__option body-style-select__option"
-                        role="option"
-                        aria-selected="false"
-                        tabindex="-1"
-                        data-value="minivan"
-                      >
-                        <span>Minivan / MPV</span>
-                      </div>
-                      <div
-                        class="condition-select__option body-style-select__option"
-                        role="option"
-                        aria-selected="false"
-                        tabindex="-1"
-                        data-value="small_car"
-                      >
-                        <span>Small Car</span>
-                      </div>
-                      <div
-                        class="condition-select__option body-style-select__option"
-                        role="option"
-                        aria-selected="false"
-                        tabindex="-1"
-                        data-value="other"
-                      >
-                        <span>Other</span>
-                      </div>
-                    </div>
-                    <input
-                      type="hidden"
-                      id="marketplace-body-style-input"
-                      name="marketplace-body-style"
-                      value=""
-                    />
-                  </div>
-                </div>
-
-                <label
-                  class="marketplace-boolean-row"
-                  for="marketplace-clean-title-input"
-                  data-vehicle-extra
-                >
-                  <span class="marketplace-boolean-row__copy">
-                    <strong>This vehicle has a clean title.</strong>
-                    <small>
-                      This vehicle has no significant damage or persistent
-                      problems.
-                    </small>
-                  </span>
-                  <input
-                    type="checkbox"
-                    id="marketplace-clean-title-input"
-                    name="marketplace-clean-title"
-                    value="true"
-                  />
-                  <span
-                    class="marketplace-boolean-row__control"
-                    aria-hidden="true"
-                  >
-                    <svg
-                      xmlns="http://www.w3.org/2000/svg"
-                      width="32"
-                      height="32"
-                      fill="currentColor"
-                      viewBox="0 0 256 256"
-                    >
-                      <path
-                        d="M229.66,77.66l-128,128a8,8,0,0,1-11.32,0l-56-56a8,8,0,0,1,11.32-11.32L96,188.69,218.34,66.34a8,8,0,0,1,11.32,11.32Z"
-                      ></path>
-                    </svg>
-                  </span>
-                </label>
-
-                <div class="marketplace-field" data-vehicle-extra>
-                  <span
-                    id="marketplace-vehicle-condition-label"
-                    class="marketplace-field__label"
-                  >
-                    Vehicle condition
-                  </span>
-                  <div
-                    id="marketplace-vehicle-condition-select"
-                    class="condition-select"
-                  >
-                    <button
-                      type="button"
-                      id="marketplace-vehicle-condition-trigger"
-                      class="condition-select__trigger"
-                      aria-haspopup="listbox"
-                      aria-expanded="false"
-                      aria-labelledby="marketplace-vehicle-condition-label marketplace-vehicle-condition-value"
-                    >
-                      <span
-                        id="marketplace-vehicle-condition-value"
-                        class="condition-select__value"
-                      >
-                        Select vehicle condition
-                      </span>
-                      <span class="condition-select__chevron" aria-hidden="true"
-                        >⌄</span
-                      >
-                    </button>
-                    <div
-                      id="marketplace-vehicle-condition-options"
-                      class="condition-select__options"
-                      role="listbox"
-                      aria-labelledby="marketplace-vehicle-condition-label"
-                      hidden
-                    >
-                      <div
-                        class="condition-select__option vehicle-condition-select__option"
-                        role="option"
-                        aria-selected="false"
-                        tabindex="-1"
-                        data-value="excellent"
-                      >
-                        <span>Excellent</span>
-                      </div>
-                      <div
-                        class="condition-select__option vehicle-condition-select__option"
-                        role="option"
-                        aria-selected="false"
-                        tabindex="-1"
-                        data-value="very_good"
-                      >
-                        <span>Very good</span>
-                      </div>
-                      <div
-                        class="condition-select__option vehicle-condition-select__option"
-                        role="option"
-                        aria-selected="false"
-                        tabindex="-1"
-                        data-value="good"
-                      >
-                        <span>Good</span>
-                      </div>
-                      <div
-                        class="condition-select__option vehicle-condition-select__option"
-                        role="option"
-                        aria-selected="false"
-                        tabindex="-1"
-                        data-value="fair"
-                      >
-                        <span>Fair</span>
-                      </div>
-                      <div
-                        class="condition-select__option vehicle-condition-select__option"
-                        role="option"
-                        aria-selected="false"
-                        tabindex="-1"
-                        data-value="poor"
-                      >
-                        <span>Poor</span>
-                      </div>
-                    </div>
-                    <input
-                      type="hidden"
-                      id="marketplace-vehicle-condition-input"
-                      name="marketplace-vehicle-condition"
-                      value=""
-                    />
-                  </div>
-                </div>
-
-                <div class="marketplace-field" data-vehicle-extra>
-                  <span
-                    id="marketplace-fuel-type-label"
-                    class="marketplace-field__label"
-                  >
-                    Fuel type
-                  </span>
-                  <div
-                    id="marketplace-fuel-type-select"
-                    class="condition-select"
-                  >
-                    <button
-                      type="button"
-                      id="marketplace-fuel-type-trigger"
-                      class="condition-select__trigger"
-                      aria-haspopup="listbox"
-                      aria-expanded="false"
-                      aria-labelledby="marketplace-fuel-type-label marketplace-fuel-type-value"
-                    >
-                      <span
-                        id="marketplace-fuel-type-value"
-                        class="condition-select__value"
-                      >
-                        Select fuel type
-                      </span>
-                      <span class="condition-select__chevron" aria-hidden="true"
-                        >⌄</span
-                      >
-                    </button>
-                    <div
-                      id="marketplace-fuel-type-options"
-                      class="condition-select__options"
-                      role="listbox"
-                      aria-labelledby="marketplace-fuel-type-label"
-                      hidden
-                    >
-                      <div
-                        class="condition-select__option fuel-type-select__option"
-                        role="option"
-                        aria-selected="false"
-                        tabindex="-1"
-                        data-value="diesel"
-                      >
-                        <span>Diesel</span>
-                      </div>
-                      <div
-                        class="condition-select__option fuel-type-select__option"
-                        role="option"
-                        aria-selected="false"
-                        tabindex="-1"
-                        data-value="electric"
-                      >
-                        <span>Electric</span>
-                      </div>
-                      <div
-                        class="condition-select__option fuel-type-select__option"
-                        role="option"
-                        aria-selected="false"
-                        tabindex="-1"
-                        data-value="gasoline"
-                      >
-                        <span>Gasoline</span>
-                      </div>
-                      <div
-                        class="condition-select__option fuel-type-select__option"
-                        role="option"
-                        aria-selected="false"
-                        tabindex="-1"
-                        data-value="flex"
-                      >
-                        <span>Flex</span>
-                      </div>
-                      <div
-                        class="condition-select__option fuel-type-select__option"
-                        role="option"
-                        aria-selected="false"
-                        tabindex="-1"
-                        data-value="hybrid"
-                      >
-                        <span>Hybrid</span>
-                      </div>
-                      <div
-                        class="condition-select__option fuel-type-select__option"
-                        role="option"
-                        aria-selected="false"
-                        tabindex="-1"
-                        data-value="petrol"
-                      >
-                        <span>Petrol</span>
-                      </div>
-                      <div
-                        class="condition-select__option fuel-type-select__option"
-                        role="option"
-                        aria-selected="false"
-                        tabindex="-1"
-                        data-value="plug_in_hybrid"
-                      >
-                        <span>Plug-in hybrid</span>
-                      </div>
-                      <div
-                        class="condition-select__option fuel-type-select__option"
-                        role="option"
-                        aria-selected="false"
-                        tabindex="-1"
-                        data-value="other"
-                      >
-                        <span>Other</span>
-                      </div>
-                    </div>
-                    <input
-                      type="hidden"
-                      id="marketplace-fuel-type-input"
-                      name="marketplace-fuel-type"
-                      value=""
-                    />
-                  </div>
-                </div>
-
-                <div class="marketplace-field" data-vehicle-extra>
-                  <span
-                    id="marketplace-transmission-label"
-                    class="marketplace-field__label"
-                  >
-                    Transmission
-                  </span>
-                  <div
-                    id="marketplace-transmission-select"
-                    class="condition-select"
-                  >
-                    <button
-                      type="button"
-                      id="marketplace-transmission-trigger"
-                      class="condition-select__trigger"
-                      aria-haspopup="listbox"
-                      aria-expanded="false"
-                      aria-labelledby="marketplace-transmission-label marketplace-transmission-value"
-                    >
-                      <span
-                        id="marketplace-transmission-value"
-                        class="condition-select__value"
-                      >
-                        Automatic transmission
-                      </span>
-                      <span class="condition-select__chevron" aria-hidden="true"
-                        >⌄</span
-                      >
-                    </button>
-                    <div
-                      id="marketplace-transmission-options"
-                      class="condition-select__options"
-                      role="listbox"
-                      aria-labelledby="marketplace-transmission-label"
-                      hidden
-                    >
-                      <div
-                        class="condition-select__option transmission-select__option"
-                        role="option"
-                        aria-selected="false"
-                        tabindex="-1"
-                        data-value="manual_transmission"
-                      >
-                        <span>Manual transmission</span>
-                      </div>
-                      <div
-                        class="condition-select__option transmission-select__option"
-                        role="option"
-                        aria-selected="true"
-                        tabindex="-1"
-                        data-value="automatic_transmission"
-                      >
-                        <span>Automatic transmission</span>
-                      </div>
-                    </div>
-                    <input
-                      type="hidden"
-                      id="marketplace-transmission-input"
-                      name="marketplace-transmission"
-                      value="automatic_transmission"
-                    />
-                  </div>
-                </div>
-
-                <div class="marketplace-field" data-vehicle-extra>
-                  <span
-                    id="marketplace-exterior-color-label"
-                    class="marketplace-field__label"
-                  >
-                    Exterior color
-                  </span>
-                  <div
-                    id="marketplace-exterior-color-select"
-                    class="condition-select"
-                  >
-                    <button
-                      type="button"
-                      id="marketplace-exterior-color-trigger"
-                      class="condition-select__trigger"
-                      aria-haspopup="listbox"
-                      aria-expanded="false"
-                      aria-labelledby="marketplace-exterior-color-label marketplace-exterior-color-value"
-                    >
-                      <span
-                        id="marketplace-exterior-color-value"
-                        class="condition-select__value"
-                      >
-                        Select exterior color
-                      </span>
-                      <span class="condition-select__chevron" aria-hidden="true"
-                        >⌄</span
-                      >
-                    </button>
-                    <div
-                      id="marketplace-exterior-color-options"
-                      class="condition-select__options"
-                      role="listbox"
-                      aria-labelledby="marketplace-exterior-color-label"
-                      hidden
-                    ></div>
-                    <input
-                      type="hidden"
-                      id="marketplace-exterior-color-input"
-                      name="marketplace-exterior-color"
-                      value=""
-                    />
-                  </div>
-                </div>
-
-                <div class="marketplace-field" data-vehicle-extra>
-                  <span
-                    id="marketplace-interior-color-label"
-                    class="marketplace-field__label"
-                  >
-                    Interior color
-                  </span>
-                  <div
-                    id="marketplace-interior-color-select"
-                    class="condition-select"
-                  >
-                    <button
-                      type="button"
-                      id="marketplace-interior-color-trigger"
-                      class="condition-select__trigger"
-                      aria-haspopup="listbox"
-                      aria-expanded="false"
-                      aria-labelledby="marketplace-interior-color-label marketplace-interior-color-value"
-                    >
-                      <span
-                        id="marketplace-interior-color-value"
-                        class="condition-select__value"
-                      >
-                        Select interior color
-                      </span>
-                      <span class="condition-select__chevron" aria-hidden="true"
-                        >⌄</span
-                      >
-                    </button>
-                    <div
-                      id="marketplace-interior-color-options"
-                      class="condition-select__options"
-                      role="listbox"
-                      aria-labelledby="marketplace-interior-color-label"
-                      hidden
-                    ></div>
-                    <input
-                      type="hidden"
-                      id="marketplace-interior-color-input"
-                      name="marketplace-interior-color"
-                      value=""
-                    />
-                  </div>
-                </div>
-              </div>
-
-              <div
-                id="marketplace-rental-type-field"
-                class="marketplace-field"
-                hidden
-              >
-                <span
-                  id="marketplace-rental-type-label"
-                  class="marketplace-field__label"
-                >
-                  Rental type
-                </span>
-                <div
-                  id="marketplace-rental-type-select"
-                  class="condition-select"
-                >
-                  <button
-                    type="button"
-                    id="marketplace-rental-type-trigger"
-                    class="condition-select__trigger"
-                    aria-haspopup="listbox"
-                    aria-expanded="false"
-                    aria-labelledby="marketplace-rental-type-label marketplace-rental-type-value"
-                  >
-                    <span
-                      id="marketplace-rental-type-value"
-                      class="condition-select__value"
-                    >
-                      Select rental type
-                    </span>
-                    <span class="condition-select__chevron" aria-hidden="true"
-                      >⌄</span
-                    >
-                  </button>
-                  <div
-                    id="marketplace-rental-type-options"
-                    class="condition-select__options"
-                    role="listbox"
-                    aria-labelledby="marketplace-rental-type-label"
-                    hidden
-                  >
-                    <div
-                      class="condition-select__option rental-type-select__option"
-                      role="option"
-                      aria-selected="false"
-                      tabindex="-1"
-                      data-value="house"
-                    >
-                      <span>House</span>
-                    </div>
-                    <div
-                      class="condition-select__option rental-type-select__option"
-                      role="option"
-                      aria-selected="false"
-                      tabindex="-1"
-                      data-value="townhouse"
-                    >
-                      <span>Townhouse</span>
-                    </div>
-                    <div
-                      class="condition-select__option rental-type-select__option"
-                      role="option"
-                      aria-selected="false"
-                      tabindex="-1"
-                      data-value="apartment_condo"
-                    >
-                      <span>Apartment/condo</span>
-                    </div>
-                    <div
-                      class="condition-select__option rental-type-select__option"
-                      role="option"
-                      aria-selected="false"
-                      tabindex="-1"
-                      data-value="room_only"
-                    >
-                      <span>Room only</span>
-                    </div>
-                  </div>
-                  <input
-                    type="hidden"
-                    id="marketplace-rental-type-input"
-                    name="marketplace-rental-type"
-                    value=""
-                  />
-                </div>
-              </div>
-
-              <div
-                id="marketplace-home-details-fields"
-                class="marketplace-vehicle-details-fields"
-                hidden
-              >
-                <div class="marketplace-field">
-                  <label
-                    for="marketplace-bedrooms-input"
-                    class="marketplace-field__label"
-                  >
-                    Bedrooms
-                  </label>
-                  <input
-                    type="text"
-                    id="marketplace-bedrooms-input"
-                    class="marketplace-text-input"
-                    name="marketplace-bedrooms"
-                    placeholder="Number of bedrooms"
-                    inputmode="numeric"
-                    pattern="[0-9]*"
-                    autocomplete="off"
-                    spellcheck="false"
-                  />
-                </div>
-
-                <div class="marketplace-field">
-                  <label
-                    for="marketplace-bathrooms-input"
-                    class="marketplace-field__label"
-                  >
-                    Bathrooms
-                  </label>
-                  <input
-                    type="text"
-                    id="marketplace-bathrooms-input"
-                    class="marketplace-text-input"
-                    name="marketplace-bathrooms"
-                    placeholder="Number of bathrooms"
-                    inputmode="numeric"
-                    pattern="[0-9]*"
-                    autocomplete="off"
-                    spellcheck="false"
-                  />
-                </div>
-              </div>
-
-              <div id="marketplace-title-field" class="marketplace-field">
-                <label
-                  for="marketplace-title-input"
-                  class="marketplace-field__label"
-                >
-                  Title
-                </label>
-                <input
-                  type="text"
-                  id="marketplace-title-input"
-                  class="marketplace-text-input"
-                  name="marketplace-title"
-                  placeholder="What are you selling?"
-                  maxlength="200"
-                  autocomplete="off"
-                  spellcheck="true"
-                  aria-describedby="marketplace-title-meta"
-                />
-                <div id="marketplace-title-meta" class="marketplace-input-meta">
-                  <span>Maximum 200 characters</span>
-                  <span id="marketplace-title-count">0 / 200</span>
-                </div>
-              </div>
-
-              <div id="marketplace-price-field" class="marketplace-field">
-                <label
-                  for="marketplace-price-input"
-                  class="marketplace-field__label"
-                >
-                  Price
-                </label>
-                <input
-                  type="text"
-                  id="marketplace-price-input"
-                  class="marketplace-text-input"
-                  name="marketplace-price"
-                  placeholder="Enter price"
-                  inputmode="numeric"
-                  pattern="[0-9]*"
-                  autocomplete="off"
-                  spellcheck="false"
-                  aria-describedby="marketplace-price-hint"
-                />
-                <span
-                  id="marketplace-price-hint"
-                  class="marketplace-field__hint"
-                >
-                  Numbers only
-                </span>
-              </div>
-
-              <div id="marketplace-category-field" class="marketplace-field">
-                <span
-                  id="marketplace-category-label"
-                  class="marketplace-field__label"
-                >
-                  Category
-                </span>
-                <div id="marketplace-category-select" class="category-select">
-                  <button
-                    type="button"
-                    id="marketplace-category-trigger"
-                    class="category-select__trigger"
-                    aria-haspopup="listbox"
-                    aria-expanded="false"
-                    aria-labelledby="marketplace-category-label marketplace-category-value"
-                  >
-                    <span
-                      id="marketplace-category-selected-icon"
-                      class="category-select__selected-icon"
-                      aria-hidden="true"
-                    >
-                      <svg
-                        xmlns="http://www.w3.org/2000/svg"
-                        width="32"
-                        height="32"
-                        fill="currentColor"
-                        viewBox="0 0 256 256"
-                      >
-                        <path
-                          d="M224,128a8,8,0,0,1-8,8H136v80a8,8,0,0,1-16,0V136H40a8,8,0,0,1,0-16h80V40a8,8,0,0,1,16,0v80h80A8,8,0,0,1,224,128Z"
-                        ></path>
-                      </svg>
-                    </span>
-                    <span
-                      id="marketplace-category-value"
-                      class="category-select__value"
-                    >
-                      Select a category
-                    </span>
-                    <span class="category-select__chevron" aria-hidden="true"
-                      >⌄</span
-                    >
-                  </button>
-                  <div
-                    id="marketplace-category-options"
-                    class="category-select__options"
-                    role="listbox"
-                    aria-labelledby="marketplace-category-label"
-                    hidden
-                  ></div>
-                  <input
-                    type="hidden"
-                    id="marketplace-category-input"
-                    name="marketplace-category"
-                    value=""
-                  />
-                  <input
-                    type="hidden"
-                    id="marketplace-category-group-input"
-                    name="marketplace-category-group"
-                    value=""
-                  />
-                </div>
-                <p class="marketplace-field__hint">
-                  Choose the category that best matches your listing.
-                </p>
-              </div>
-
-              <div id="marketplace-condition-field" class="marketplace-field">
-                <span
-                  id="marketplace-condition-label"
-                  class="marketplace-field__label"
-                >
-                  Condition
-                </span>
-                <div id="marketplace-condition-select" class="condition-select">
-                  <button
-                    type="button"
-                    id="marketplace-condition-trigger"
-                    class="condition-select__trigger"
-                    aria-haspopup="listbox"
-                    aria-expanded="false"
-                    aria-labelledby="marketplace-condition-label marketplace-condition-value"
-                  >
-                    <span
-                      id="marketplace-condition-value"
-                      class="condition-select__value"
-                    >
-                      Select condition
-                    </span>
-                    <span class="condition-select__chevron" aria-hidden="true"
-                      >⌄</span
-                    >
-                  </button>
-                  <div
-                    id="marketplace-condition-options"
-                    class="condition-select__options"
-                    role="listbox"
-                    aria-labelledby="marketplace-condition-label"
-                    hidden
-                  >
-                    <div
-                      class="condition-select__option"
-                      role="option"
-                      aria-selected="false"
-                      tabindex="-1"
-                      data-value="new"
-                    >
-                      <span>New</span>
-                      <span class="condition-select__check" aria-hidden="true"
-                        >✓</span
-                      >
-                    </div>
-                    <div
-                      class="condition-select__option"
-                      role="option"
-                      aria-selected="false"
-                      tabindex="-1"
-                      data-value="used_like_new"
-                    >
-                      <span>Used - Like New</span>
-                      <span class="condition-select__check" aria-hidden="true"
-                        >✓</span
-                      >
-                    </div>
-                    <div
-                      class="condition-select__option"
-                      role="option"
-                      aria-selected="false"
-                      tabindex="-1"
-                      data-value="used_good"
-                    >
-                      <span>Used - Good</span>
-                      <span class="condition-select__check" aria-hidden="true"
-                        >✓</span
-                      >
-                    </div>
-                    <div
-                      class="condition-select__option"
-                      role="option"
-                      aria-selected="false"
-                      tabindex="-1"
-                      data-value="used_fair"
-                    >
-                      <span>Used - Fair</span>
-                      <span class="condition-select__check" aria-hidden="true"
-                        >✓</span
-                      >
-                    </div>
-                  </div>
-                  <input
-                    type="hidden"
-                    id="marketplace-condition-input"
-                    name="marketplace-condition"
-                    value=""
-                  />
-                </div>
-              </div>
-
-              <div id="marketplace-description-field" class="marketplace-field">
-                <label
-                  for="marketplace-description-input"
-                  class="marketplace-field__label"
-                >
-                  Description
-                </label>
-                <textarea
-                  id="marketplace-description-input"
-                  class="marketplace-description-input"
-                  name="marketplace-description"
-                  rows="7"
-                  placeholder="Describe your listing"
-                  spellcheck="true"
-                ></textarea>
-              </div>
-
-              <div id="marketplace-location-field" class="marketplace-field">
-                <label
-                  for="marketplace-location-input"
-                  class="marketplace-field__label"
-                >
-                  Location
-                </label>
-                <input
-                  type="text"
-                  id="marketplace-location-input"
-                  class="marketplace-text-input"
-                  name="marketplace-location"
-                  placeholder="Enter a city, neighborhood or postcode"
-                  autocomplete="address-level2"
-                  spellcheck="true"
-                  aria-describedby="marketplace-location-hint"
-                />
-                <span
-                  id="marketplace-location-hint"
-                  class="marketplace-field__hint"
-                >
-                  Location must match an available Facebook Marketplace option.
-                </span>
-              </div>
-
-              <div class="marketplace-save-listing">
-                <div class="marketplace-save-listing__actions">
-                  <button
-                    type="button"
-                    id="save-marketplace-listing-btn"
-                    class="marketplace-save-listing__button button-89"
-                    disabled
-                    title="Complete all listing fields and add at least one photo"
-                  >
-                    Save listing
-                  </button>
-                  <button
-                    type="button"
-                    id="cancel-marketplace-listing-edit-btn"
-                    class="marketplace-save-listing__cancel button-89"
-                    hidden
-                  >
-                    Cancel edit
-                  </button>
-                </div>
-                <p
-                  id="marketplace-save-listing-status"
-                  class="marketplace-save-listing__status"
-                  role="status"
-                  aria-live="polite"
-                  hidden
-                ></p>
-              </div>
-            </div>
-              </div>
-            </details>
-          </section>
-
-          <section
-            class="workflow-card marketplace-card marketplace-saved-card saved-marketplace-listings"
-            aria-labelledby="saved-marketplace-listings-title"
-          >
-            <details id="marketplace-saved-card" class="card-accordion" name="workflow-cards">
-              <summary class="card-accordion__summary">
-                <span class="card-accordion__icon" aria-hidden="true">
-                  <svg viewBox="0 0 256 256" fill="currentColor"><path d="M213.66,101.66l-80,80a8,8,0,0,1-11.32,0l-80-80A8,8,0,0,1,53.66,90.34L128,164.69l74.34-74.35a8,8,0,0,1,11.32,11.32Z"></path></svg>
-                </span>
-                <span><strong id="saved-marketplace-listings-title">Your Marketplace listings</strong><small>Manage your saved listings and photos</small></span>
-              </summary>
-              <div class="card-accordion__content">
-                <div class="selection-count">Saved listings · <span id="saved-marketplace-listings-count">0</span></div>
-<p
-              id="saved-marketplace-listings-status"
-              class="saved-marketplace-listings__status"
-              role="status"
-              aria-live="polite"
-            >
-              Saved listings will appear here.
-            </p>
-            <div
-              id="saved-marketplace-listings-list"
-              class="saved-marketplace-listings__list"
-            ></div>
-              </div>
-            </details>
-          </section>
-
-          <section class="workflow-card marketplace-card marketplace-cleanup-card">
-            <details id="marketplace-cleanup-card" class="card-accordion" name="workflow-cards">
-              <summary class="card-accordion__summary">
-                <span class="card-accordion__icon" aria-hidden="true">
-                  <svg viewBox="0 0 256 256" fill="currentColor"><path d="M213.66,101.66l-80,80a8,8,0,0,1-11.32,0l-80-80A8,8,0,0,1,53.66,90.34L128,164.69l74.34-74.35a8,8,0,0,1,11.32,11.32Z"></path></svg>
-                </span>
-                <span><strong>Marketplace cleanup</strong><small>Delete listings older than the age you choose</small></span>
-              </summary>
-              <div class="card-accordion__content">
-                <div class="marketplace-cleanup-card__controls">
-              <div class="field">
-                <label for="marketplace-cleanup-days-input"
-                  >Delete listings older than</label
-                >
-                <div class="marketplace-cleanup-card__days">
-                  <input
-                    type="text"
-                    id="marketplace-cleanup-days-input"
-                    inputmode="numeric"
-                    pattern="[0-9]*"
-                    autocomplete="off"
-                    spellcheck="false"
-                    aria-describedby="marketplace-cleanup-days-hint"
-                  />
-                  <span>days</span>
-                </div>
-                <span
-                  id="marketplace-cleanup-days-hint"
-                  class="marketplace-field__hint"
-                >
-                  Enter 0 to delete all listings, including listings created
-                  today.
-                </span>
-              </div>
-              <p class="marketplace-field__hint">
-                Cleanup deletes active listings only. Duplicate listings in
-                Facebook's inactive section are not included.
-              </p>
-              <button
-                type="button"
-                id="delete-old-marketplace-listings-btn"
-                disabled
-               class="button-89 button-89--danger">
-                Delete old listings
-              </button>
-            </div>
-            <div
-              id="marketplace-cleanup-progress"
-              class="posting-progress marketplace-cleanup-progress"
-              role="status"
-              aria-live="polite"
-              hidden
-            >
-              <div class="posting-progress__heading">
-                <p class="section-heading__eyebrow">Activity</p>
-              </div>
-              <div class="posting-progress__header">
-                <span id="marketplace-cleanup-count">0/0 processed</span>
-                <strong id="marketplace-cleanup-percent">0%</strong>
-              </div>
-              <div class="posting-progress__bar" aria-hidden="true">
-                <span id="marketplace-cleanup-progress-bar"></span>
-              </div>
-              <div class="posting-progress__stats">
-                <span>
-                  <strong id="marketplace-cleanup-deleted">0</strong>
-                  deleted
-                </span>
-                <span>
-                  <strong id="marketplace-cleanup-failed">0</strong>
-                  failed
-                </span>
-                <span>
-                  <strong id="marketplace-cleanup-remaining">0</strong>
-                  remaining
-                </span>
-              </div>
-              <div
-                id="marketplace-cleanup-message"
-                class="posting-progress__current"
-              >
-                No cleanup running.
-              </div>
-              <ol
-                id="marketplace-cleanup-log"
-                class="posting-progress__log"
-                aria-label="Marketplace cleanup activity"
-              ></ol>
-            </div>
-              </div>
-            </details>
-          </section>
-
-          <div id="marketplace-posting-preferences-card" class="marketplace-posting-preferences-card">
-            <details id="marketplace-posting-preferences" class="card-accordion" name="workflow-cards">
-              <summary class="card-accordion__summary">
-                <span class="card-accordion__icon">
-                  <svg
-                    width="32"
-                    height="32"
-                    fill="currentColor"
-                    viewBox="0 0 256 256"
-                    aria-hidden="true"
-                  >
-                    <path
-                      d="M213.66,101.66l-80,80a8,8,0,0,1-11.32,0l-80-80A8,8,0,0,1,53.66,90.34L128,164.69l74.34-74.35a8,8,0,0,1,11.32,11.32Z"
-                    ></path>
-                  </svg>
-                </span>
-                <span>
-                  <strong>Posting preferences</strong>
-                  <small>Wait times, AI rewriting and listing order</small>
-                </span>
-              </summary>
-              <div class="card-accordion__content">
-                <div class="interval-card marketplace-interval-card">
-                  <div class="interval-card__heading">
-                    <strong>Time between listings</strong>
-                    <small
-                      >Postika chooses a different wait time within your range between listings.</small
-                    >
-                  </div>
-                  <div class="number-input-grid">
-                    <div class="field">
-                      <label for="marketplace-interval-min-input"
-                        >Shortest wait (seconds)</label
-                      >
-                      <div class="number-input-row">
-                        <input
-                          type="number"
-                          id="marketplace-interval-min-input"
-                          min="60"
-                          step="1"
-                          value="60"
-                          inputmode="numeric"
-                        />
-                      </div>
-                    </div>
-                    <div class="field">
-                      <label for="marketplace-interval-max-input"
-                        >Longest wait (seconds)</label
-                      >
-                      <div class="number-input-row">
-                        <input
-                          type="number"
-                          id="marketplace-interval-max-input"
-                          min="60"
-                          step="1"
-                          value="300"
-                          inputmode="numeric"
-                        />
-                      </div>
-                    </div>
-                  </div>
-                  <p class="section-note">
-                    Both waits must be at least 60 seconds. For example, 60 to 300 means a wait of 1 to 5 minutes.
-                  </p>
-                </div>
-
-                <div class="field">
-                  <label for="marketplace-gemini-api-key-input"
-                    >Gemini access key (for AI rewriting)</label
-                  >
-                  <input
-                    type="password"
-                    id="marketplace-gemini-api-key-input"
-                    placeholder="Paste your Gemini API key"
-                    autocomplete="off"
-                    spellcheck="false"
-                  />
-                  <p class="section-note">
-                    Use your Gemini API key to rewrite listing descriptions with AI.
-                    The same key is used for Groups and saved in this browser.
-                  </p>
-                </div>
-
-                <div class="field">
-                  <label for="marketplace-gemini-prompt-input">
-                    How should AI rewrite your text? (optional)
-                  </label>
-                  <textarea
-                    id="marketplace-gemini-prompt-input"
-                    rows="6"
-                    placeholder="Example: Use a friendly Kenyan sales tone and short paragraphs."
-                    spellcheck="true"
-                  ></textarea>
-                </div>
-
-                <label
-                  class="toggle-row"
-                  for="marketplace-gemini-rewrite-toggle"
-                >
-                  <span class="toggle-row__copy">
-                    <strong>Rewrite descriptions with AI</strong>
-                    <small
-                      >Let Gemini rewrite each description before posting. Requires
-                      a Gemini access key.</small
-                    >
-                  </span>
-                  <input
-                    type="checkbox"
-                    id="marketplace-gemini-rewrite-toggle"
-                  />
-                </label>
-
-                <label
-                  class="toggle-row"
-                  for="marketplace-shuffle-items-toggle"
-                >
-                  <span class="toggle-row__copy">
-                    <strong>Post listings in a random order</strong>
-                    <small
-                      >Change the order of your selected listings each time you
-                      start posting.</small
-                    >
-                  </span>
-                  <input
-                    type="checkbox"
-                    id="marketplace-shuffle-items-toggle"
-                  />
-                </label>
-              </div>
-            </details>
-          </div>
-
-          <div class="workflow-card marketplace-queue-settings">
-            <details id="marketplace-queue-card" class="card-accordion" name="workflow-cards">
-              <summary class="card-accordion__summary">
-                <span class="card-accordion__icon" aria-hidden="true">
-                  <svg viewBox="0 0 256 256" fill="currentColor"><path d="M213.66,101.66l-80,80a8,8,0,0,1-11.32,0l-80-80A8,8,0,0,1,53.66,90.34L128,164.69l74.34-74.35a8,8,0,0,1,11.32,11.32Z"></path></svg>
-                </span>
-                <span><strong>Select and post listings</strong><small>Choose saved listings to post to Facebook</small></span>
-              </summary>
-              <div class="card-accordion__content">
-                <label
-                class="marketplace-listings-select-all"
-                for="marketplace-listings-select-all-checkbox"
-              >
-                <input
-                  type="checkbox"
-                  id="marketplace-listings-select-all-checkbox"
-                />
-                <span>Select all listings</span>
-              </label>
-<p
-              id="marketplace-listings-selection-count"
-              class="selection-count"
-            >
-              0 listings selected
-            </p>
-            <button
-              type="button"
-              id="post-selected-marketplace-items-btn"
-              class="marketplace-post-selected button-89"
-              disabled
-            >
-              Post selected listings
-            </button>
-              </div>
-            </details>
-          </div>
-
-          <section
-            id="marketplace-posting-progress-card"
-            class="workflow-card marketplace-card marketplace-progress-card"
-            aria-label="Marketplace posting activity"
-            hidden
-          >
-            <details id="marketplace-activity-card" class="card-accordion" name="workflow-cards">
-              <summary class="card-accordion__summary">
-                <span class="card-accordion__icon" aria-hidden="true">
-                  <svg viewBox="0 0 256 256" fill="currentColor"><path d="M213.66,101.66l-80,80a8,8,0,0,1-11.32,0l-80-80A8,8,0,0,1,53.66,90.34L128,164.69l74.34-74.35a8,8,0,0,1,11.32,11.32Z"></path></svg>
-                </span>
-                <span><strong>Marketplace activity</strong><small>Track posting progress, pause or stop the queue</small></span>
-              </summary>
-              <div class="card-accordion__content">
-                <div
-              id="marketplace-posting-progress"
-              class="posting-progress"
-              role="status"
-              aria-live="polite"
-            >
-              <div class="posting-progress__header">
-                <span id="marketplace-posting-status-count">0/0 posted</span>
-                <strong id="marketplace-posting-progress-percent">0%</strong>
-              </div>
-              <div class="posting-progress__bar" aria-hidden="true">
-                <span id="marketplace-posting-progress-bar"></span>
-              </div>
-              <div
-                id="marketplace-posting-timing"
-                class="posting-timing"
-                aria-label="Marketplace posting time"
-              >
-                <span class="posting-timing__icon" aria-hidden="true">
-                  <svg
-                    xmlns="http://www.w3.org/2000/svg"
-                    width="32"
-                    height="32"
-                    fill="currentColor"
-                    viewBox="0 0 256 256"
-                  >
-                    <path
-                      d="M128,24A104,104,0,1,0,232,128,104.11,104.11,0,0,0,128,24Zm0,192a88,88,0,1,1,88-88A88.1,88.1,0,0,1,128,216Zm64-88a8,8,0,0,1-8,8H128a8,8,0,0,1-8-8V72a8,8,0,0,1,16,0v48h48A8,8,0,0,1,192,128Z"
-                    ></path>
-                  </svg>
-                </span>
-                <span class="posting-timing__metric">
-                  <small id="marketplace-posting-timing-label">Time spent</small>
-                  <strong id="marketplace-posting-elapsed-time">00:00</strong>
-                </span>
-                <span class="posting-timing__divider" aria-hidden="true"></span>
-                <span class="posting-timing__metric">
-                  <small id="marketplace-posting-item-timing-label"
-                    >Current post</small
-                  >
-                  <strong id="marketplace-posting-item-time">00:00</strong>
-                </span>
-              </div>
-              <div class="posting-progress__stats">
-                <button
-                  type="button"
-                  id="marketplace-progress-filter-posted"
-                  class="posting-progress__stat-filter"
-                  aria-pressed="false"
-                  title="Show only posted listings"
-                >
-                  <strong id="marketplace-posting-progress-success">0</strong>
-                  posted
-                </button>
-                <button
-                  type="button"
-                  id="marketplace-progress-filter-failed"
-                  class="posting-progress__stat-filter"
-                  aria-pressed="false"
-                  title="Show only failed listings"
-                >
-                  <strong id="marketplace-posting-progress-failed">0</strong>
-                  failed
-                </button>
-                <span>
-                  <strong id="marketplace-posting-progress-remaining">0</strong>
-                  remaining
-                </span>
-              </div>
-              <div
-                id="marketplace-posting-status-message"
-                class="posting-progress__current"
-              >
-                Marketplace posting has not started.
-              </div>
-              <ol
-                id="marketplace-posting-log"
-                class="posting-progress__log marketplace-posting-log"
-                aria-label="Marketplace posting activity"
-              ></ol>
-              <div class="posting-progress__controls">
-                <button type="button" id="pause-marketplace-posting-btn" hidden class="button-89">
-                  Pause
-                </button>
-                <button type="button" id="stop-marketplace-posting-btn" hidden class="button-89 button-89--danger">
-                  Stop
-                </button>
-              </div>
-            </div>
-              </div>
-            </details>
           </section>
         </div>
       </form>
 
       <div
-        id="delete-confirmation"
-        class="delete-confirmation"
-        role="alertdialog"
-        aria-modal="true"
-        aria-labelledby="delete-confirmation-title"
-        aria-describedby="delete-confirmation-message"
-        hidden
-      >
-        <button
-          type="button"
-          id="delete-confirmation-backdrop"
-          class="delete-confirmation__backdrop"
-          aria-label="Cancel deletion"
-        ></button>
-        <div class="delete-confirmation__dialog">
-          <p class="section-heading__eyebrow">Confirm deletion</p>
-          <h2 id="delete-confirmation-title">Delete saved post?</h2>
-          <p id="delete-confirmation-message">
-            This permanently removes the saved post and its photos.
-          </p>
-          <div class="delete-confirmation__actions">
-            <button type="button" id="delete-confirmation-cancel" class="button-89">
-              Cancel
-            </button>
-            <button
-              type="button"
-              id="delete-confirmation-confirm"
-              class="delete-confirmation__confirm button-89 button-89--danger"
-            >
-              Delete
-            </button>
-          </div>
-        </div>
-      </div>
-
-      <div
-        id="marketplace-audience-choice"
-        class="delete-confirmation marketplace-audience-choice"
+        id="photo-lightbox"
+        class="photo-lightbox"
         role="dialog"
         aria-modal="true"
-        aria-labelledby="marketplace-audience-choice-title"
-        aria-describedby="marketplace-audience-choice-message"
-        hidden
-      >
-        <button
-          type="button"
-          id="marketplace-audience-choice-backdrop"
-          class="delete-confirmation__backdrop"
-          aria-label="Cancel Marketplace posting"
-        ></button>
-        <div
-          class="delete-confirmation__dialog marketplace-audience-choice__dialog"
-        >
-          <p class="section-heading__eyebrow">Marketplace audience</p>
-          <h2 id="marketplace-audience-choice-title">
-            Share to suggested Groups?
-          </h2>
-          <p id="marketplace-audience-choice-message">
-            Choose whether to publish only on Marketplace or also share each
-            listing to all suggested Groups shown by Facebook.
-          </p>
-          <div
-            class="delete-confirmation__actions marketplace-audience-choice__actions"
-          >
-            <button type="button" id="marketplace-audience-choice-cancel" class="button-89">
-              Cancel
-            </button>
-            <button
-              type="button"
-              id="marketplace-audience-choice-marketplace-only"
-              class="marketplace-audience-choice__marketplace-only button-89"
-            >
-              Marketplace only
-            </button>
-            <button
-              type="button"
-              id="marketplace-audience-choice-with-groups"
-              class="marketplace-audience-choice__with-groups button-89"
-            >
-              Marketplace + Groups
-            </button>
-          </div>
-        </div>
-      </div>
-
-      <div
-        id="marketplace-photo-lightbox"
-        class="marketplace-photo-lightbox"
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="marketplace-photo-lightbox-title"
+        aria-labelledby="photo-lightbox-title"
         hidden
       >
         <div
-          id="marketplace-photo-lightbox-backdrop"
-          class="marketplace-photo-lightbox__backdrop"
+          id="photo-lightbox-backdrop"
+          class="photo-lightbox__backdrop"
         ></div>
-        <div class="marketplace-photo-lightbox__dialog">
-          <div class="marketplace-photo-lightbox__header">
+        <div class="photo-lightbox__dialog">
+          <div class="photo-lightbox__header">
             <div>
-              <strong id="marketplace-photo-lightbox-title">
-                Photo preview
-              </strong>
-              <span id="marketplace-photo-lightbox-counter">1 / 1</span>
+              <strong id="photo-lightbox-title"> Photo preview </strong>
+              <span id="photo-lightbox-counter">1 / 1</span>
             </div>
             <button
               type="button"
-              id="marketplace-photo-lightbox-close"
-              class="marketplace-photo-lightbox__close"
+              id="photo-lightbox-close"
+              class="photo-lightbox__close"
               aria-label="Close photo preview"
             >
               <svg
@@ -2840,11 +781,11 @@
             </button>
           </div>
 
-          <div class="marketplace-photo-lightbox__stage">
+          <div class="photo-lightbox__stage">
             <button
               type="button"
-              id="marketplace-photo-lightbox-previous"
-              class="marketplace-photo-lightbox__navigation marketplace-photo-lightbox__navigation--previous"
+              id="photo-lightbox-previous"
+              class="photo-lightbox__navigation photo-lightbox__navigation--previous"
               aria-label="View previous photo"
             >
               <svg
@@ -2860,11 +801,11 @@
                 ></path>
               </svg>
             </button>
-            <img id="marketplace-photo-lightbox-image" src="" alt="" />
+            <img id="photo-lightbox-image" src="" alt="" />
             <button
               type="button"
-              id="marketplace-photo-lightbox-next"
-              class="marketplace-photo-lightbox__navigation marketplace-photo-lightbox__navigation--next"
+              id="photo-lightbox-next"
+              class="photo-lightbox__navigation photo-lightbox__navigation--next"
               aria-label="View next photo"
             >
               <svg
@@ -2882,12 +823,12 @@
             </button>
           </div>
 
-          <div class="marketplace-photo-lightbox__footer">
-            <span id="marketplace-photo-lightbox-filename"></span>
+          <div class="photo-lightbox__footer">
+            <span id="photo-lightbox-filename"></span>
             <div
-              id="marketplace-photo-lightbox-thumbnails"
-              class="marketplace-photo-lightbox__thumbnails"
-              aria-label="Photos in listing order"
+              id="photo-lightbox-thumbnails"
+              class="photo-lightbox__thumbnails"
+              aria-label="Photos in post order"
             ></div>
           </div>
         </div>

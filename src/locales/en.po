@@ -1,0 +1,1114 @@
+msgid ""
+msgstr ""
+"Source-Language: en\n"
+"Language: en\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=utf-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Plural-Forms: nplurals=2\n"
+"X-Plurals-Order: one, other\n"
+
+#: .wuchale-build/i18n.ts
+msgid "Postika"
+msgstr "Postika"
+
+#: .wuchale-build/i18n.ts
+msgid "Language"
+msgstr "Language"
+
+#: .wuchale-build/i18n.ts
+msgid "Could not load the selected language."
+msgstr "Could not load the selected language."
+
+#: .wuchale-build/i18n.ts
+msgid "Search languages…"
+msgstr "Search languages…"
+
+#: .wuchale-build/i18n.ts
+msgid "Search languages"
+msgstr "Search languages"
+
+#: .wuchale-build/i18n.ts
+msgid "All languages"
+msgstr "All languages"
+
+#: .wuchale-build/i18n.ts
+msgid "No languages found"
+msgstr "No languages found"
+
+#: .wuchale-build/i18n.ts
+msgid "Try a different search."
+msgstr "Try a different search."
+
+#: .wuchale-build/i18n.ts
+msgid "Group posting"
+msgstr "Group posting"
+
+#: .wuchale-build/i18n.ts
+msgid "Posting steps"
+msgstr "Posting steps"
+
+#: .wuchale-build/i18n.ts
+msgid "Create post"
+msgstr "Create post"
+
+#: .wuchale-build/i18n.ts
+msgid "Select groups"
+msgstr "Select groups"
+
+#: .wuchale-build/i18n.ts
+#: .wuchale-build/i18n.ts
+msgid "Review & post"
+msgstr "Review & post"
+
+#: .wuchale-build/i18n.ts
+msgid "Step 1 of 3"
+msgstr "Step 1 of 3"
+
+#: .wuchale-build/i18n.ts
+msgid "Step 2 of 3"
+msgstr "Step 2 of 3"
+
+#: .wuchale-build/i18n.ts
+msgid "Step 3 of 3"
+msgstr "Step 3 of 3"
+
+#: .wuchale-build/i18n.ts
+msgid "Create your post"
+msgstr "Create your post"
+
+#: .wuchale-build/i18n.ts
+msgid "Text formatting"
+msgstr "Text formatting"
+
+#~ msgid "Text style"
+#~ msgstr "Text style"
+
+#~ msgid "Normal text"
+#~ msgstr "Normal text"
+
+#: .wuchale-build/i18n.ts
+msgid "Heading 1"
+msgstr "Heading 1"
+
+#: .wuchale-build/i18n.ts
+msgid "Heading 2"
+msgstr "Heading 2"
+
+#: .wuchale-build/i18n.ts
+msgid "Bold"
+msgstr "Bold"
+
+#: .wuchale-build/i18n.ts
+msgid "Italic"
+msgstr "Italic"
+
+#: .wuchale-build/i18n.ts
+msgid "Undo"
+msgstr "Undo"
+
+#: .wuchale-build/i18n.ts
+msgid "Redo"
+msgstr "Redo"
+
+#: .wuchale-build/i18n.ts
+msgid "Bulleted list"
+msgstr "Bulleted list"
+
+#: .wuchale-build/i18n.ts
+msgid "Numbered list"
+msgstr "Numbered list"
+
+#: .wuchale-build/i18n.ts
+msgid "Quote"
+msgstr "Quote"
+
+#: .wuchale-build/i18n.ts
+msgid "Post text"
+msgstr "Post text"
+
+#: .wuchale-build/i18n.ts
+msgid "Write what you want to share..."
+msgstr "Write what you want to share..."
+
+#: .wuchale-build/i18n.ts
+msgid "Choose images"
+msgstr "Choose images"
+
+#: .wuchale-build/i18n.ts
+msgid "Click to browse or drag and drop images here"
+msgstr "Click to browse or drag and drop images here"
+
+#: .wuchale-build/i18n.ts
+msgid "Next: select groups"
+msgstr "Next: select groups"
+
+#: .wuchale-build/i18n.ts
+msgid "Select your groups"
+msgstr "Select your groups"
+
+#: .wuchale-build/i18n.ts
+msgid "Find my groups"
+msgstr "Find my groups"
+
+#: .wuchale-build/i18n.ts
+msgid "Refresh groups"
+msgstr "Refresh groups"
+
+#: .wuchale-build/i18n.ts
+msgid "Could not restore saved images. Please add them again."
+msgstr "Could not restore saved images. Please add them again."
+
+#: .wuchale-build/i18n.ts
+msgid "Could not save your images. They may not be available next time."
+msgstr "Could not save your images. They may not be available next time."
+
+#~ msgid "Click Find my groups, then select where you want to post."
+#~ msgstr "Click Find my groups, then select where you want to post."
+
+#. 0: count
+#: .wuchale-build/i18n.ts
+msgid "{0} loaded"
+msgstr "{0} loaded"
+
+#: .wuchale-build/i18n.ts
+msgid "Select all groups"
+msgstr "Select all groups"
+
+#: .wuchale-build/i18n.ts
+msgid "Search groups"
+msgstr "Search groups"
+
+#: .wuchale-build/i18n.ts
+msgid "Search your groups"
+msgstr "Search your groups"
+
+#. 0: count
+#. 0: count
+#: .wuchale-build/i18n.ts
+#: .wuchale-build/i18n.ts
+msgid "{0} groups selected"
+msgstr "{0} groups selected"
+
+#~ msgid "Click Find my groups to see the groups you have joined."
+#~ msgstr "Click Find my groups to see the groups you have joined."
+
+#: .wuchale-build/i18n.ts
+msgid "Select at least one group to continue."
+msgstr "Select at least one group to continue."
+
+#: .wuchale-build/i18n.ts
+msgid "Back"
+msgstr "Back"
+
+#: .wuchale-build/i18n.ts
+msgid "Next: review post"
+msgstr "Next: review post"
+
+#: .wuchale-build/i18n.ts
+msgid "Your post"
+msgstr "Your post"
+
+#: .wuchale-build/i18n.ts
+msgid "Edit post"
+msgstr "Edit post"
+
+#: .wuchale-build/i18n.ts
+msgid "Groups"
+msgstr "Groups"
+
+#: .wuchale-build/i18n.ts
+msgid "Edit groups"
+msgstr "Edit groups"
+
+#: .wuchale-build/i18n.ts
+msgid "Selected groups"
+msgstr "Selected groups"
+
+#: .wuchale-build/i18n.ts
+msgid "Complete post text"
+msgstr "Complete post text"
+
+#: .wuchale-build/i18n.ts
+msgid "Time between posts"
+msgstr "Time between posts"
+
+#: .wuchale-build/i18n.ts
+msgid "Postika chooses a different wait time within your range between posts."
+msgstr "Postika chooses a different wait time within your range between posts."
+
+#: .wuchale-build/i18n.ts
+msgid "Shortest wait (seconds)"
+msgstr "Shortest wait (seconds)"
+
+#: .wuchale-build/i18n.ts
+msgid "Longest wait (seconds)"
+msgstr "Longest wait (seconds)"
+
+#: .wuchale-build/i18n.ts
+msgid "Both waits must be at least 60 seconds. For example, 60 to 300 means a wait of 1 to 5 minutes."
+msgstr "Both waits must be at least 60 seconds. For example, 60 to 300 means a wait of 1 to 5 minutes."
+
+#~ msgid "Post to selected groups"
+#~ msgstr "Post to selected groups"
+
+#: .wuchale-build/i18n.ts
+msgid "Activity"
+msgstr "Activity"
+
+#: .wuchale-build/i18n.ts
+msgid "Posting progress"
+msgstr "Posting progress"
+
+#: .wuchale-build/i18n.ts
+msgid "Group posting time"
+msgstr "Group posting time"
+
+#: .wuchale-build/i18n.ts
+msgid "Time spent"
+msgstr "Time spent"
+
+#: .wuchale-build/i18n.ts
+msgid "Current post"
+msgstr "Current post"
+
+#. 0: current; 1: total
+#. 0: current; 1: total
+#: .wuchale-build/i18n.ts
+#: .wuchale-build/i18n.ts
+msgid "Group {0}/{1}"
+msgstr "Group {0}/{1}"
+
+#: .wuchale-build/i18n.ts
+msgid "Posting has not started."
+msgstr "Posting has not started."
+
+#: .wuchale-build/i18n.ts
+msgid "Pause"
+msgstr "Pause"
+
+#: .wuchale-build/i18n.ts
+msgid "Stop"
+msgstr "Stop"
+
+#: .wuchale-build/i18n.ts
+msgid "Resume"
+msgstr "Resume"
+
+#: .wuchale-build/i18n.ts
+msgid "Photo preview"
+msgstr "Photo preview"
+
+#: .wuchale-build/i18n.ts
+msgid "Close photo preview"
+msgstr "Close photo preview"
+
+#: .wuchale-build/i18n.ts
+msgid "View previous photo"
+msgstr "View previous photo"
+
+#: .wuchale-build/i18n.ts
+msgid "View next photo"
+msgstr "View next photo"
+
+#: .wuchale-build/i18n.ts
+msgid "Photos in post order"
+msgstr "Photos in post order"
+
+#: .wuchale-build/i18n.ts
+msgid "Dismiss notification"
+msgstr "Dismiss notification"
+
+#: .wuchale-build/i18n.ts
+msgid "Success"
+msgstr "Success"
+
+#: .wuchale-build/i18n.ts
+msgid "Please check"
+msgstr "Please check"
+
+#: .wuchale-build/i18n.ts
+msgid "Something went wrong"
+msgstr "Something went wrong"
+
+#: .wuchale-build/i18n.ts
+msgid "Information"
+msgstr "Information"
+
+#: .wuchale-build/i18n.ts
+msgid "No groups found."
+msgstr "No groups found."
+
+#. 0: query
+#: .wuchale-build/i18n.ts
+msgid "No groups match \"{0}\"."
+msgstr "No groups match \"{0}\"."
+
+#: .wuchale-build/i18n.ts
+msgid "Selected Groups"
+msgstr "Selected Groups"
+
+#: .wuchale-build/i18n.ts
+msgid "No selected groups match this search."
+msgstr "No selected groups match this search."
+
+#: .wuchale-build/i18n.ts
+msgid "No groups selected yet."
+msgstr "No groups selected yet."
+
+#: .wuchale-build/i18n.ts
+msgid "Other Groups"
+msgstr "Other Groups"
+
+#: .wuchale-build/i18n.ts
+msgid "No remaining groups match this search."
+msgstr "No remaining groups match this search."
+
+#: .wuchale-build/i18n.ts
+msgid "No other groups available."
+msgstr "No other groups available."
+
+#: .wuchale-build/i18n.ts
+msgid "Find and select the groups you want to post to"
+msgstr "Find and select the groups you want to post to"
+
+#: .wuchale-build/i18n.ts
+msgid "Group posting is already in progress."
+msgstr "Group posting is already in progress."
+
+#: .wuchale-build/i18n.ts
+msgid "Posting…"
+msgstr "Posting…"
+
+#: .wuchale-build/i18n.ts
+msgid "Resuming…"
+msgstr "Resuming…"
+
+#: .wuchale-build/i18n.ts
+msgid "Pausing…"
+msgstr "Pausing…"
+
+#: .wuchale-build/i18n.ts
+msgid "Stopping…"
+msgstr "Stopping…"
+
+#: .wuchale-build/i18n.ts
+msgid "Active time"
+msgstr "Active time"
+
+#: .wuchale-build/i18n.ts
+msgid "Paused at"
+msgstr "Paused at"
+
+#: .wuchale-build/i18n.ts
+msgid "Elapsed"
+msgstr "Elapsed"
+
+#: .wuchale-build/i18n.ts
+msgid "Last item"
+msgstr "Last item"
+
+#: .wuchale-build/i18n.ts
+msgid "Current item"
+msgstr "Current item"
+
+#: .wuchale-build/i18n.ts
+msgid "Item time"
+msgstr "Item time"
+
+#: .wuchale-build/i18n.ts
+msgid "Copy Facebook failure response"
+msgstr "Copy Facebook failure response"
+
+#: .wuchale-build/i18n.ts
+msgid "Facebook failure response copied."
+msgstr "Facebook failure response copied."
+
+#: .wuchale-build/i18n.ts
+msgid "Unable to copy the Facebook response."
+msgstr "Unable to copy the Facebook response."
+
+#: .wuchale-build/i18n.ts
+msgid "Done"
+msgstr "Done"
+
+#: .wuchale-build/i18n.ts
+msgid "Pending"
+msgstr "Pending"
+
+#: .wuchale-build/i18n.ts
+msgid "Fail"
+msgstr "Fail"
+
+#: .wuchale-build/i18n.ts
+msgid "Limit"
+msgstr "Limit"
+
+#: .wuchale-build/i18n.ts
+msgid "Next"
+msgstr "Next"
+
+#: .wuchale-build/i18n.ts
+msgid "Post"
+msgstr "Post"
+
+#: .wuchale-build/i18n.ts
+msgid "Info"
+msgstr "Info"
+
+#: .wuchale-build/i18n.ts
+msgid "Loading..."
+msgstr "Loading..."
+
+#: .wuchale-build/i18n.ts
+msgid "Finding the groups you have joined..."
+msgstr "Finding the groups you have joined..."
+
+#: .wuchale-build/i18n.ts
+msgid "Opening Facebook to find the groups you have joined..."
+msgstr "Opening Facebook to find the groups you have joined..."
+
+#: .wuchale-build/i18n.ts
+msgid "Unable to load groups."
+msgstr "Unable to load groups."
+
+#. 0: count
+#: .wuchale-build/i18n.ts
+msgid "Finished loading {0} groups."
+msgstr "Finished loading {0} groups."
+
+#: .wuchale-build/i18n.ts
+msgid "Could not find your groups. Check that you are signed into Facebook and try again."
+msgstr "Could not find your groups. Check that you are signed into Facebook and try again."
+
+#: .wuchale-build/i18n.ts
+msgid "Unable to add images."
+msgstr "Unable to add images."
+
+#: .wuchale-build/i18n.ts
+msgid "Only image files can be added."
+msgstr "Only image files can be added."
+
+#. 0: count
+#: .wuchale-build/i18n.ts
+msgid "{0} duplicate image was skipped."
+msgstr "{0} duplicate image was skipped."
+
+#. 0: count
+#: .wuchale-build/i18n.ts
+msgid "{0} duplicate images were skipped."
+msgstr "{0} duplicate images were skipped."
+
+#~ msgid "Image {0} of {1}. Click to preview or drag to reorder."
+#~ msgstr "Image {0} of {1}. Click to preview or drag to reorder."
+
+#. 0: name
+#: .wuchale-build/i18n.ts
+msgid "Remove {0}"
+msgstr "Remove {0}"
+
+#: .wuchale-build/i18n.ts
+msgid "Unable to resume posting."
+msgstr "Unable to resume posting."
+
+#: .wuchale-build/i18n.ts
+msgid "Unable to pause posting."
+msgstr "Unable to pause posting."
+
+#: .wuchale-build/i18n.ts
+msgid "Unable to stop posting."
+msgstr "Unable to stop posting."
+
+#: .wuchale-build/i18n.ts
+msgid "Please select at least one group."
+msgstr "Please select at least one group."
+
+#: .wuchale-build/i18n.ts
+msgid "Write your post and add at least one image before posting."
+msgstr "Write your post and add at least one image before posting."
+
+#. 0: minimum
+#: .wuchale-build/i18n.ts
+msgid "Enter whole numbers of at least {0} seconds for both waits. The longest wait must be at least as long as the shortest wait."
+msgstr "Enter whole numbers of at least {0} seconds for both waits. The longest wait must be at least as long as the shortest wait."
+
+#: .wuchale-build/i18n.ts
+msgid "Your selected groups are no longer available. Click Find my groups, select them again, and try posting."
+msgstr "Your selected groups are no longer available. Click Find my groups, select them again, and try posting."
+
+#: .wuchale-build/i18n.ts
+msgid "Getting ready to post..."
+msgstr "Getting ready to post..."
+
+#: .wuchale-build/i18n.ts
+msgid "Could not start posting. Please try again."
+msgstr "Could not start posting. Please try again."
+
+#. 0: name
+#: .wuchale-build/i18n.ts
+msgid "Unable to read {0}."
+msgstr "Unable to read {0}."
+
+#. 0: count
+#: .wuchale-build/i18n.ts
+msgid "Restored {0} loaded groups."
+msgstr "Restored {0} loaded groups."
+
+#: .wuchale-build/i18n.ts
+msgid "Unable to restore side panel session."
+msgstr "Unable to restore side panel session."
+
+#: .wuchale-build/i18n.ts
+msgid "Unable to save side panel session."
+msgstr "Unable to save side panel session."
+
+#: .wuchale-build/i18n.ts
+msgid "Post image preview"
+msgstr "Post image preview"
+
+#. 0: index; 1: name
+#: .wuchale-build/i18n.ts
+msgid "View photo {0}: {1}"
+msgstr "View photo {0}: {1}"
+
+#. 0: count; 1: target
+#: .wuchale-build/i18n.ts
+msgid "{0}/{1} posts submitted"
+msgstr "{0}/{1} posts submitted"
+
+#. 0: count; 1: total
+#: .wuchale-build/i18n.ts
+msgid "{0}/{1} groups processed"
+msgstr "{0}/{1} groups processed"
+
+#: .wuchale-build/i18n.ts
+msgid "Queue"
+msgstr "Queue"
+
+#. 0: count; 1: duration; 2: failed
+#: .wuchale-build/i18n.ts
+msgid "Completed {0} posts in {1}{2}."
+msgstr "Completed {0} posts in {1}{2}."
+
+#. 0: duration
+#: .wuchale-build/i18n.ts
+msgid "Next post in {0}"
+msgstr "Next post in {0}"
+
+#: .wuchale-build/i18n.ts
+msgid "Posting paused."
+msgstr "Posting paused."
+
+#. 0: group
+#: .wuchale-build/i18n.ts
+msgid "Posting paused before {0}."
+msgstr "Posting paused before {0}."
+
+#: .wuchale-build/i18n.ts
+msgid "Posting is already in progress."
+msgstr "Posting is already in progress."
+
+#: .wuchale-build/i18n.ts
+msgid "Wait for the current posts to finish, or stop posting before starting again."
+msgstr "Wait for the current posts to finish, or stop posting before starting again."
+
+#: .wuchale-build/i18n.ts
+msgid "Preparing the first post..."
+msgstr "Preparing the first post..."
+
+#: .wuchale-build/i18n.ts
+msgid "Continuing to post automatically..."
+msgstr "Continuing to post automatically..."
+
+#. 0: current; 1: total; 2: group
+#: .wuchale-build/i18n.ts
+msgid "Preparing post {0}/{1} for {2}..."
+msgstr "Preparing post {0}/{1} for {2}..."
+
+#. 0: current; 1: total; 2: group
+#: .wuchale-build/i18n.ts
+msgid "Uploading images from post {0}/{1} for {2}..."
+msgstr "Uploading images from post {0}/{1} for {2}..."
+
+#. 0: current; 1: total; 2: group
+#: .wuchale-build/i18n.ts
+msgid "Preparing text-only post {0}/{1} for {2}..."
+msgstr "Preparing text-only post {0}/{1} for {2}..."
+
+#. 0: current; 1: total; 2: group
+#: .wuchale-build/i18n.ts
+msgid "Posting post {0}/{1} to {2}..."
+msgstr "Posting post {0}/{1} to {2}..."
+
+#: .wuchale-build/i18n.ts
+msgid "Your post is pending"
+msgstr "Your post is pending"
+
+#. 0: group
+#: .wuchale-build/i18n.ts
+msgid "Posted to {0}."
+msgstr "Posted to {0}."
+
+#. 0: group
+#: .wuchale-build/i18n.ts
+msgid "Posted successfully to {0}."
+msgstr "Posted successfully to {0}."
+
+#: .wuchale-build/i18n.ts
+msgid "Your post is awaiting admin approval. If the admin team approves it, it'll become visible in the group."
+msgstr "Your post is awaiting admin approval. If the admin team approves it, it'll become visible in the group."
+
+#. 0: count
+#: .wuchale-build/i18n.ts
+msgid "Posting finished: {0} posts were submitted."
+msgstr "Posting finished: {0} posts were submitted."
+
+#. 0: posted; 1: failed
+#: .wuchale-build/i18n.ts
+msgid "Posting finished: {0} posts were submitted and {1} groups failed."
+msgstr "Posting finished: {0} posts were submitted and {1} groups failed."
+
+#: .wuchale-build/i18n.ts
+msgid "Facebook temporarily blocked posting on this account. Queue stopped. Try again later."
+msgstr "Facebook temporarily blocked posting on this account. Queue stopped. Try again later."
+
+#. 0: group
+#: .wuchale-build/i18n.ts
+msgid "Failed to post to {0}."
+msgstr "Failed to post to {0}."
+
+#. 0: group
+#: .wuchale-build/i18n.ts
+msgid "Facebook rejected the post to {0} because this Group cannot accept more pending content from your account."
+msgstr "Facebook rejected the post to {0} because this Group cannot accept more pending content from your account."
+
+#: .wuchale-build/i18n.ts
+msgid "Automatic posting stopped."
+msgstr "Automatic posting stopped."
+
+#: .wuchale-build/i18n.ts
+msgid "Posting stopped by user."
+msgstr "Posting stopped by user."
+
+#: .wuchale-build/i18n.ts
+msgid "Show only posted activity"
+msgstr "Show only posted activity"
+
+#: .wuchale-build/i18n.ts
+msgid "Show only posts waiting for approval"
+msgstr "Show only posts waiting for approval"
+
+#: .wuchale-build/i18n.ts
+msgid "Show only failed activity"
+msgstr "Show only failed activity"
+
+#. 0: count
+#: .wuchale-build/i18n.ts
+msgid "{0} group"
+msgstr "{0} group"
+
+#. 0: count
+#: .wuchale-build/i18n.ts
+msgid "{0} groups"
+msgstr "{0} groups"
+
+#. 0: count
+#: .wuchale-build/i18n.ts
+msgid "{0} result"
+msgstr "{0} result"
+
+#. 0: count
+#: .wuchale-build/i18n.ts
+msgid "{0} results"
+msgstr "{0} results"
+
+#: .wuchale-build/i18n.ts
+#: .wuchale-build/i18n.ts
+msgid "Escape"
+msgstr "Escape"
+
+#: .wuchale-build/i18n.ts
+msgid "Enter"
+msgstr "Enter"
+
+#: .wuchale-build/i18n.ts
+msgid "Tab"
+msgstr "Tab"
+
+#: .wuchale-build/i18n.ts
+#: .wuchale-build/i18n.ts
+#: .wuchale-build/i18n.ts
+msgid "ArrowDown"
+msgstr "ArrowDown"
+
+#: .wuchale-build/i18n.ts
+#: .wuchale-build/i18n.ts
+msgid "ArrowUp"
+msgstr "ArrowUp"
+
+#: .wuchale-build/i18n.ts
+msgid "Home"
+msgstr "Home"
+
+#: .wuchale-build/i18n.ts
+msgid "End"
+msgstr "End"
+
+#: .wuchale-build/i18n.ts
+msgid "Clear language search"
+msgstr "Clear language search"
+
+#: .wuchale-build/i18n.ts
+msgid "Notifications"
+msgstr "Notifications"
+
+#: .wuchale-build/i18n.ts
+msgid "Starting group extraction..."
+msgstr "Starting group extraction..."
+
+#: .wuchale-build/i18n.ts
+msgid "Open Facebook first. This extension only works on facebook.com."
+msgstr "Open Facebook first. This extension only works on facebook.com."
+
+#: .wuchale-build/i18n.ts
+msgid "Select at least one post before posting."
+msgstr "Select at least one post before posting."
+
+#: .wuchale-build/i18n.ts
+msgid "Preparing current tab..."
+msgstr "Preparing current tab..."
+
+#: .wuchale-build/i18n.ts
+msgid "Opening Facebook joined groups page..."
+msgstr "Opening Facebook joined groups page..."
+
+#: .wuchale-build/i18n.ts
+msgid "Facebook joined groups page loaded."
+msgstr "Facebook joined groups page loaded."
+
+#: .wuchale-build/i18n.ts
+msgid "Changing joined groups sort to trigger Facebook groups request..."
+msgstr "Changing joined groups sort to trigger Facebook groups request..."
+
+#: .wuchale-build/i18n.ts
+msgid "Waiting for fresh Facebook groups request..."
+msgstr "Waiting for fresh Facebook groups request..."
+
+#: .wuchale-build/i18n.ts
+msgid "Captured groups request. Preparing extraction..."
+msgstr "Captured groups request. Preparing extraction..."
+
+#. 0: page
+#: .wuchale-build/i18n.ts
+msgid "Fetching groups page {0}..."
+msgstr "Fetching groups page {0}..."
+
+#. 0: count
+#: .wuchale-build/i18n.ts
+msgid "Loaded {0} groups so far."
+msgstr "Loaded {0} groups so far."
+
+#. 0: count
+#: .wuchale-build/i18n.ts
+msgid "Fetching next page. {0} groups loaded."
+msgstr "Fetching next page. {0} groups loaded."
+
+#. 0: status
+#: .wuchale-build/i18n.ts
+msgid "Facebook groups request failed with {0}."
+msgstr "Facebook groups request failed with {0}."
+
+#: .wuchale-build/i18n.ts
+msgid "Unable to fetch groups."
+msgstr "Unable to fetch groups."
+
+#: .wuchale-build/i18n.ts
+msgid "Unable to find the active tab for posting."
+msgstr "Unable to find the active tab for posting."
+
+#: .wuchale-build/i18n.ts
+msgid "Unable to open joined groups in the current tab."
+msgstr "Unable to open joined groups in the current tab."
+
+#: .wuchale-build/i18n.ts
+msgid "Unable to trigger joined groups sort."
+msgstr "Unable to trigger joined groups sort."
+
+#: .wuchale-build/i18n.ts
+msgid "The joined groups sort control changed. Please load groups again."
+msgstr "The joined groups sort control changed. Please load groups again."
+
+#: .wuchale-build/i18n.ts
+msgid "Unable to read groups from joined groups tab."
+msgstr "Unable to read groups from joined groups tab."
+
+#: .wuchale-build/i18n.ts
+msgid "Facebook did not return group data."
+msgstr "Facebook did not return group data."
+
+#: .wuchale-build/i18n.ts
+msgid "None of the selected Groups has a visible post composer. Select another standard Group and try again."
+msgstr "None of the selected Groups has a visible post composer. Select another standard Group and try again."
+
+#: .wuchale-build/i18n.ts
+msgid "Could not set up photo uploads from your first post. Please start posting again."
+msgstr "Could not set up photo uploads from your first post. Please start posting again."
+
+#. 0: starter; 1: next
+#: .wuchale-build/i18n.ts
+msgid "{0} does not allow Postika to start posting. Trying {1} instead..."
+msgstr "{0} does not allow Postika to start posting. Trying {1} instead..."
+
+#. 0: duration
+#: .wuchale-build/i18n.ts
+msgid "Paused {0}"
+msgstr "Paused {0}"
+
+#. 0: kind; 1: group
+#: .wuchale-build/i18n.ts
+msgid "Fresh {0} request values captured from {1}."
+msgstr "Fresh {0} request values captured from {1}."
+
+#: .wuchale-build/i18n.ts
+msgid "Add post text and at least one image to continue."
+msgstr "Add post text and at least one image to continue."
+
+#: .wuchale-build/i18n.ts
+msgid "Add post text to continue."
+msgstr "Add post text to continue."
+
+#: .wuchale-build/i18n.ts
+msgid "Add at least one image to continue."
+msgstr "Add at least one image to continue."
+
+#. 0: count
+#: .wuchale-build/i18n.ts
+msgid "{0} groups selected. Continue to review your post."
+msgstr "{0} groups selected. Continue to review your post."
+
+#. 0: count
+#: .wuchale-build/i18n.ts
+msgid "{0} images"
+msgstr "{0} images"
+
+#: .wuchale-build/i18n.ts
+msgid "Post now"
+msgstr "Post now"
+
+#: .wuchale-build/i18n.ts
+msgid "Schedule"
+msgstr "Schedule"
+
+#: .wuchale-build/i18n.ts
+msgid "Schedule your queue"
+msgstr "Schedule your queue"
+
+#: .wuchale-build/i18n.ts
+msgid "Confirm schedule"
+msgstr "Confirm schedule"
+
+#: .wuchale-build/i18n.ts
+msgid "Cancel"
+msgstr "Cancel"
+
+#. 0: zone
+#: .wuchale-build/i18n.ts
+msgid "Time zone: {0}. Keep Chrome open and your computer awake. Facebook may ask you to sign in when posting starts."
+msgstr "Time zone: {0}. Keep Chrome open and your computer awake. Facebook may ask you to sign in when posting starts."
+
+#: .wuchale-build/i18n.ts
+msgid "Choose a date and time"
+msgstr "Choose a date and time"
+
+#: .wuchale-build/i18n.ts
+msgid "Choose a weekday for this post"
+msgstr "Choose a weekday for this post"
+
+#: .wuchale-build/i18n.ts
+msgid "Previous month"
+msgstr "Previous month"
+
+#: .wuchale-build/i18n.ts
+msgid "Next month"
+msgstr "Next month"
+
+#: .wuchale-build/i18n.ts
+msgid "Select date"
+msgstr "Select date"
+
+#: .wuchale-build/i18n.ts
+msgid "Select time"
+msgstr "Select time"
+
+#: .wuchale-build/i18n.ts
+msgid "Hour"
+msgstr "Hour"
+
+#: .wuchale-build/i18n.ts
+msgid "Minute"
+msgstr "Minute"
+
+#: .wuchale-build/i18n.ts
+msgid "Increase hour"
+msgstr "Increase hour"
+
+#: .wuchale-build/i18n.ts
+msgid "Decrease hour"
+msgstr "Decrease hour"
+
+#: .wuchale-build/i18n.ts
+msgid "Increase minute"
+msgstr "Increase minute"
+
+#: .wuchale-build/i18n.ts
+msgid "Decrease minute"
+msgstr "Decrease minute"
+
+#: .wuchale-build/i18n.ts
+msgid "Morning"
+msgstr "Morning"
+
+#: .wuchale-build/i18n.ts
+msgid "Afternoon"
+msgstr "Afternoon"
+
+#: .wuchale-build/i18n.ts
+msgid "Evening"
+msgstr "Evening"
+
+#: .wuchale-build/i18n.ts
+msgid "Choose a date and time in the future."
+msgstr "Choose a date and time in the future."
+
+#: .wuchale-build/i18n.ts
+msgid "Scheduled"
+msgstr "Scheduled"
+
+#. 0: date
+#: .wuchale-build/i18n.ts
+msgid "Scheduled for {0}. Keep Chrome open and your computer awake."
+msgstr "Scheduled for {0}. Keep Chrome open and your computer awake."
+
+#: .wuchale-build/i18n.ts
+msgid "Your queue is scheduled."
+msgstr "Your queue is scheduled."
+
+#: .wuchale-build/i18n.ts
+msgid "Cancel scheduled queue"
+msgstr "Cancel scheduled queue"
+
+#: .wuchale-build/i18n.ts
+msgid "Scheduled posting cancelled."
+msgstr "Scheduled posting cancelled."
+
+#: .wuchale-build/i18n.ts
+msgid "Could not schedule this queue. Check that Chrome storage is available and try again."
+msgstr "Could not schedule this queue. Check that Chrome storage is available and try again."
+
+#: .wuchale-build/i18n.ts
+msgid "The scheduled queue could not be started. Please schedule it again."
+msgstr "The scheduled queue could not be started. Please schedule it again."
+
+#: .wuchale-build/i18n.ts
+msgid "Scheduling this queue..."
+msgstr "Scheduling this queue..."
+
+#~ msgid "24-hour clock"
+#~ msgstr "24-hour clock"
+
+#: .wuchale-build/i18n.ts
+msgid "Time format: 24-hour"
+msgstr "Time format: 24-hour"
+
+#: .wuchale-build/i18n.ts
+msgid "Settings & support"
+msgstr "Settings & support"
+
+#: .wuchale-build/i18n.ts
+msgid "Dark mode"
+msgstr "Dark mode"
+
+#: .wuchale-build/i18n.ts
+msgid "WhatsApp developer"
+msgstr "WhatsApp developer"
+
+#: .wuchale-build/i18n.ts
+msgid "Email developer"
+msgstr "Email developer"
+
+#: .wuchale-build/i18n.ts
+msgid "Could not load the appearance setting. Using light mode."
+msgstr "Could not load the appearance setting. Using light mode."
+
+#: .wuchale-build/i18n.ts
+msgid "Could not save the appearance setting. It will reset when Postika closes."
+msgstr "Could not save the appearance setting. It will reset when Postika closes."
+
+#: .wuchale-build/i18n.ts
+msgid "Download desktop app"
+msgstr "Download desktop app"
+
+#: .wuchale-build/i18n.ts
+msgid "Images"
+msgstr "Images"
+
+#: .wuchale-build/i18n.ts
+msgid "Required"
+msgstr "Required"
+
+#. 0: count
+#: .wuchale-build/i18n.ts
+msgid "{0} images selected"
+msgstr "{0} images selected"
+
+#: .wuchale-build/i18n.ts
+msgid "Add more"
+msgstr "Add more"
+
+#. 0: current; 1: total
+#: .wuchale-build/i18n.ts
+msgid "Image {0} of {1}. Click to preview; drag or use Alt+Left/Right to reorder."
+msgstr "Image {0} of {1}. Click to preview; drag or use Alt+Left/Right to reorder."
+
+#: .wuchale-build/i18n.ts
+msgid "More formatting"
+msgstr "More formatting"
+
+#~ msgid "Sign in to Facebook in a Chrome tab before finding groups. Postika opens your joined-groups page to load them."
+#~ msgstr "Sign in to Facebook in a Chrome tab before finding groups. Postika opens your joined-groups page to load them."
+
+#: .wuchale-build/i18n.ts
+msgid "Sign in to Facebook in a Chrome tab. Postika opens your joined-groups page."
+msgstr "Sign in to Facebook in a Chrome tab. Postika opens your joined-groups page."
+
+#: .wuchale-build/i18n.ts
+msgid "Select the groups where you want to post."
+msgstr "Select the groups where you want to post."
+
+#: .wuchale-build/i18n.ts
+msgid "Your groups will appear here."
+msgstr "Your groups will appear here."
+
+#: .wuchale-build/i18n.ts
+msgid "Internet connection lost. Posting paused until the connection returns."
+msgstr "Internet connection lost. Posting paused until the connection returns."
+
+#: .wuchale-build/i18n.ts
+msgid "Posting resumed."
+msgstr "Posting resumed."
+
+#: .wuchale-build/i18n.ts
+msgid "Internet connection restored. Resuming posting."
+msgstr "Internet connection restored. Resuming posting."
+
+#: .wuchale-build/i18n.ts
+msgid "Internet connection restored. Posting remains paused until you resume."
+msgstr "Internet connection restored. Posting remains paused until you resume."
+
+#: .wuchale-build/i18n.ts
+msgid "Facebook did not provide the request values needed to continue. Try again."
+msgstr "Facebook did not provide the request values needed to continue. Try again."
+
+#: .wuchale-build/i18n.ts
+msgid "Facebook did not confirm whether the first post was submitted. Check Facebook before trying again."
+msgstr "Facebook did not confirm whether the first post was submitted. Check Facebook before trying again."

@@ -1,31 +1,22 @@
 {
   "manifest_version": 3,
-  "name": "Postika – Facebook Groups & Marketplace Auto Poster",
+  "name": "Postika – Facebook Groups Auto Poster",
   "short_name": "Postika",
-  "version": "1.6.40",
-  "description": "Bulk post to Facebook Groups and Marketplace using reusable posts and listings, paced queues, optional AI rewriting, and cleanup.",
+  "version": "1.6.44",
+  "description": "Post to Facebook Groups in three simple steps: create your post, select groups, then review and post.",
   "icons": {
     "48": "images/icon-48.png",
     "128": "images/icon-128.png"
   },
   "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEA0eOKzRnm+Zflnslh2KS/jt2WvA83HDr2VekEHccf85T9iAwaaK8/fu8ZTzaEHiWo57S2We9istV12daVzoq329iHo3uxjrGFcKC/rhtkGP1UyQtzOSP0f7WjRurYuZKdC7+tuK32QTFljI7bvOLXrIIRKP4nXGp3J3Aezc0D1Tc1x9VGsEKmG5K/Oy0njC300LDsC03oM7laz2f+u4SVAGQsYj1jBWImCduNjCVI08MWYADP87rwrd5lyKdyWOEGQ110Rjo2V0C4faQgJAest3jq0uzf9nZ/hmJhn7EuQH1hpsT37SoP2WS7xZwBnMAwEUryo+g2Gcr4XXIyy17MvQIDAQAB",
-  "oauth2": {
-    "client_id": "248783871494-fpf7i952h85k1433lm9qhhq62e2b4hdt.apps.googleusercontent.com",
-    "scopes": [
-      "openid",
-      "https://www.googleapis.com/auth/userinfo.email",
-      "https://www.googleapis.com/auth/userinfo.profile"
-    ]
-  },
   "action": {
     "default_title": "Open Postika"
   },
   "permissions": [
     "sidePanel",
-    "tabs",
     "cookies",
-    "identity",
     "storage",
+    "alarms",
     "scripting",
     "webRequest"
   ],
@@ -33,9 +24,6 @@
     "default_path": "sidepanel.html"
   },
   "host_permissions": [
-    "https://api.facebook-groups-bulk-poster.softwrhq.com/*",
-    "https://*.b-cdn.net/*",
-    "https://generativelanguage.googleapis.com/*",
     "https://www.facebook.com/*",
     "https://web.facebook.com/*",
     "https://upload.facebook.com/*"

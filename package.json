@@ -1,9 +1,11 @@
 {
   "name": "chrome-extension",
   "version": "1.0.0",
+  "type": "module",
   "description": "",
   "scripts": {
     "build": "node scripts/build.mjs",
+    "i18n:extract": "node scripts/wuchale.mjs",
     "watch": "node scripts/build.mjs --watch"
   },
   "keywords": [],
@@ -14,9 +16,16 @@
     "@types/node": "^25.3.0",
     "esbuild": "^0.27.3",
     "prettier": "^3.8.1",
-    "typescript": "^5.9.3"
+    "typescript": "^5.9.3",
+    "wuchale": "^0.26.7"
   },
   "dependencies": {
+    "@lexical/history": "^0.53.0",
+    "@lexical/html": "^0.53.0",
+    "@lexical/list": "^0.53.0",
+    "@lexical/rich-text": "^0.53.0",
+    "@lexical/selection": "^0.53.0",
+    "lexical": "^0.53.0",
     "mime": "^4.1.0"
   }
 }

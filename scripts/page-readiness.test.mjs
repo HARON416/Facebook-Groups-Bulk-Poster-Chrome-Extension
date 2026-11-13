@@ -86,6 +86,127 @@ test("joined-page and capture waits accept results after their former deadlines"
   assert.equal(request.body, "fresh");
 });
 
+test("group loading uses the active Facebook tab", async () => {
+  let queryOptions;
+  const context = vm.createContext({
+    chrome: {
+      tabs: {
+        query: async (options) => {
+          queryOptions = options;
+          return [{ id: 42, url: "https://www.facebook.com/groups/1/" }];
+        },
+      },
+    },
+    isFacebookUrl: (url) => url.includes("facebook.com"),
+  });
+  vm.runInContext(
+    await backgroundFunction(
+      "getActiveTabForLoadingGroups",
+      "async function getActiveTabForPosting",
+    ),
+    context,
+  );
+
+  const tab = await context.getActiveTabForLoadingGroups();
+  assert.equal(tab.id, 42);
+  assert.deepEqual(
+    { ...queryOptions },
+    { active: true, currentWindow: true },
+  );
+});
+
+test("the joined-groups page navigates the existing tab", async () => {
+  const calls = [];
+  const context = vm.createContext({
+    JOINED_GROUPS_URL: "https://web.facebook.com/groups/joins/",
+    chrome: {
+      tabs: {
+        update: async (tabId, properties) => {
+          calls.push(["update", tabId, properties]);
+        },
+      },
+    },
+    waitForJoinedGroupsPage: async (tabId) => calls.push(["loaded", tabId]),
+    waitForPageDomReady: async (tabId, path) =>
+      calls.push(["ready", tabId, path]),
+  });
+  vm.runInContext(
+    await backgroundFunction(
+      "navigateToJoinedGroups",
+      "async function waitForJoinedGroupsPage",
+    ),
+    context,
+  );
+
+  await context.navigateToJoinedGroups(42);
+  assert.equal(calls.length, 3);
+  assert.equal(calls[0][0], "update");
+  assert.equal(calls[0][1], 42);
+  assert.equal(calls[0][2].url, "https://web.facebook.com/groups/joins/");
+  assert.equal(calls[1][0], "loaded");
+  assert.equal(calls[1][1], 42);
+  assert.equal(calls[2][0], "ready");
+  assert.equal(calls[2][1], 42);
+  assert.equal(calls[2][2], "/groups/joins/");
+});
+
+test("a logged-out Facebook redirect ends the joined-page wait with guidance", async () => {
+  const context = vm.createContext({
+    URL,
+    chrome: {
+      tabs: {
+        get: async () => ({
+          status: "complete",
+          url: "https://www.facebook.com/login/",
+        }),
+      },
+    },
+    isFacebookUrl: (url) => url.includes("facebook.com"),
+  });
+  vm.runInContext(
+    await backgroundFunction(
+      "waitForJoinedGroupsPage",
+      "async function waitForPageDomReady",
+    ),
+    context,
+  );
+
+  await assert.rejects(
+    context.waitForJoinedGroupsPage(42),
+    /Check that you are signed in to Facebook/,
+  );
+});
+
+test("a non-login Facebook redirect keeps waiting for the groups route", async () => {
+  let reads = 0;
+  const context = vm.createContext({
+    URL,
+    chrome: {
+      tabs: {
+        get: async () => ({
+          status: "complete",
+          url:
+            reads++ === 0
+              ? "https://www.facebook.com/"
+              : "https://www.facebook.com/groups/joins/",
+        }),
+      },
+    },
+    isFacebookUrl: (url) => url.includes("facebook.com"),
+    sleep: async () => {},
+  });
+  vm.runInContext(
+    await backgroundFunction(
+      "waitForJoinedGroupsPage",
+      "async function waitForPageDomReady",
+    ),
+    context,
+  );
+
+  await context.waitForJoinedGroupsPage(42);
+  assert.equal(reads, 2);
+});
+
 test("closing the tab ends a request wait with the actual tab error", async () => {
   const context = vm.createContext({ capturedGroupsRequest: undefined, chrome: { tabs: { get: async () => { throw new Error("No tab with id: 1"); } } } });
   vm.runInContext(await backgroundFunction("waitForCapturedGroupsRequest", "function updateFetchGroupsConfigFromCapturedRequest"), context);

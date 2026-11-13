@@ -1,0 +1,1114 @@
+msgid ""
+msgstr ""
+"Source-Language: en\n"
+"Language: ar\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=utf-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Plural-Forms: nplurals=6\n"
+"X-Plurals-Order: zero, one, two, few, many, other\n"
+
+#: .wuchale-build/i18n.ts
+msgid "Postika"
+msgstr "Postika"
+
+#: .wuchale-build/i18n.ts
+msgid "Language"
+msgstr "اللغة"
+
+#: .wuchale-build/i18n.ts
+msgid "Could not load the selected language."
+msgstr "تعذّر تحميل اللغة المحددة."
+
+#: .wuchale-build/i18n.ts
+msgid "Search languages…"
+msgstr "البحث عن لغات…"
+
+#: .wuchale-build/i18n.ts
+msgid "Search languages"
+msgstr "البحث عن لغات"
+
+#: .wuchale-build/i18n.ts
+msgid "All languages"
+msgstr "جميع اللغات"
+
+#: .wuchale-build/i18n.ts
+msgid "No languages found"
+msgstr "لم يتم العثور على لغات"
+
+#: .wuchale-build/i18n.ts
+msgid "Try a different search."
+msgstr "جرّب البحث بكلمات مختلفة."
+
+#: .wuchale-build/i18n.ts
+msgid "Group posting"
+msgstr "النشر في المجموعات"
+
+#: .wuchale-build/i18n.ts
+msgid "Posting steps"
+msgstr "خطوات النشر"
+
+#: .wuchale-build/i18n.ts
+msgid "Create post"
+msgstr "إنشاء منشور"
+
+#: .wuchale-build/i18n.ts
+msgid "Select groups"
+msgstr "اختيار المجموعات"
+
+#: .wuchale-build/i18n.ts
+#: .wuchale-build/i18n.ts
+msgid "Review & post"
+msgstr "مراجعة ونشر"
+
+#: .wuchale-build/i18n.ts
+msgid "Step 1 of 3"
+msgstr "الخطوة 1 من 3"
+
+#: .wuchale-build/i18n.ts
+msgid "Step 2 of 3"
+msgstr "الخطوة 2 من 3"
+
+#: .wuchale-build/i18n.ts
+msgid "Step 3 of 3"
+msgstr "الخطوة 3 من 3"
+
+#: .wuchale-build/i18n.ts
+msgid "Create your post"
+msgstr "أنشئ منشورك"
+
+#: .wuchale-build/i18n.ts
+msgid "Text formatting"
+msgstr "تنسيق النص"
+
+#~ msgid "Text style"
+#~ msgstr "نمط النص"
+
+#~ msgid "Normal text"
+#~ msgstr "نص عادي"
+
+#: .wuchale-build/i18n.ts
+msgid "Heading 1"
+msgstr "العنوان 1"
+
+#: .wuchale-build/i18n.ts
+msgid "Heading 2"
+msgstr "العنوان 2"
+
+#: .wuchale-build/i18n.ts
+msgid "Bold"
+msgstr "عريض"
+
+#: .wuchale-build/i18n.ts
+msgid "Italic"
+msgstr "مائل"
+
+#: .wuchale-build/i18n.ts
+msgid "Undo"
+msgstr "تراجع"
+
+#: .wuchale-build/i18n.ts
+msgid "Redo"
+msgstr "إعادة"
+
+#: .wuchale-build/i18n.ts
+msgid "Bulleted list"
+msgstr "قائمة نقطية"
+
+#: .wuchale-build/i18n.ts
+msgid "Numbered list"
+msgstr "قائمة مرقمة"
+
+#: .wuchale-build/i18n.ts
+msgid "Quote"
+msgstr "اقتباس"
+
+#: .wuchale-build/i18n.ts
+msgid "Post text"
+msgstr "نص المنشور"
+
+#: .wuchale-build/i18n.ts
+msgid "Write what you want to share..."
+msgstr "اكتب ما تريد مشاركته..."
+
+#: .wuchale-build/i18n.ts
+msgid "Choose images"
+msgstr "اختر الصور"
+
+#: .wuchale-build/i18n.ts
+msgid "Click to browse or drag and drop images here"
+msgstr "انقر لاستعراض الصور أو اسحبها وأفلتها هنا"
+
+#: .wuchale-build/i18n.ts
+msgid "Next: select groups"
+msgstr "التالي: اختيار المجموعات"
+
+#: .wuchale-build/i18n.ts
+msgid "Select your groups"
+msgstr "اختر مجموعاتك"
+
+#: .wuchale-build/i18n.ts
+msgid "Find my groups"
+msgstr "العثور على مجموعاتي"
+
+#: .wuchale-build/i18n.ts
+msgid "Refresh groups"
+msgstr "تحديث المجموعات"
+
+#: .wuchale-build/i18n.ts
+msgid "Could not restore saved images. Please add them again."
+msgstr "تعذرت استعادة الصور المحفوظة. يرجى إضافتها مرة أخرى."
+
+#: .wuchale-build/i18n.ts
+msgid "Could not save your images. They may not be available next time."
+msgstr "تعذر حفظ الصور. قد لا تكون متاحة في المرة القادمة."
+
+#~ msgid "Click Find my groups, then select where you want to post."
+#~ msgstr "انقر على «العثور على مجموعاتي»، ثم اختر المجموعات التي تريد النشر فيها."
+
+#. 0: count
+#: .wuchale-build/i18n.ts
+msgid "{0} loaded"
+msgstr "تم تحميل {0}"
+
+#: .wuchale-build/i18n.ts
+msgid "Select all groups"
+msgstr "تحديد جميع المجموعات"
+
+#: .wuchale-build/i18n.ts
+msgid "Search groups"
+msgstr "البحث عن مجموعات"
+
+#: .wuchale-build/i18n.ts
+msgid "Search your groups"
+msgstr "البحث في مجموعاتك"
+
+#. 0: count
+#. 0: count
+#: .wuchale-build/i18n.ts
+#: .wuchale-build/i18n.ts
+msgid "{0} groups selected"
+msgstr "تم اختيار {0} مجموعة"
+
+#~ msgid "Click Find my groups to see the groups you have joined."
+#~ msgstr "انقر على «العثور على مجموعاتي» لعرض المجموعات التي انضممت إليها."
+
+#: .wuchale-build/i18n.ts
+msgid "Select at least one group to continue."
+msgstr "اختر مجموعة واحدة على الأقل للمتابعة."
+
+#: .wuchale-build/i18n.ts
+msgid "Back"
+msgstr "رجوع"
+
+#: .wuchale-build/i18n.ts
+msgid "Next: review post"
+msgstr "التالي: مراجعة المنشور"
+
+#: .wuchale-build/i18n.ts
+msgid "Your post"
+msgstr "منشورك"
+
+#: .wuchale-build/i18n.ts
+msgid "Edit post"
+msgstr "تعديل المنشور"
+
+#: .wuchale-build/i18n.ts
+msgid "Groups"
+msgstr "المجموعات"
+
+#: .wuchale-build/i18n.ts
+msgid "Edit groups"
+msgstr "تعديل المجموعات"
+
+#: .wuchale-build/i18n.ts
+msgid "Selected groups"
+msgstr "المجموعات المحددة"
+
+#: .wuchale-build/i18n.ts
+msgid "Complete post text"
+msgstr "نص المنشور الكامل"
+
+#: .wuchale-build/i18n.ts
+msgid "Time between posts"
+msgstr "الفاصل بين المنشورات"
+
+#: .wuchale-build/i18n.ts
+msgid "Postika chooses a different wait time within your range between posts."
+msgstr "يختار Postika مدة انتظار مختلفة ضمن النطاق الذي تحدده بين المنشورات."
+
+#: .wuchale-build/i18n.ts
+msgid "Shortest wait (seconds)"
+msgstr "أقصر مدة انتظار (بالثواني)"
+
+#: .wuchale-build/i18n.ts
+msgid "Longest wait (seconds)"
+msgstr "أطول مدة انتظار (بالثواني)"
+
+#: .wuchale-build/i18n.ts
+msgid "Both waits must be at least 60 seconds. For example, 60 to 300 means a wait of 1 to 5 minutes."
+msgstr "يجب ألا تقل مدتا الانتظار عن 60 ثانية. مثلاً، من 60 إلى 300 يعني الانتظار من دقيقة إلى 5 دقائق."
+
+#~ msgid "Post to selected groups"
+#~ msgstr "النشر في المجموعات المحددة"
+
+#: .wuchale-build/i18n.ts
+msgid "Activity"
+msgstr "النشاط"
+
+#: .wuchale-build/i18n.ts
+msgid "Posting progress"
+msgstr "تقدم النشر"
+
+#: .wuchale-build/i18n.ts
+msgid "Group posting time"
+msgstr "وقت النشر في المجموعة"
+
+#: .wuchale-build/i18n.ts
+msgid "Time spent"
+msgstr "الوقت المستغرق"
+
+#: .wuchale-build/i18n.ts
+msgid "Current post"
+msgstr "المنشور الحالي"
+
+#. 0: current; 1: total
+#. 0: current; 1: total
+#: .wuchale-build/i18n.ts
+#: .wuchale-build/i18n.ts
+msgid "Group {0}/{1}"
+msgstr "المجموعة {0}/{1}"
+
+#: .wuchale-build/i18n.ts
+msgid "Posting has not started."
+msgstr "لم يبدأ النشر بعد."
+
+#: .wuchale-build/i18n.ts
+msgid "Pause"
+msgstr "إيقاف مؤقت"
+
+#: .wuchale-build/i18n.ts
+msgid "Stop"
+msgstr "إيقاف"
+
+#: .wuchale-build/i18n.ts
+msgid "Resume"
+msgstr "استئناف"
+
+#: .wuchale-build/i18n.ts
+msgid "Photo preview"
+msgstr "معاينة الصورة"
+
+#: .wuchale-build/i18n.ts
+msgid "Close photo preview"
+msgstr "إغلاق معاينة الصورة"
+
+#: .wuchale-build/i18n.ts
+msgid "View previous photo"
+msgstr "عرض الصورة السابقة"
+
+#: .wuchale-build/i18n.ts
+msgid "View next photo"
+msgstr "عرض الصورة التالية"
+
+#: .wuchale-build/i18n.ts
+msgid "Photos in post order"
+msgstr "الصور بترتيب المنشور"
+
+#: .wuchale-build/i18n.ts
+msgid "Dismiss notification"
+msgstr "إغلاق الإشعار"
+
+#: .wuchale-build/i18n.ts
+msgid "Success"
+msgstr "تم بنجاح"
+
+#: .wuchale-build/i18n.ts
+msgid "Please check"
+msgstr "يرجى التحقق"
+
+#: .wuchale-build/i18n.ts
+msgid "Something went wrong"
+msgstr "حدث خطأ ما"
+
+#: .wuchale-build/i18n.ts
+msgid "Information"
+msgstr "معلومات"
+
+#: .wuchale-build/i18n.ts
+msgid "No groups found."
+msgstr "لم يتم العثور على مجموعات."
+
+#. 0: query
+#: .wuchale-build/i18n.ts
+msgid "No groups match \"{0}\"."
+msgstr "لا توجد مجموعات تطابق «{0}»."
+
+#: .wuchale-build/i18n.ts
+msgid "Selected Groups"
+msgstr "المجموعات المحددة"
+
+#: .wuchale-build/i18n.ts
+msgid "No selected groups match this search."
+msgstr "لا توجد مجموعات محددة تطابق هذا البحث."
+
+#: .wuchale-build/i18n.ts
+msgid "No groups selected yet."
+msgstr "لم يتم اختيار أي مجموعات بعد."
+
+#: .wuchale-build/i18n.ts
+msgid "Other Groups"
+msgstr "مجموعات أخرى"
+
+#: .wuchale-build/i18n.ts
+msgid "No remaining groups match this search."
+msgstr "لا توجد مجموعات أخرى تطابق هذا البحث."
+
+#: .wuchale-build/i18n.ts
+msgid "No other groups available."
+msgstr "لا توجد مجموعات أخرى متاحة."
+
+#: .wuchale-build/i18n.ts
+msgid "Find and select the groups you want to post to"
+msgstr "اعثر على المجموعات التي تريد النشر فيها وحددها"
+
+#: .wuchale-build/i18n.ts
+msgid "Group posting is already in progress."
+msgstr "النشر في المجموعات جارٍ بالفعل."
+
+#: .wuchale-build/i18n.ts
+msgid "Posting…"
+msgstr "جارٍ النشر…"
+
+#: .wuchale-build/i18n.ts
+msgid "Resuming…"
+msgstr "جارٍ الاستئناف…"
+
+#: .wuchale-build/i18n.ts
+msgid "Pausing…"
+msgstr "جارٍ الإيقاف المؤقت…"
+
+#: .wuchale-build/i18n.ts
+msgid "Stopping…"
+msgstr "جارٍ الإيقاف…"
+
+#: .wuchale-build/i18n.ts
+msgid "Active time"
+msgstr "وقت النشاط"
+
+#: .wuchale-build/i18n.ts
+msgid "Paused at"
+msgstr "توقف مؤقت عند"
+
+#: .wuchale-build/i18n.ts
+msgid "Elapsed"
+msgstr "الوقت المنقضي"
+
+#: .wuchale-build/i18n.ts
+msgid "Last item"
+msgstr "العنصر الأخير"
+
+#: .wuchale-build/i18n.ts
+msgid "Current item"
+msgstr "العنصر الحالي"
+
+#: .wuchale-build/i18n.ts
+msgid "Item time"
+msgstr "وقت العنصر"
+
+#: .wuchale-build/i18n.ts
+msgid "Copy Facebook failure response"
+msgstr "نسخ رسالة خطأ Facebook"
+
+#: .wuchale-build/i18n.ts
+msgid "Facebook failure response copied."
+msgstr "تم نسخ رسالة خطأ Facebook."
+
+#: .wuchale-build/i18n.ts
+msgid "Unable to copy the Facebook response."
+msgstr "تعذّر نسخ رسالة Facebook."
+
+#: .wuchale-build/i18n.ts
+msgid "Done"
+msgstr "تم"
+
+#: .wuchale-build/i18n.ts
+msgid "Pending"
+msgstr "قيد الانتظار"
+
+#: .wuchale-build/i18n.ts
+msgid "Fail"
+msgstr "فشل"
+
+#: .wuchale-build/i18n.ts
+msgid "Limit"
+msgstr "الحد"
+
+#: .wuchale-build/i18n.ts
+msgid "Next"
+msgstr "التالي"
+
+#: .wuchale-build/i18n.ts
+msgid "Post"
+msgstr "نشر"
+
+#: .wuchale-build/i18n.ts
+msgid "Info"
+msgstr "معلومات"
+
+#: .wuchale-build/i18n.ts
+msgid "Loading..."
+msgstr "جارٍ التحميل..."
+
+#: .wuchale-build/i18n.ts
+msgid "Finding the groups you have joined..."
+msgstr "جارٍ البحث عن المجموعات التي انضممت إليها..."
+
+#: .wuchale-build/i18n.ts
+msgid "Opening Facebook to find the groups you have joined..."
+msgstr "جارٍ فتح Facebook للعثور على المجموعات التي انضممت إليها..."
+
+#: .wuchale-build/i18n.ts
+msgid "Unable to load groups."
+msgstr "تعذّر تحميل المجموعات."
+
+#. 0: count
+#: .wuchale-build/i18n.ts
+msgid "Finished loading {0} groups."
+msgstr "اكتمل تحميل {0} من المجموعات."
+
+#: .wuchale-build/i18n.ts
+msgid "Could not find your groups. Check that you are signed into Facebook and try again."
+msgstr "تعذّر العثور على مجموعاتك. تحقق من تسجيل الدخول إلى Facebook ثم حاول مرة أخرى."
+
+#: .wuchale-build/i18n.ts
+msgid "Unable to add images."
+msgstr "تعذّرت إضافة الصور."
+
+#: .wuchale-build/i18n.ts
+msgid "Only image files can be added."
+msgstr "يمكن إضافة ملفات الصور فقط."
+
+#. 0: count
+#: .wuchale-build/i18n.ts
+msgid "{0} duplicate image was skipped."
+msgstr "تم تخطي صورة مكررة واحدة ({0})."
+
+#. 0: count
+#: .wuchale-build/i18n.ts
+msgid "{0} duplicate images were skipped."
+msgstr "تم تخطي {0} صور مكررة."
+
+#~ msgid "Image {0} of {1}. Click to preview or drag to reorder."
+#~ msgstr "الصورة {0} من {1}. انقر لمعاينتها أو اسحبها لتغيير ترتيبها."
+
+#. 0: name
+#: .wuchale-build/i18n.ts
+msgid "Remove {0}"
+msgstr "إزالة {0}"
+
+#: .wuchale-build/i18n.ts
+msgid "Unable to resume posting."
+msgstr "تعذّر استئناف النشر."
+
+#: .wuchale-build/i18n.ts
+msgid "Unable to pause posting."
+msgstr "تعذّر إيقاف النشر مؤقتاً."
+
+#: .wuchale-build/i18n.ts
+msgid "Unable to stop posting."
+msgstr "تعذّر إيقاف النشر."
+
+#: .wuchale-build/i18n.ts
+msgid "Please select at least one group."
+msgstr "يرجى اختيار مجموعة واحدة على الأقل."
+
+#: .wuchale-build/i18n.ts
+msgid "Write your post and add at least one image before posting."
+msgstr "اكتب منشورك وأضف صورة واحدة على الأقل قبل النشر."
+
+#. 0: minimum
+#: .wuchale-build/i18n.ts
+msgid "Enter whole numbers of at least {0} seconds for both waits. The longest wait must be at least as long as the shortest wait."
+msgstr "أدخل أعداداً صحيحة لا تقل عن {0} ثانية لكلتا مدتي الانتظار. يجب ألا تقل المدة الأطول عن الأقصر."
+
+#: .wuchale-build/i18n.ts
+msgid "Your selected groups are no longer available. Click Find my groups, select them again, and try posting."
+msgstr "لم تعد المجموعات المحددة متاحة. انقر على «العثور على مجموعاتي»، وحددها مجدداً، ثم حاول النشر."
+
+#: .wuchale-build/i18n.ts
+msgid "Getting ready to post..."
+msgstr "جارٍ الاستعداد للنشر..."
+
+#: .wuchale-build/i18n.ts
+msgid "Could not start posting. Please try again."
+msgstr "تعذّر بدء النشر. يرجى المحاولة مرة أخرى."
+
+#. 0: name
+#: .wuchale-build/i18n.ts
+msgid "Unable to read {0}."
+msgstr "تعذّرت قراءة {0}."
+
+#. 0: count
+#: .wuchale-build/i18n.ts
+msgid "Restored {0} loaded groups."
+msgstr "تمت استعادة {0} من المجموعات المحمّلة."
+
+#: .wuchale-build/i18n.ts
+msgid "Unable to restore side panel session."
+msgstr "تعذّرت استعادة جلسة اللوحة الجانبية."
+
+#: .wuchale-build/i18n.ts
+msgid "Unable to save side panel session."
+msgstr "تعذّر حفظ جلسة اللوحة الجانبية."
+
+#: .wuchale-build/i18n.ts
+msgid "Post image preview"
+msgstr "معاينة صورة المنشور"
+
+#. 0: index; 1: name
+#: .wuchale-build/i18n.ts
+msgid "View photo {0}: {1}"
+msgstr "عرض الصورة {0}: {1}"
+
+#. 0: count; 1: target
+#: .wuchale-build/i18n.ts
+msgid "{0}/{1} posts submitted"
+msgstr "تم إرسال {0} من {1} منشور"
+
+#. 0: count; 1: total
+#: .wuchale-build/i18n.ts
+msgid "{0}/{1} groups processed"
+msgstr "تمت معالجة {0} من {1} مجموعة"
+
+#: .wuchale-build/i18n.ts
+msgid "Queue"
+msgstr "قائمة الانتظار"
+
+#. 0: count; 1: duration; 2: failed
+#: .wuchale-build/i18n.ts
+msgid "Completed {0} posts in {1}{2}."
+msgstr "اكتمل إرسال {0} منشور خلال {1}{2}."
+
+#. 0: duration
+#: .wuchale-build/i18n.ts
+msgid "Next post in {0}"
+msgstr "المنشور التالي بعد {0}"
+
+#: .wuchale-build/i18n.ts
+msgid "Posting paused."
+msgstr "تم إيقاف النشر مؤقتاً."
+
+#. 0: group
+#: .wuchale-build/i18n.ts
+msgid "Posting paused before {0}."
+msgstr "تم إيقاف النشر مؤقتاً قبل {0}."
+
+#: .wuchale-build/i18n.ts
+msgid "Posting is already in progress."
+msgstr "النشر جارٍ بالفعل."
+
+#: .wuchale-build/i18n.ts
+msgid "Wait for the current posts to finish, or stop posting before starting again."
+msgstr "انتظر حتى تكتمل المنشورات الحالية أو أوقف النشر قبل البدء من جديد."
+
+#: .wuchale-build/i18n.ts
+msgid "Preparing the first post..."
+msgstr "جارٍ تجهيز المنشور الأول..."
+
+#: .wuchale-build/i18n.ts
+msgid "Continuing to post automatically..."
+msgstr "جارٍ متابعة النشر تلقائياً..."
+
+#. 0: current; 1: total; 2: group
+#: .wuchale-build/i18n.ts
+msgid "Preparing post {0}/{1} for {2}..."
+msgstr "جارٍ تجهيز المنشور {0}/{1} للمجموعة {2}..."
+
+#. 0: current; 1: total; 2: group
+#: .wuchale-build/i18n.ts
+msgid "Uploading images from post {0}/{1} for {2}..."
+msgstr "جارٍ رفع صور المنشور {0}/{1} للمجموعة {2}..."
+
+#. 0: current; 1: total; 2: group
+#: .wuchale-build/i18n.ts
+msgid "Preparing text-only post {0}/{1} for {2}..."
+msgstr "جارٍ تجهيز المنشور النصي {0}/{1} للمجموعة {2}..."
+
+#. 0: current; 1: total; 2: group
+#: .wuchale-build/i18n.ts
+msgid "Posting post {0}/{1} to {2}..."
+msgstr "جارٍ نشر المنشور {0}/{1} في المجموعة {2}..."
+
+#: .wuchale-build/i18n.ts
+msgid "Your post is pending"
+msgstr "منشورك قيد الانتظار"
+
+#. 0: group
+#: .wuchale-build/i18n.ts
+msgid "Posted to {0}."
+msgstr "تم النشر في {0}."
+
+#. 0: group
+#: .wuchale-build/i18n.ts
+msgid "Posted successfully to {0}."
+msgstr "تم النشر بنجاح في {0}."
+
+#: .wuchale-build/i18n.ts
+msgid "Your post is awaiting admin approval. If the admin team approves it, it'll become visible in the group."
+msgstr "ينتظر منشورك موافقة المشرفين. سيظهر في المجموعة إذا وافق فريق الإدارة عليه."
+
+#. 0: count
+#: .wuchale-build/i18n.ts
+msgid "Posting finished: {0} posts were submitted."
+msgstr "انتهى النشر: تم إرسال {0} منشور."
+
+#. 0: posted; 1: failed
+#: .wuchale-build/i18n.ts
+msgid "Posting finished: {0} posts were submitted and {1} groups failed."
+msgstr "انتهى النشر: تم إرسال {0} منشور وتعذّر النشر في {1} مجموعة."
+
+#: .wuchale-build/i18n.ts
+msgid "Facebook temporarily blocked posting on this account. Queue stopped. Try again later."
+msgstr "حظر Facebook النشر مؤقتاً من هذا الحساب. تم إيقاف قائمة الانتظار. حاول مرة أخرى لاحقاً."
+
+#. 0: group
+#: .wuchale-build/i18n.ts
+msgid "Failed to post to {0}."
+msgstr "تعذّر النشر في {0}."
+
+#. 0: group
+#: .wuchale-build/i18n.ts
+msgid "Facebook rejected the post to {0} because this Group cannot accept more pending content from your account."
+msgstr "رفض Facebook النشر في {0} لأن هذه المجموعة لا يمكنها قبول مزيد من المحتوى المعلّق من حسابك."
+
+#: .wuchale-build/i18n.ts
+msgid "Automatic posting stopped."
+msgstr "تم إيقاف النشر التلقائي."
+
+#: .wuchale-build/i18n.ts
+msgid "Posting stopped by user."
+msgstr "أوقف المستخدم عملية النشر."
+
+#: .wuchale-build/i18n.ts
+msgid "Show only posted activity"
+msgstr "عرض المنشورات المنشورة فقط"
+
+#: .wuchale-build/i18n.ts
+msgid "Show only posts waiting for approval"
+msgstr "عرض المنشورات التي تنتظر الموافقة فقط"
+
+#: .wuchale-build/i18n.ts
+msgid "Show only failed activity"
+msgstr "عرض المنشورات التي فشلت فقط"
+
+#. 0: count
+#: .wuchale-build/i18n.ts
+msgid "{0} group"
+msgstr "{0} مجموعة"
+
+#. 0: count
+#: .wuchale-build/i18n.ts
+msgid "{0} groups"
+msgstr "{0} مجموعات"
+
+#. 0: count
+#: .wuchale-build/i18n.ts
+msgid "{0} result"
+msgstr "{0} نتيجة"
+
+#. 0: count
+#: .wuchale-build/i18n.ts
+msgid "{0} results"
+msgstr "{0} نتائج"
+
+#: .wuchale-build/i18n.ts
+#: .wuchale-build/i18n.ts
+msgid "Escape"
+msgstr "إفلات"
+
+#: .wuchale-build/i18n.ts
+msgid "Enter"
+msgstr "إدخال"
+
+#: .wuchale-build/i18n.ts
+msgid "Tab"
+msgstr "علامة تبويب"
+
+#: .wuchale-build/i18n.ts
+#: .wuchale-build/i18n.ts
+#: .wuchale-build/i18n.ts
+msgid "ArrowDown"
+msgstr "السهم لأسفل"
+
+#: .wuchale-build/i18n.ts
+#: .wuchale-build/i18n.ts
+msgid "ArrowUp"
+msgstr "السهم لأعلى"
+
+#: .wuchale-build/i18n.ts
+msgid "Home"
+msgstr "البداية"
+
+#: .wuchale-build/i18n.ts
+msgid "End"
+msgstr "النهاية"
+
+#: .wuchale-build/i18n.ts
+msgid "Clear language search"
+msgstr "مسح البحث عن اللغات"
+
+#: .wuchale-build/i18n.ts
+msgid "Notifications"
+msgstr "الإشعارات"
+
+#: .wuchale-build/i18n.ts
+msgid "Starting group extraction..."
+msgstr "جارٍ بدء استخراج المجموعات..."
+
+#: .wuchale-build/i18n.ts
+msgid "Open Facebook first. This extension only works on facebook.com."
+msgstr "افتح فيسبوك أولاً. لا يعمل هذا الامتداد إلا على facebook.com."
+
+#: .wuchale-build/i18n.ts
+msgid "Select at least one post before posting."
+msgstr "اختر منشوراً واحداً على الأقل قبل النشر."
+
+#: .wuchale-build/i18n.ts
+msgid "Preparing current tab..."
+msgstr "جارٍ إعداد علامة التبويب الحالية..."
+
+#: .wuchale-build/i18n.ts
+msgid "Opening Facebook joined groups page..."
+msgstr "جارٍ فتح صفحة المجموعات التي انضممت إليها على فيسبوك..."
+
+#: .wuchale-build/i18n.ts
+msgid "Facebook joined groups page loaded."
+msgstr "تم تحميل صفحة المجموعات التي انضممت إليها على فيسبوك."
+
+#: .wuchale-build/i18n.ts
+msgid "Changing joined groups sort to trigger Facebook groups request..."
+msgstr "جارٍ تغيير ترتيب المجموعات لتحفيز طلب المجموعات من فيسبوك..."
+
+#: .wuchale-build/i18n.ts
+msgid "Waiting for fresh Facebook groups request..."
+msgstr "بانتظار طلب جديد للمجموعات من فيسبوك..."
+
+#: .wuchale-build/i18n.ts
+msgid "Captured groups request. Preparing extraction..."
+msgstr "تم التقاط طلب المجموعات. جارٍ الإعداد للاستخراج..."
+
+#. 0: page
+#: .wuchale-build/i18n.ts
+msgid "Fetching groups page {0}..."
+msgstr "جارٍ جلب صفحة المجموعات {0}..."
+
+#. 0: count
+#: .wuchale-build/i18n.ts
+msgid "Loaded {0} groups so far."
+msgstr "تم تحميل {0} من المجموعات حتى الآن."
+
+#. 0: count
+#: .wuchale-build/i18n.ts
+msgid "Fetching next page. {0} groups loaded."
+msgstr "جارٍ جلب الصفحة التالية. تم تحميل {0} من المجموعات."
+
+#. 0: status
+#: .wuchale-build/i18n.ts
+msgid "Facebook groups request failed with {0}."
+msgstr "فشل طلب مجموعات فيسبوك بالرمز {0}."
+
+#: .wuchale-build/i18n.ts
+msgid "Unable to fetch groups."
+msgstr "تعذر جلب المجموعات."
+
+#: .wuchale-build/i18n.ts
+msgid "Unable to find the active tab for posting."
+msgstr "تعذر العثور على علامة التبويب النشطة للنشر."
+
+#: .wuchale-build/i18n.ts
+msgid "Unable to open joined groups in the current tab."
+msgstr "تعذر فتح صفحة المجموعات التي انضممت إليها في علامة التبويب الحالية."
+
+#: .wuchale-build/i18n.ts
+msgid "Unable to trigger joined groups sort."
+msgstr "تعذر تغيير ترتيب المجموعات التي انضممت إليها."
+
+#: .wuchale-build/i18n.ts
+msgid "The joined groups sort control changed. Please load groups again."
+msgstr "تغير عنصر التحكم بترتيب المجموعات. يرجى تحميل المجموعات مجدداً."
+
+#: .wuchale-build/i18n.ts
+msgid "Unable to read groups from joined groups tab."
+msgstr "تعذرت قراءة المجموعات من علامة تبويب المجموعات التي انضممت إليها."
+
+#: .wuchale-build/i18n.ts
+msgid "Facebook did not return group data."
+msgstr "لم يُرجع فيسبوك بيانات المجموعات."
+
+#: .wuchale-build/i18n.ts
+msgid "None of the selected Groups has a visible post composer. Select another standard Group and try again."
+msgstr "لا يحتوي أي من المجموعات المحددة على محرر منشورات ظاهر. اختر مجموعة عادية أخرى وحاول مجدداً."
+
+#: .wuchale-build/i18n.ts
+msgid "Could not set up photo uploads from your first post. Please start posting again."
+msgstr "تعذر إعداد رفع الصور من منشورك الأول. يرجى بدء النشر مجدداً."
+
+#. 0: starter; 1: next
+#: .wuchale-build/i18n.ts
+msgid "{0} does not allow Postika to start posting. Trying {1} instead..."
+msgstr "لا تسمح {0} لـ Postika ببدء النشر. جارٍ تجربة {1} بدلاً منها..."
+
+#. 0: duration
+#: .wuchale-build/i18n.ts
+msgid "Paused {0}"
+msgstr "متوقف مؤقتاً لمدة {0}"
+
+#. 0: kind; 1: group
+#: .wuchale-build/i18n.ts
+msgid "Fresh {0} request values captured from {1}."
+msgstr "تم التقاط قيم جديدة لطلب {0} من {1}."
+
+#: .wuchale-build/i18n.ts
+msgid "Add post text and at least one image to continue."
+msgstr "أضف نص المنشور وصورة واحدة على الأقل للمتابعة."
+
+#: .wuchale-build/i18n.ts
+msgid "Add post text to continue."
+msgstr "أضف نصاً إلى المنشور للمتابعة."
+
+#: .wuchale-build/i18n.ts
+msgid "Add at least one image to continue."
+msgstr "أضف صورة واحدة على الأقل للمتابعة."
+
+#. 0: count
+#: .wuchale-build/i18n.ts
+msgid "{0} groups selected. Continue to review your post."
+msgstr "تم تحديد {0} مجموعة. تابع لمراجعة منشورك."
+
+#. 0: count
+#: .wuchale-build/i18n.ts
+msgid "{0} images"
+msgstr "{0} صور"
+
+#: .wuchale-build/i18n.ts
+msgid "Post now"
+msgstr "انشر الآن"
+
+#: .wuchale-build/i18n.ts
+msgid "Schedule"
+msgstr "جدولة"
+
+#: .wuchale-build/i18n.ts
+msgid "Schedule your queue"
+msgstr "جدولة قائمة النشر"
+
+#: .wuchale-build/i18n.ts
+msgid "Confirm schedule"
+msgstr "تأكيد الجدولة"
+
+#: .wuchale-build/i18n.ts
+msgid "Cancel"
+msgstr "إلغاء"
+
+#. 0: zone
+#: .wuchale-build/i18n.ts
+msgid "Time zone: {0}. Keep Chrome open and your computer awake. Facebook may ask you to sign in when posting starts."
+msgstr "المنطقة الزمنية: {0}. أبقِ Chrome مفتوحًا والكمبيوتر قيد التشغيل. قد يطلب منك Facebook تسجيل الدخول عند بدء النشر."
+
+#: .wuchale-build/i18n.ts
+msgid "Choose a date and time"
+msgstr "اختر التاريخ والوقت"
+
+#: .wuchale-build/i18n.ts
+msgid "Choose a weekday for this post"
+msgstr "اختر يومًا من أيام الأسبوع لهذا المنشور"
+
+#: .wuchale-build/i18n.ts
+msgid "Previous month"
+msgstr "الشهر السابق"
+
+#: .wuchale-build/i18n.ts
+msgid "Next month"
+msgstr "الشهر التالي"
+
+#: .wuchale-build/i18n.ts
+msgid "Select date"
+msgstr "اختر التاريخ"
+
+#: .wuchale-build/i18n.ts
+msgid "Select time"
+msgstr "اختر الوقت"
+
+#: .wuchale-build/i18n.ts
+msgid "Hour"
+msgstr "الساعة"
+
+#: .wuchale-build/i18n.ts
+msgid "Minute"
+msgstr "الدقيقة"
+
+#: .wuchale-build/i18n.ts
+msgid "Increase hour"
+msgstr "زيادة الساعة"
+
+#: .wuchale-build/i18n.ts
+msgid "Decrease hour"
+msgstr "خفض الساعة"
+
+#: .wuchale-build/i18n.ts
+msgid "Increase minute"
+msgstr "زيادة الدقيقة"
+
+#: .wuchale-build/i18n.ts
+msgid "Decrease minute"
+msgstr "خفض الدقيقة"
+
+#: .wuchale-build/i18n.ts
+msgid "Morning"
+msgstr "الصباح"
+
+#: .wuchale-build/i18n.ts
+msgid "Afternoon"
+msgstr "بعد الظهر"
+
+#: .wuchale-build/i18n.ts
+msgid "Evening"
+msgstr "المساء"
+
+#: .wuchale-build/i18n.ts
+msgid "Choose a date and time in the future."
+msgstr "اختر تاريخًا ووقتًا في المستقبل."
+
+#: .wuchale-build/i18n.ts
+msgid "Scheduled"
+msgstr "مجدول"
+
+#. 0: date
+#: .wuchale-build/i18n.ts
+msgid "Scheduled for {0}. Keep Chrome open and your computer awake."
+msgstr "مجدول في {0}. أبقِ Chrome مفتوحًا والكمبيوتر قيد التشغيل."
+
+#: .wuchale-build/i18n.ts
+msgid "Your queue is scheduled."
+msgstr "تمت جدولة قائمة النشر."
+
+#: .wuchale-build/i18n.ts
+msgid "Cancel scheduled queue"
+msgstr "إلغاء قائمة النشر المجدولة"
+
+#: .wuchale-build/i18n.ts
+msgid "Scheduled posting cancelled."
+msgstr "تم إلغاء النشر المجدول."
+
+#: .wuchale-build/i18n.ts
+msgid "Could not schedule this queue. Check that Chrome storage is available and try again."
+msgstr "تعذرت جدولة قائمة النشر. تحقق من توفر مساحة تخزين Chrome ثم حاول مرة أخرى."
+
+#: .wuchale-build/i18n.ts
+msgid "The scheduled queue could not be started. Please schedule it again."
+msgstr "تعذر بدء قائمة النشر المجدولة. يرجى جدولتها مرة أخرى."
+
+#: .wuchale-build/i18n.ts
+msgid "Scheduling this queue..."
+msgstr "جارٍ جدولة قائمة النشر..."
+
+#~ msgid "24-hour clock"
+#~ msgstr "نظام 24 ساعة"
+
+#: .wuchale-build/i18n.ts
+msgid "Time format: 24-hour"
+msgstr "تنسيق الوقت: 24 ساعة"
+
+#: .wuchale-build/i18n.ts
+msgid "Settings & support"
+msgstr "الإعدادات والدعم"
+
+#: .wuchale-build/i18n.ts
+msgid "Dark mode"
+msgstr "الوضع الداكن"
+
+#: .wuchale-build/i18n.ts
+msgid "WhatsApp developer"
+msgstr "التواصل مع المطور عبر واتساب"
+
+#: .wuchale-build/i18n.ts
+msgid "Email developer"
+msgstr "مراسلة المطور عبر البريد الإلكتروني"
+
+#: .wuchale-build/i18n.ts
+msgid "Could not load the appearance setting. Using light mode."
+msgstr "تعذر تحميل إعداد المظهر. سيتم استخدام الوضع الفاتح."
+
+#: .wuchale-build/i18n.ts
+msgid "Could not save the appearance setting. It will reset when Postika closes."
+msgstr "تعذر حفظ إعداد المظهر. ستتم إعادة ضبطه عند إغلاق Postika."
+
+#: .wuchale-build/i18n.ts
+msgid "Download desktop app"
+msgstr "تنزيل تطبيق سطح المكتب"
+
+#: .wuchale-build/i18n.ts
+msgid "Images"
+msgstr "الصور"
+
+#: .wuchale-build/i18n.ts
+msgid "Required"
+msgstr "مطلوب"
+
+#. 0: count
+#: .wuchale-build/i18n.ts
+msgid "{0} images selected"
+msgstr "الصور المحددة: {0}"
+
+#: .wuchale-build/i18n.ts
+msgid "Add more"
+msgstr "إضافة المزيد"
+
+#. 0: current; 1: total
+#: .wuchale-build/i18n.ts
+msgid "Image {0} of {1}. Click to preview; drag or use Alt+Left/Right to reorder."
+msgstr "الصورة {0} من {1}. انقر لمعاينتها، أو اسحبها أو استخدم Alt+السهم الأيسر/الأيمن لإعادة ترتيبها."
+
+#: .wuchale-build/i18n.ts
+msgid "More formatting"
+msgstr "المزيد من التنسيق"
+
+#~ msgid "Sign in to Facebook in a Chrome tab before finding groups. Postika opens your joined-groups page to load them."
+#~ msgstr "قبل البحث عن المجموعات، سجّل الدخول إلى Facebook في علامة تبويب Chrome. سيفتح Postika صفحة المجموعات التي انضممت إليها لتحميلها."
+
+#: .wuchale-build/i18n.ts
+msgid "Sign in to Facebook in a Chrome tab. Postika opens your joined-groups page."
+msgstr "سجّل الدخول إلى Facebook في علامة تبويب Chrome. سيفتح Postika صفحة مجموعاتك."
+
+#: .wuchale-build/i18n.ts
+msgid "Select the groups where you want to post."
+msgstr "اختر المجموعات التي تريد النشر فيها."
+
+#: .wuchale-build/i18n.ts
+msgid "Your groups will appear here."
+msgstr "ستظهر مجموعاتك هنا."
+
+#: .wuchale-build/i18n.ts
+msgid "Internet connection lost. Posting paused until the connection returns."
+msgstr "انقطع اتصال الإنترنت. تم إيقاف النشر مؤقتًا حتى عودة الاتصال."
+
+#: .wuchale-build/i18n.ts
+msgid "Posting resumed."
+msgstr "استؤنف النشر."
+
+#: .wuchale-build/i18n.ts
+msgid "Internet connection restored. Resuming posting."
+msgstr "عاد اتصال الإنترنت. جارٍ استئناف النشر."
+
+#: .wuchale-build/i18n.ts
+msgid "Internet connection restored. Posting remains paused until you resume."
+msgstr "عاد اتصال الإنترنت. سيظل النشر متوقفًا مؤقتًا حتى تستأنفه."
+
+#: .wuchale-build/i18n.ts
+msgid "Facebook did not provide the request values needed to continue. Try again."
+msgstr "لم يوفّر Facebook بيانات الطلب اللازمة للمتابعة. حاول مرة أخرى."
+
+#: .wuchale-build/i18n.ts
+msgid "Facebook did not confirm whether the first post was submitted. Check Facebook before trying again."
+msgstr "لم يؤكد Facebook ما إذا كان قد تم إرسال المنشور الأول. تحقّق من Facebook قبل المحاولة مرة أخرى."

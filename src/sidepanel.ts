@@ -1,69 +1,40 @@
 import type {
-  GeminiErrorPrompt,
-  AccessEntitlements,
-  AccessEntitlementsUpdatedMessage,
   FacebookGroup,
   GetPostingQueueStatusRequest,
   GroupExtractionStatusMessage,
   LoadGroupsResponse,
-  MarketplaceCleanupStatusMessage,
-  DeleteOldMarketplaceListingsRequest,
-  PauseMarketplacePostingRequest,
   PauseUiPostingRequest,
-  MarketplaceItemPostingResponse,
-  MarketplaceItemPostingStatusMessage,
   PostingQueueStatusResponse,
   PostingTiming,
   ResumeUiPostingRequest,
-  ResumeMarketplacePostingRequest,
-  StartMarketplaceItemPostingRequest,
   StopUiPostingRequest,
-  StopMarketplacePostingRequest,
   StartUiPostingRequest,
   StatusBannerTone,
   UiPostImage,
-  UiPreparedPost,
   UiPostingResponse,
   UiPostingStatusMessage,
 } from "./config";
-import { AUTH_API_BASE_URL } from "./auth-config";
+import { sendPostingRequest } from "./posting-request-transfer";
 import { groupsInSelectionOrder } from "./group-posting-order";
-import { initializeCardAccordions, expandedCardIds, restoreExpandedCards, revealCardFor } from "./card-accordions";
-import { initializeWatermarkControls, watermarkImage, type WatermarkSettings } from "./watermark";
-
-const GEMINI_API_KEY_STORAGE_KEY = "geminiApiKey";
-const GEMINI_REWRITE_ENABLED_STORAGE_KEY = "geminiRewriteEnabled";
-const GEMINI_CUSTOM_PROMPT_STORAGE_KEY = "geminiCustomPrompt";
-const MARKETPLACE_GEMINI_REWRITE_ENABLED_STORAGE_KEY =
-  "marketplaceGeminiRewriteEnabled";
-const MARKETPLACE_GEMINI_CUSTOM_PROMPT_STORAGE_KEY =
-  "marketplaceGeminiCustomPrompt";
-const MARKETPLACE_MIN_INTERVAL_STORAGE_KEY = "marketplaceMinimumDelaySeconds";
-const MARKETPLACE_MAX_INTERVAL_STORAGE_KEY = "marketplaceMaximumDelaySeconds";
-const MARKETPLACE_SHUFFLE_ITEMS_STORAGE_KEY = "marketplaceShuffleItems";
-const AUTH_SESSION_STORAGE_KEY = "googleAuthSession";
-const AUTH_SIGNED_OUT_STORAGE_KEY = "googleAuthSignedOut";
+import { overlappingTarget, type DragBounds } from "./drag-target";
+import {
+  initializePostingWizard,
+  type PostingWizardMessages,
+} from "./posting-wizard";
+import { initializePostEditor } from "./rich-text-editor";
+import {
+  initializeSchedulePicker,
+  type SchedulePicker,
+} from "./schedule-picker";
+import { getLocale, initializeI18n, msg } from "./i18n";
 const SIDE_PANEL_SESSION_STORAGE_KEY = "sidePanelSession";
+const SIDE_PANEL_DRAFT_IMAGES_STORAGE_KEY = "sidePanelDraftImages";
 const MIN_SLEEP_SECONDS = 60;
 const PREVIOUS_MIN_SLEEP_SECONDS = 120;
 const DEFAULT_MAX_SLEEP_SECONDS = 300;
-const DEFAULT_MAX_POSTS = 200;
-const FREE_MAX_GROUP_POSTS = 5;
-const MIN_MAX_POSTS = 1;
-
-function rootFontSize(): number {
-  return Number.parseFloat(getComputedStyle(document.documentElement).fontSize) || 10;
-}
-
-function remToPixels(value: number): number {
-  return value * rootFontSize();
-}
-
-function pixelsToRem(value: number): string {
-  return `${value / rootFontSize()}rem`;
-}
 
 const toastRegion = document.querySelector<HTMLElement>("#toast-region");
+const APP_THEME_STORAGE_KEY = "postika:theme";
 
 function showToast(
   message: string,
@@ -81,6 +52,7 @@ function showToast(
 
   const toast = document.createElement("section");
   toast.className = `toast-card toast-card--${tone}`;
+  toast.dataset.message = message;
   toast.setAttribute("role", tone === "error" ? "alert" : "status");
 
   const accent = document.createElement("span");
@@ -90,22 +62,15 @@ function showToast(
   const content = document.createElement("div");
   content.className = "toast-card__content";
   const title = document.createElement("strong");
-  title.textContent =
-    tone === "success"
-      ? "Success"
-      : tone === "warning"
-        ? "Please check"
-        : tone === "error"
-          ? "Something went wrong"
-          : "Information";
+  title.textContent = toastTitle(tone);
   const copy = document.createElement("span");
-  copy.textContent = message;
+  copy.textContent = localizeAppText(message);
   content.append(title, copy);
 
   const close = document.createElement("button");
   close.type = "button";
   close.className = "toast-card__close";
-  close.setAttribute("aria-label", "Dismiss notification");
+  close.setAttribute("aria-label", msg("dismissNotification"));
   close.textContent = "×";
 
   let removalTimer: number | undefined;
@@ -125,70 +90,136 @@ function showToast(
   removalTimer = window.setTimeout(dismiss, durationMs);
 }
 
-const accessSummary = document.querySelector<HTMLElement>("#access-summary");
-const accessTierBadge =
-  document.querySelector<HTMLElement>("#access-tier-badge");
-const accessUsageDashboard = document.querySelector<HTMLElement>(
-  "#access-usage-dashboard",
-);
-const accessProSummary = document.querySelector<HTMLElement>(
-  "#access-pro-summary",
-);
-const accessResetMessage = document.querySelector<HTMLElement>(
-  "#access-reset-message",
-);
-const accessResetMessageCopy = document.querySelector<HTMLElement>(
-  "#access-reset-message-copy",
-);
-const accessUpgrade = document.querySelector<HTMLElement>("#access-upgrade");
+function initializeAppMenu() {
+  const trigger =
+    document.querySelector<HTMLButtonElement>("#app-menu-trigger");
+  const menu = document.querySelector<HTMLElement>("#app-menu");
+  const title = document.querySelector<HTMLElement>("#app-menu-title");
+  const themeToggle =
+    document.querySelector<HTMLButtonElement>("#theme-toggle");
+  const themeToggleLabel =
+    themeToggle?.querySelector<HTMLElement>(".app-menu__label");
+  if (!trigger || !menu || !title || !themeToggle || !themeToggleLabel) return;
 
-type AccessMeterElements = {
-  value: HTMLElement | null;
-  meter: HTMLElement | null;
-};
+  let theme: "light" | "dark" = "light";
+  try {
+    theme =
+      localStorage.getItem(APP_THEME_STORAGE_KEY) === "dark" ? "dark" : "light";
+  } catch (error) {
+    console.error("Could not load the appearance setting.", error);
+    showToast(msg("themePreferenceLoadFailure"), "warning");
+  }
 
-const accessMeters = {
-  savedGroupPosts: {
-    value: document.querySelector<HTMLElement>("#saved-groups-value"),
-    meter: document.querySelector<HTMLElement>("#saved-groups-meter"),
-  },
-  savedMarketplaceListings: {
-    value: document.querySelector<HTMLElement>("#saved-marketplace-value"),
-    meter: document.querySelector<HTMLElement>("#saved-marketplace-meter"),
-  },
-  groupPostsToday: {
-    value: document.querySelector<HTMLElement>("#daily-groups-value"),
-    meter: document.querySelector<HTMLElement>("#daily-groups-meter"),
-  },
-  marketplaceListingsToday: {
-    value: document.querySelector<HTMLElement>("#daily-marketplace-value"),
-    meter: document.querySelector<HTMLElement>("#daily-marketplace-meter"),
-  },
-} satisfies Record<string, AccessMeterElements>;
+  const render = () => {
+    trigger.setAttribute("aria-label", msg("settingsAndSupport"));
+    title.textContent = msg("settingsAndSupport");
+    themeToggleLabel.textContent = msg("darkMode");
+    themeToggle.setAttribute("aria-pressed", String(theme === "dark"));
+    themeToggle.setAttribute("aria-label", msg("darkMode"));
+    menu
+      .querySelector<HTMLAnchorElement>(".app-menu__whatsapp")
+      ?.replaceChildren(document.createTextNode(msg("whatsappDeveloper")));
+    menu
+      .querySelector<HTMLAnchorElement>(".app-menu__email")
+      ?.replaceChildren(document.createTextNode(msg("emailDeveloper")));
+    menu
+      .querySelector<HTMLElement>(".app-menu__download .app-menu__label")
+      ?.replaceChildren(document.createTextNode(msg("downloadDesktopApp")));
+  };
+
+  const applyTheme = (persist: boolean) => {
+    document.documentElement.dataset.theme = theme;
+    render();
+    if (!persist) return;
+    try {
+      localStorage.setItem(APP_THEME_STORAGE_KEY, theme);
+    } catch (error) {
+      console.error("Could not save the appearance setting.", error);
+      showToast(msg("themePreferenceSaveFailure"), "error");
+    }
+  };
+
+  const close = (restoreFocus = false) => {
+    menu.hidden = true;
+    trigger.setAttribute("aria-expanded", "false");
+    if (restoreFocus) trigger.focus();
+  };
+
+  trigger.addEventListener("click", () => {
+    menu.hidden = !menu.hidden;
+    trigger.setAttribute("aria-expanded", String(!menu.hidden));
+    if (!menu.hidden) themeToggle.focus();
+  });
+  themeToggle.addEventListener("click", () => {
+    theme = theme === "dark" ? "light" : "dark";
+    applyTheme(true);
+  });
+  menu.addEventListener("click", (event) => {
+    if (event.target instanceof Element && event.target.closest("a")) {
+      close();
+    }
+  });
+  document.addEventListener("pointerdown", (event) => {
+    if (
+      event.target instanceof Node &&
+      !menu.contains(event.target) &&
+      !trigger.contains(event.target)
+    ) {
+      close();
+    }
+  });
+  document.addEventListener("keydown", (event) => {
+    if (event.key === "Escape" && !menu.hidden) {
+      event.preventDefault();
+      close(true);
+    }
+  });
+  window.addEventListener("postika:locale-changed", render);
+
+  applyTheme(false);
+}
+
+function toastTitle(tone: StatusBannerTone): string {
+  switch (tone) {
+    case "success":
+      return msg("success");
+    case "warning":
+      return msg("pleaseCheck");
+    case "error":
+      return msg("somethingWentWrong");
+    default:
+      return msg("information");
+  }
+}
+
+function refreshToastTranslations() {
+  toastRegion?.querySelectorAll<HTMLElement>(".toast-card").forEach((toast) => {
+    const tone = (["success", "warning", "error"] as const).find((candidate) =>
+      toast.classList.contains(`toast-card--${candidate}`),
+    );
+    const title = toast.querySelector<HTMLElement>(
+      ".toast-card__content strong",
+    );
+    const copy = toast.querySelector<HTMLElement>(".toast-card__content span");
+    const close = toast.querySelector<HTMLButtonElement>(".toast-card__close");
+    if (title) title.textContent = toastTitle(tone ?? "info");
+    if (copy) copy.textContent = localizeAppText(toast.dataset.message ?? "");
+    close?.setAttribute("aria-label", msg("dismissNotification"));
+  });
+}
 
 type SidePanelSession = {
   minimumDelaySeconds: number;
   maximumDelaySeconds: number;
   delaySeconds?: number;
   intervalSettingsVersion: number;
-  maxPosts: number;
-  groupCommentEnabled?: boolean;
-  groupCommentOptions?: string[];
-  groupCommentText?: string;
-  groupCommentOwnerUserId?: string;
   loadedGroups: FacebookGroup[];
   selectedGroupIds: string[];
   groupsSearchQuery: string;
   groupsVisible?: boolean;
-  expandedCards?: string[];
   imagePreviewsVisible: boolean;
+  postBodyHtml: string;
 };
-
-type StoredPreparedPost = UiPreparedPost & {
-  selected: boolean;
-};
-
-type SavedMarketplaceListingFieldValue = string | boolean;
 
 const loadGroupsButton =
   document.querySelector<HTMLButtonElement>("#load-groups-btn");
@@ -210,8 +241,6 @@ const groupsSelectAll =
 const groupsSelectAllCheckbox = document.querySelector<HTMLInputElement>(
   "#groups-select-all-checkbox",
 );
-const postBodyInput =
-  document.querySelector<HTMLTextAreaElement>("#post-body-input");
 const postImagesInput =
   document.querySelector<HTMLInputElement>("#post-images-input");
 const groupsPhotoDropzone =
@@ -222,593 +251,40 @@ const groupsPhotoStatus = document.querySelector<HTMLElement>(
 const imagePreviewList = document.querySelector<HTMLElement>(
   "#image-preview-list",
 );
-const savePreparedPostButton = document.querySelector<HTMLButtonElement>(
-  "#save-prepared-post-btn",
-);
-const cancelPostEditButton = document.querySelector<HTMLButtonElement>(
-  "#cancel-post-edit-btn",
-);
-const preparedPostsList = document.querySelector<HTMLElement>(
-  "#prepared-posts-list",
-);
-const preparedPostsCount = document.querySelector<HTMLElement>(
-  "#prepared-posts-count",
-);
-const preparedPostsSelectAll = document.querySelector<HTMLElement>(
-  "#prepared-posts-select-all",
-);
-const preparedPostsSelectAllCheckbox = document.querySelector<HTMLInputElement>(
-  "#prepared-posts-select-all-checkbox",
-);
 const postIntervalMinInput = document.querySelector<HTMLInputElement>(
   "#post-interval-min-input",
 );
 const postIntervalMaxInput = document.querySelector<HTMLInputElement>(
   "#post-interval-max-input",
 );
-const maxPostsInput =
-  document.querySelector<HTMLInputElement>("#max-posts-input");
-const maxPostsNote = document.querySelector<HTMLElement>("#max-posts-note");
-const geminiApiKeyInput = document.querySelector<HTMLInputElement>(
-  "#gemini-api-key-input",
-);
-const geminiRewriteToggle = document.querySelector<HTMLInputElement>(
-  "#gemini-rewrite-toggle",
-);
-const geminiCustomPromptInput = document.querySelector<HTMLTextAreaElement>(
-  "#gemini-custom-prompt-input",
-);
-const groupCommentEnabledToggle = document.querySelector<HTMLInputElement>(
-  "#group-comment-enabled-toggle",
-);
-const groupCommentOptionsContainer = document.querySelector<HTMLElement>(
-  "#group-comment-options",
-);
-const groupCommentAddButton = document.querySelector<HTMLButtonElement>(
-  "#group-comment-add-btn",
-);
-const DEFAULT_GROUP_COMMENT_OPTIONS = [""];
-type GroupCommentSettings = { enabled: boolean; options: string[] };
-let groupCommentOptions = [...DEFAULT_GROUP_COMMENT_OPTIONS];
-let legacyGroupCommentSettings: (GroupCommentSettings & { ownerUserId?: string }) | undefined;
-let groupCommentSettingsLoaded = false;
-let groupCommentSettingsGeneration = 0;
-let groupCommentSaveTimer: number | undefined;
-let groupCommentSaveQueue: Promise<void> = Promise.resolve();
-let groupCommentEditVersion = 0;
-let groupCommentSavedVersion = 0;
-const groupCommentSyncStatus = document.querySelector<HTMLElement>("#group-comment-sync-status");
-const groupCommentRetryButton = document.querySelector<HTMLButtonElement>("#group-comment-retry-btn");
-const geminiStatusMessage = document.querySelector<HTMLElement>(
-  "#gemini-status-message",
-);
-const geminiStatusCount = document.querySelector<HTMLElement>(
-  "#gemini-status-count",
-);
 const createForm = document.querySelector<HTMLFormElement>("#create-form");
-const groupsTab = document.querySelector<HTMLButtonElement>("#groups-tab");
-const marketplaceTab =
-  document.querySelector<HTMLButtonElement>("#marketplace-tab");
-const groupsTabPanel = document.querySelector<HTMLElement>("#groups-tab-panel");
-const marketplaceTabPanel = document.querySelector<HTMLElement>(
-  "#marketplace-tab-panel",
+const photoLightbox = document.querySelector<HTMLElement>("#photo-lightbox");
+const photoLightboxBackdrop = document.querySelector<HTMLElement>(
+  "#photo-lightbox-backdrop",
 );
-const marketplaceCleanupCard = document.querySelector<HTMLElement>(
-  ".marketplace-cleanup-card",
+const photoLightboxClose = document.querySelector<HTMLButtonElement>(
+  "#photo-lightbox-close",
 );
-const marketplaceSavedListingsCard = document.querySelector<HTMLElement>(
-  ".marketplace-saved-card",
+const photoLightboxTitle = document.querySelector<HTMLElement>(
+  "#photo-lightbox-title",
 );
-const marketplacePostingPreferencesCard = document.querySelector<HTMLElement>(
-  "#marketplace-posting-preferences-card",
+const photoLightboxImage = document.querySelector<HTMLImageElement>(
+  "#photo-lightbox-image",
 );
-const listingTypeSelect = document.querySelector<HTMLElement>(
-  "#listing-type-select",
+const photoLightboxCounter = document.querySelector<HTMLElement>(
+  "#photo-lightbox-counter",
 );
-const listingTypeTrigger = document.querySelector<HTMLButtonElement>(
-  "#listing-type-trigger",
+const photoLightboxFilename = document.querySelector<HTMLElement>(
+  "#photo-lightbox-filename",
 );
-const listingTypeOptions = document.querySelector<HTMLElement>(
-  "#listing-type-options",
+const photoLightboxPrevious = document.querySelector<HTMLButtonElement>(
+  "#photo-lightbox-previous",
 );
-const listingTypeValue = document.querySelector<HTMLElement>(
-  "#listing-type-value",
+const photoLightboxNext = document.querySelector<HTMLButtonElement>(
+  "#photo-lightbox-next",
 );
-const listingTypeSelectedIcon = document.querySelector<HTMLElement>(
-  "#listing-type-selected-icon",
-);
-const listingTypeDefaultIconMarkup = listingTypeSelectedIcon?.innerHTML ?? "";
-const marketplaceListingTypeInput = document.querySelector<HTMLInputElement>(
-  "#marketplace-listing-type-input",
-);
-const listingTypeOptionElements = Array.from(
-  document.querySelectorAll<HTMLElement>(".custom-select__option"),
-);
-const marketplacePhotosField = document.querySelector<HTMLElement>(
-  "#marketplace-photos-field",
-);
-const marketplaceListingFields = document.querySelector<HTMLElement>(
-  "#marketplace-listing-fields",
-);
-const saveMarketplaceListingButton = document.querySelector<HTMLButtonElement>(
-  "#save-marketplace-listing-btn",
-);
-const cancelMarketplaceListingEditButton =
-  document.querySelector<HTMLButtonElement>(
-    "#cancel-marketplace-listing-edit-btn",
-  );
-const marketplaceSaveListingStatus = document.querySelector<HTMLElement>(
-  "#marketplace-save-listing-status",
-);
-const savedMarketplaceListingsList = document.querySelector<HTMLElement>(
-  "#saved-marketplace-listings-list",
-);
-const savedMarketplaceListingsCount = document.querySelector<HTMLElement>(
-  "#saved-marketplace-listings-count",
-);
-const savedMarketplaceListingsStatus = document.querySelector<HTMLElement>(
-  "#saved-marketplace-listings-status",
-);
-const marketplaceListingsSelectAllCheckbox =
-  document.querySelector<HTMLInputElement>(
-    "#marketplace-listings-select-all-checkbox",
-  );
-const marketplaceListingsSelectionCount = document.querySelector<HTMLElement>(
-  "#marketplace-listings-selection-count",
-);
-const marketplaceIntervalMinInput = document.querySelector<HTMLInputElement>(
-  "#marketplace-interval-min-input",
-);
-const marketplaceIntervalMaxInput = document.querySelector<HTMLInputElement>(
-  "#marketplace-interval-max-input",
-);
-const marketplaceGeminiApiKeyInput = document.querySelector<HTMLInputElement>(
-  "#marketplace-gemini-api-key-input",
-);
-const marketplaceGeminiPromptInput =
-  document.querySelector<HTMLTextAreaElement>(
-    "#marketplace-gemini-prompt-input",
-  );
-const marketplaceGeminiRewriteToggle = document.querySelector<HTMLInputElement>(
-  "#marketplace-gemini-rewrite-toggle",
-);
-const marketplaceShuffleItemsToggle = document.querySelector<HTMLInputElement>(
-  "#marketplace-shuffle-items-toggle",
-);
-const marketplacePostingStatusMessage = document.querySelector<HTMLElement>(
-  "#marketplace-posting-status-message",
-);
-const marketplacePostingStatusCount = document.querySelector<HTMLElement>(
-  "#marketplace-posting-status-count",
-);
-const marketplacePostingLog = document.querySelector<HTMLOListElement>(
-  "#marketplace-posting-log",
-);
-const marketplaceCleanupDaysInput = document.querySelector<HTMLInputElement>(
-  "#marketplace-cleanup-days-input",
-);
-const deleteOldMarketplaceListingsButton =
-  document.querySelector<HTMLButtonElement>(
-    "#delete-old-marketplace-listings-btn",
-  );
-const marketplaceCleanupProgress = document.querySelector<HTMLElement>(
-  "#marketplace-cleanup-progress",
-);
-const marketplaceCleanupCount = document.querySelector<HTMLElement>(
-  "#marketplace-cleanup-count",
-);
-const marketplaceCleanupPercent = document.querySelector<HTMLElement>(
-  "#marketplace-cleanup-percent",
-);
-const marketplaceCleanupProgressBar = document.querySelector<HTMLElement>(
-  "#marketplace-cleanup-progress-bar",
-);
-const marketplaceCleanupDeleted = document.querySelector<HTMLElement>(
-  "#marketplace-cleanup-deleted",
-);
-const marketplaceCleanupFailed = document.querySelector<HTMLElement>(
-  "#marketplace-cleanup-failed",
-);
-const marketplaceCleanupRemaining = document.querySelector<HTMLElement>(
-  "#marketplace-cleanup-remaining",
-);
-const marketplaceCleanupMessage = document.querySelector<HTMLElement>(
-  "#marketplace-cleanup-message",
-);
-const marketplaceCleanupLog = document.querySelector<HTMLOListElement>(
-  "#marketplace-cleanup-log",
-);
-const marketplacePostingProgressCard = document.querySelector<HTMLElement>(
-  "#marketplace-posting-progress-card",
-);
-const marketplacePostingProgress = document.querySelector<HTMLElement>(
-  "#marketplace-posting-progress",
-);
-const marketplacePostingProgressPercent = document.querySelector<HTMLElement>(
-  "#marketplace-posting-progress-percent",
-);
-const marketplacePostingProgressBar = document.querySelector<HTMLElement>(
-  "#marketplace-posting-progress-bar",
-);
-const marketplacePostingProgressSuccess = document.querySelector<HTMLElement>(
-  "#marketplace-posting-progress-success",
-);
-const marketplacePostingProgressFailed = document.querySelector<HTMLElement>(
-  "#marketplace-posting-progress-failed",
-);
-const marketplacePostingProgressRemaining = document.querySelector<HTMLElement>(
-  "#marketplace-posting-progress-remaining",
-);
-const marketplacePostingTiming = document.querySelector<HTMLElement>(
-  "#marketplace-posting-timing",
-);
-const marketplacePostingTimingLabel = document.querySelector<HTMLElement>(
-  "#marketplace-posting-timing-label",
-);
-const marketplacePostingElapsedTime = document.querySelector<HTMLElement>(
-  "#marketplace-posting-elapsed-time",
-);
-const marketplacePostingItemTimingLabel = document.querySelector<HTMLElement>(
-  "#marketplace-posting-item-timing-label",
-);
-const marketplacePostingItemTime = document.querySelector<HTMLElement>(
-  "#marketplace-posting-item-time",
-);
-const marketplaceProgressPostedFilterButton =
-  document.querySelector<HTMLButtonElement>(
-    "#marketplace-progress-filter-posted",
-  );
-const marketplaceProgressFailedFilterButton =
-  document.querySelector<HTMLButtonElement>(
-    "#marketplace-progress-filter-failed",
-  );
-const pauseMarketplacePostingButton = document.querySelector<HTMLButtonElement>(
-  "#pause-marketplace-posting-btn",
-);
-const stopMarketplacePostingButton = document.querySelector<HTMLButtonElement>(
-  "#stop-marketplace-posting-btn",
-);
-const postSelectedMarketplaceItemsButton =
-  document.querySelector<HTMLButtonElement>(
-    "#post-selected-marketplace-items-btn",
-  );
-const marketplacePhotoDropzone = document.querySelector<HTMLElement>(
-  "#marketplace-photo-dropzone",
-);
-const marketplaceImagesInput = document.querySelector<HTMLInputElement>(
-  "#marketplace-images-input",
-);
-const marketplacePhotoCount = document.querySelector<HTMLElement>(
-  "#marketplace-photo-count",
-);
-const marketplacePhotoLimit = document.querySelector<HTMLElement>(
-  "#marketplace-photo-limit",
-);
-const marketplacePhotoGuidance = document.querySelector<HTMLElement>(
-  "#marketplace-photo-guidance",
-);
-const marketplacePhotoStatus = document.querySelector<HTMLElement>(
-  "#marketplace-photo-status",
-);
-const marketplacePhotoPreviews = document.querySelector<HTMLElement>(
-  "#marketplace-photo-previews",
-);
-const marketplaceTitleInput = document.querySelector<HTMLInputElement>(
-  "#marketplace-title-input",
-);
-const marketplaceTitleCount = document.querySelector<HTMLElement>(
-  "#marketplace-title-count",
-);
-const marketplacePriceInput = document.querySelector<HTMLInputElement>(
-  "#marketplace-price-input",
-);
-const marketplaceCategorySelect = document.querySelector<HTMLElement>(
-  "#marketplace-category-select",
-);
-const marketplaceCategoryTrigger = document.querySelector<HTMLButtonElement>(
-  "#marketplace-category-trigger",
-);
-const marketplaceCategoryOptions = document.querySelector<HTMLElement>(
-  "#marketplace-category-options",
-);
-const marketplaceCategoryValue = document.querySelector<HTMLElement>(
-  "#marketplace-category-value",
-);
-const marketplaceCategorySelectedIcon = document.querySelector<HTMLElement>(
-  "#marketplace-category-selected-icon",
-);
-const marketplaceCategoryDefaultIconMarkup =
-  marketplaceCategorySelectedIcon?.innerHTML ?? "";
-const marketplaceCategoryInput = document.querySelector<HTMLInputElement>(
-  "#marketplace-category-input",
-);
-const marketplaceCategoryGroupInput = document.querySelector<HTMLInputElement>(
-  "#marketplace-category-group-input",
-);
-const marketplaceConditionSelect = document.querySelector<HTMLElement>(
-  "#marketplace-condition-select",
-);
-const marketplaceConditionTrigger = document.querySelector<HTMLButtonElement>(
-  "#marketplace-condition-trigger",
-);
-const marketplaceConditionOptions = document.querySelector<HTMLElement>(
-  "#marketplace-condition-options",
-);
-const marketplaceConditionValue = document.querySelector<HTMLElement>(
-  "#marketplace-condition-value",
-);
-const marketplaceConditionInput = document.querySelector<HTMLInputElement>(
-  "#marketplace-condition-input",
-);
-const marketplaceConditionOptionElements = Array.from(
-  document.querySelectorAll<HTMLElement>(
-    "#marketplace-condition-options .condition-select__option",
-  ),
-);
-const marketplaceVehicleTypeField = document.querySelector<HTMLElement>(
-  "#marketplace-vehicle-type-field",
-);
-const marketplaceVehicleTypeSelect = document.querySelector<HTMLElement>(
-  "#marketplace-vehicle-type-select",
-);
-const marketplaceVehicleTypeTrigger = document.querySelector<HTMLButtonElement>(
-  "#marketplace-vehicle-type-trigger",
-);
-const marketplaceVehicleTypeOptions = document.querySelector<HTMLElement>(
-  "#marketplace-vehicle-type-options",
-);
-const marketplaceVehicleTypeValue = document.querySelector<HTMLElement>(
-  "#marketplace-vehicle-type-value",
-);
-const marketplaceVehicleTypeInput = document.querySelector<HTMLInputElement>(
-  "#marketplace-vehicle-type-input",
-);
-const marketplaceVehicleTypeOptionElements = Array.from(
-  document.querySelectorAll<HTMLElement>(".vehicle-type-select__option"),
-);
-const marketplaceYearField = document.querySelector<HTMLElement>(
-  "#marketplace-year-field",
-);
-const marketplaceYearSelect = document.querySelector<HTMLElement>(
-  "#marketplace-year-select",
-);
-const marketplaceYearTrigger = document.querySelector<HTMLButtonElement>(
-  "#marketplace-year-trigger",
-);
-const marketplaceYearOptions = document.querySelector<HTMLElement>(
-  "#marketplace-year-options",
-);
-const marketplaceYearValue = document.querySelector<HTMLElement>(
-  "#marketplace-year-value",
-);
-const marketplaceYearInput = document.querySelector<HTMLInputElement>(
-  "#marketplace-year-input",
-);
-const marketplaceVehicleDetailsFields = document.querySelector<HTMLElement>(
-  "#marketplace-vehicle-details-fields",
-);
-const marketplaceVehicleMileageInput = document.querySelector<HTMLInputElement>(
-  "#marketplace-vehicle-mileage-input",
-);
-const marketplaceVehicleMileageField = document.querySelector<HTMLElement>(
-  "#marketplace-vehicle-mileage-field",
-);
-const marketplaceBodyStyleSelect = document.querySelector<HTMLElement>(
-  "#marketplace-body-style-select",
-);
-const marketplaceBodyStyleTrigger = document.querySelector<HTMLButtonElement>(
-  "#marketplace-body-style-trigger",
-);
-const marketplaceBodyStyleOptions = document.querySelector<HTMLElement>(
-  "#marketplace-body-style-options",
-);
-const marketplaceBodyStyleValue = document.querySelector<HTMLElement>(
-  "#marketplace-body-style-value",
-);
-const marketplaceBodyStyleInput = document.querySelector<HTMLInputElement>(
-  "#marketplace-body-style-input",
-);
-const marketplaceBodyStyleOptionElements = Array.from(
-  document.querySelectorAll<HTMLElement>(".body-style-select__option"),
-);
-const marketplaceVehicleConditionSelect = document.querySelector<HTMLElement>(
-  "#marketplace-vehicle-condition-select",
-);
-const marketplaceVehicleConditionTrigger =
-  document.querySelector<HTMLButtonElement>(
-    "#marketplace-vehicle-condition-trigger",
-  );
-const marketplaceVehicleConditionOptions = document.querySelector<HTMLElement>(
-  "#marketplace-vehicle-condition-options",
-);
-const marketplaceVehicleConditionValue = document.querySelector<HTMLElement>(
-  "#marketplace-vehicle-condition-value",
-);
-const marketplaceVehicleConditionInput =
-  document.querySelector<HTMLInputElement>(
-    "#marketplace-vehicle-condition-input",
-  );
-const marketplaceVehicleConditionOptionElements = Array.from(
-  document.querySelectorAll<HTMLElement>(".vehicle-condition-select__option"),
-);
-const marketplaceFuelTypeSelect = document.querySelector<HTMLElement>(
-  "#marketplace-fuel-type-select",
-);
-const marketplaceFuelTypeTrigger = document.querySelector<HTMLButtonElement>(
-  "#marketplace-fuel-type-trigger",
-);
-const marketplaceFuelTypeOptions = document.querySelector<HTMLElement>(
-  "#marketplace-fuel-type-options",
-);
-const marketplaceFuelTypeValue = document.querySelector<HTMLElement>(
-  "#marketplace-fuel-type-value",
-);
-const marketplaceFuelTypeInput = document.querySelector<HTMLInputElement>(
-  "#marketplace-fuel-type-input",
-);
-const marketplaceFuelTypeOptionElements = Array.from(
-  document.querySelectorAll<HTMLElement>(".fuel-type-select__option"),
-);
-const marketplaceTransmissionSelect = document.querySelector<HTMLElement>(
-  "#marketplace-transmission-select",
-);
-const marketplaceTransmissionTrigger =
-  document.querySelector<HTMLButtonElement>(
-    "#marketplace-transmission-trigger",
-  );
-const marketplaceTransmissionOptions = document.querySelector<HTMLElement>(
-  "#marketplace-transmission-options",
-);
-const marketplaceTransmissionValue = document.querySelector<HTMLElement>(
-  "#marketplace-transmission-value",
-);
-const marketplaceTransmissionInput = document.querySelector<HTMLInputElement>(
-  "#marketplace-transmission-input",
-);
-const marketplaceTransmissionOptionElements = Array.from(
-  document.querySelectorAll<HTMLElement>(".transmission-select__option"),
-);
-const MARKETPLACE_VEHICLE_COLORS = [
-  "Black",
-  "Blue",
-  "Brown",
-  "Gold",
-  "Green",
-  "Gray",
-  "Pink",
-  "Purple",
-  "Red",
-  "Silver",
-  "Orange",
-  "White",
-  "Yellow",
-  "Charcoal",
-  "Off white",
-  "Tan",
-  "Beige",
-  "Burgundy",
-  "Turquoise",
-] as const;
-type MarketplaceVehicleColorKind = "exterior" | "interior";
-const marketplaceColorDropdowns = {
-  exterior: {
-    select: document.querySelector<HTMLElement>(
-      "#marketplace-exterior-color-select",
-    ),
-    trigger: document.querySelector<HTMLButtonElement>(
-      "#marketplace-exterior-color-trigger",
-    ),
-    options: document.querySelector<HTMLElement>(
-      "#marketplace-exterior-color-options",
-    ),
-    value: document.querySelector<HTMLElement>(
-      "#marketplace-exterior-color-value",
-    ),
-    input: document.querySelector<HTMLInputElement>(
-      "#marketplace-exterior-color-input",
-    ),
-    optionElements: [] as HTMLElement[],
-  },
-  interior: {
-    select: document.querySelector<HTMLElement>(
-      "#marketplace-interior-color-select",
-    ),
-    trigger: document.querySelector<HTMLButtonElement>(
-      "#marketplace-interior-color-trigger",
-    ),
-    options: document.querySelector<HTMLElement>(
-      "#marketplace-interior-color-options",
-    ),
-    value: document.querySelector<HTMLElement>(
-      "#marketplace-interior-color-value",
-    ),
-    input: document.querySelector<HTMLInputElement>(
-      "#marketplace-interior-color-input",
-    ),
-    optionElements: [] as HTMLElement[],
-  },
-};
-const marketplaceRentalTypeField = document.querySelector<HTMLElement>(
-  "#marketplace-rental-type-field",
-);
-const marketplaceRentalTypeSelect = document.querySelector<HTMLElement>(
-  "#marketplace-rental-type-select",
-);
-const marketplaceRentalTypeTrigger = document.querySelector<HTMLButtonElement>(
-  "#marketplace-rental-type-trigger",
-);
-const marketplaceRentalTypeOptions = document.querySelector<HTMLElement>(
-  "#marketplace-rental-type-options",
-);
-const marketplaceRentalTypeValue = document.querySelector<HTMLElement>(
-  "#marketplace-rental-type-value",
-);
-const marketplaceRentalTypeInput = document.querySelector<HTMLInputElement>(
-  "#marketplace-rental-type-input",
-);
-const marketplaceRentalTypeOptionElements = Array.from(
-  document.querySelectorAll<HTMLElement>(".rental-type-select__option"),
-);
-const marketplaceHomeDetailsFields = document.querySelector<HTMLElement>(
-  "#marketplace-home-details-fields",
-);
-const marketplaceVehicleExtraFields = Array.from(
-  document.querySelectorAll<HTMLElement>("[data-vehicle-extra]"),
-);
-const marketplaceTitleField = document.querySelector<HTMLElement>(
-  "#marketplace-title-field",
-);
-const marketplacePriceField = document.querySelector<HTMLElement>(
-  "#marketplace-price-field",
-);
-const marketplaceCategoryField = document.querySelector<HTMLElement>(
-  "#marketplace-category-field",
-);
-const marketplaceConditionField = document.querySelector<HTMLElement>(
-  "#marketplace-condition-field",
-);
-const marketplaceDescriptionField = document.querySelector<HTMLElement>(
-  "#marketplace-description-field",
-);
-const marketplaceLocationField = document.querySelector<HTMLElement>(
-  "#marketplace-location-field",
-);
-const marketplaceBedroomsInput = document.querySelector<HTMLInputElement>(
-  "#marketplace-bedrooms-input",
-);
-const marketplaceBathroomsInput = document.querySelector<HTMLInputElement>(
-  "#marketplace-bathrooms-input",
-);
-const marketplacePhotoLightbox = document.querySelector<HTMLElement>(
-  "#marketplace-photo-lightbox",
-);
-const marketplacePhotoLightboxBackdrop = document.querySelector<HTMLElement>(
-  "#marketplace-photo-lightbox-backdrop",
-);
-const marketplacePhotoLightboxClose = document.querySelector<HTMLButtonElement>(
-  "#marketplace-photo-lightbox-close",
-);
-const marketplacePhotoLightboxTitle = document.querySelector<HTMLElement>(
-  "#marketplace-photo-lightbox-title",
-);
-const marketplacePhotoLightboxImage = document.querySelector<HTMLImageElement>(
-  "#marketplace-photo-lightbox-image",
-);
-const marketplacePhotoLightboxCounter = document.querySelector<HTMLElement>(
-  "#marketplace-photo-lightbox-counter",
-);
-const marketplacePhotoLightboxFilename = document.querySelector<HTMLElement>(
-  "#marketplace-photo-lightbox-filename",
-);
-const marketplacePhotoLightboxPrevious =
-  document.querySelector<HTMLButtonElement>(
-    "#marketplace-photo-lightbox-previous",
-  );
-const marketplacePhotoLightboxNext = document.querySelector<HTMLButtonElement>(
-  "#marketplace-photo-lightbox-next",
-);
-const marketplacePhotoLightboxThumbnails = document.querySelector<HTMLElement>(
-  "#marketplace-photo-lightbox-thumbnails",
+const photoLightboxThumbnails = document.querySelector<HTMLElement>(
+  "#photo-lightbox-thumbnails",
 );
 const pausePostingButton =
   document.querySelector<HTMLButtonElement>("#pause-posting-btn");
@@ -816,6 +292,21 @@ const stopPostingButton =
   document.querySelector<HTMLButtonElement>("#stop-posting-btn");
 const startPostingButton =
   document.querySelector<HTMLButtonElement>("#start-posting-btn");
+const openScheduleButton =
+  document.querySelector<HTMLButtonElement>("#open-schedule-btn");
+const cancelScheduleButton = document.querySelector<HTMLButtonElement>(
+  "#cancel-schedule-btn",
+);
+const confirmScheduleButton = document.querySelector<HTMLButtonElement>(
+  "#confirm-schedule-btn",
+);
+const schedulePanel = document.querySelector<HTMLElement>("#schedule-panel");
+const scheduleTimezoneNote = document.querySelector<HTMLElement>(
+  "#schedule-timezone-note",
+);
+const schedulePickerRoot = document.querySelector<HTMLElement>(
+  "#schedule-time-picker",
+);
 const postingProgress =
   document.querySelector<HTMLElement>("#posting-progress");
 const postingProgressTitle = document.querySelector<HTMLElement>(
@@ -826,6 +317,9 @@ const postingProgressPercent = document.querySelector<HTMLElement>(
 );
 const postingProgressBar = document.querySelector<HTMLElement>(
   "#posting-progress-bar",
+);
+const postingProgressTrack = document.querySelector<HTMLElement>(
+  ".posting-progress__bar",
 );
 const postingProgressSuccess = document.querySelector<HTMLElement>(
   "#posting-progress-success",
@@ -863,293 +357,104 @@ const postingProgressPendingFilterButton =
   document.querySelector<HTMLButtonElement>("#posting-progress-filter-pending");
 const postingProgressFailedFilterButton =
   document.querySelector<HTMLButtonElement>("#posting-progress-filter-failed");
-const authLoginButton =
-  document.querySelector<HTMLButtonElement>("#auth-login-btn");
-const authLogoutButton =
-  document.querySelector<HTMLButtonElement>("#auth-logout-btn");
-const authStatusMessage = document.querySelector<HTMLElement>(
-  "#auth-status-message",
-);
-const accountCardToggle = document.querySelector<HTMLButtonElement>(
-  "#account-card-toggle",
-);
-const accountCardContent = document.querySelector<HTMLElement>(
-  "#account-card-content",
-);
-let accountCardExpanded = false;
-
-function updateAccountCardVisibility(signedIn: boolean) {
-  if (!signedIn) accountCardExpanded = false;
-  if (accountCardToggle) {
-    accountCardToggle.hidden = !signedIn;
-    accountCardToggle.setAttribute(
-      "aria-expanded",
-      String(accountCardExpanded),
-    );
-  }
-  if (accountCardContent)
-    accountCardContent.hidden = signedIn && !accountCardExpanded;
-}
-
-accountCardToggle?.addEventListener("click", () => {
-  accountCardExpanded = !accountCardExpanded;
-  updateAccountCardVisibility(true);
-});
-
-const authPanelTitle = document.querySelector<HTMLElement>("#auth-panel-title");
-const authWelcomeArt = document.querySelector<HTMLElement>("#auth-welcome-art");
-const authBenefits = document.querySelector<HTMLElement>("#auth-benefits");
-const authSigninNote = document.querySelector<HTMLElement>("#auth-signin-note");
-const authSessionPill =
-  document.querySelector<HTMLElement>("#auth-session-pill");
-const authUserEmail = document.querySelector<HTMLElement>("#auth-user-email");
-const deleteConfirmation = document.querySelector<HTMLElement>(
-  "#delete-confirmation",
-);
-const deleteConfirmationBackdrop = document.querySelector<HTMLButtonElement>(
-  "#delete-confirmation-backdrop",
-);
-const deleteConfirmationTitle = document.querySelector<HTMLElement>(
-  "#delete-confirmation-title",
-);
-const deleteConfirmationMessage = document.querySelector<HTMLElement>(
-  "#delete-confirmation-message",
-);
-const deleteConfirmationCancel = document.querySelector<HTMLButtonElement>(
-  "#delete-confirmation-cancel",
-);
-const deleteConfirmationConfirm = document.querySelector<HTMLButtonElement>(
-  "#delete-confirmation-confirm",
-);
-const marketplaceAudienceChoice = document.querySelector<HTMLElement>(
-  "#marketplace-audience-choice",
-);
-const marketplaceAudienceChoiceBackdrop =
-  document.querySelector<HTMLButtonElement>(
-    "#marketplace-audience-choice-backdrop",
-  );
-const marketplaceAudienceChoiceCancel =
-  document.querySelector<HTMLButtonElement>(
-    "#marketplace-audience-choice-cancel",
-  );
-const marketplaceAudienceChoiceMarketplaceOnly =
-  document.querySelector<HTMLButtonElement>(
-    "#marketplace-audience-choice-marketplace-only",
-  );
-const marketplaceAudienceChoiceWithGroups =
-  document.querySelector<HTMLButtonElement>(
-    "#marketplace-audience-choice-with-groups",
-  );
 const selectedImagePreviewUrls: string[] = [];
-const marketplacePhotoPreviewUrls: string[] = [];
-const marketplacePhotoLightboxUrls: string[] = [];
-const MARKETPLACE_PHOTO_LIMITS = {
-  item: 10,
-  vehicle: 20,
-  home: 50,
-} as const;
-type MarketplaceListingType = keyof typeof MARKETPLACE_PHOTO_LIMITS;
-type CloudMarketplaceListing = {
-  id: string;
-  listing_type: MarketplaceListingType;
-  fields: Record<string, string | boolean>;
-  images: { url: string; position: number }[];
-  created_at: string;
-  updated_at: string;
-};
-type MarketplaceCategoryOption = {
-  label: string;
-  shipping?: boolean;
-};
-type MarketplaceCategoryGroup = {
-  name: string;
-  iconPath: string;
-  options: MarketplaceCategoryOption[];
-};
-const MARKETPLACE_CATEGORY_GROUPS: MarketplaceCategoryGroup[] = [
-  {
-    name: "Home & Garden",
-    iconPath:
-      "M219.31,108.68l-80-80a16,16,0,0,0-22.62,0l-80,80A15.87,15.87,0,0,0,32,120v96a8,8,0,0,0,8,8h64a8,8,0,0,0,8-8V160h32v56a8,8,0,0,0,8,8h64a8,8,0,0,0,8-8V120A15.87,15.87,0,0,0,219.31,108.68ZM208,208H160V152a8,8,0,0,0-8-8H104a8,8,0,0,0-8,8v56H48V120l80-80,80,80Z",
-    options: [
-      { label: "Tools" },
-      { label: "Furniture" },
-      { label: "Household", shipping: true },
-      { label: "Garden" },
-      { label: "Appliances" },
-    ],
-  },
-  {
-    name: "Entertainment",
-    iconPath:
-      "M176,112H152a8,8,0,0,1,0-16h24a8,8,0,0,1,0,16ZM104,96H96V88a8,8,0,0,0-16,0v8H72a8,8,0,0,0,0,16h8v8a8,8,0,0,0,16,0v-8h8a8,8,0,0,0,0-16ZM241.48,200.65a36,36,0,0,1-54.94,4.81c-.12-.12-.24-.24-.35-.37L146.48,160h-37L69.81,205.09l-.35.37A36.08,36.08,0,0,1,44,216,36,36,0,0,1,8.56,173.75a.68.68,0,0,1,0-.14L24.93,89.52A59.88,59.88,0,0,1,83.89,40H172a60.08,60.08,0,0,1,59,49.25c0,.06,0,.12,0,.18l16.37,84.17a.68.68,0,0,1,0,.14A35.74,35.74,0,0,1,241.48,200.65ZM172,144a44,44,0,0,0,0-88H83.89A43.9,43.9,0,0,0,40.68,92.37l0,.13L24.3,176.59A20,20,0,0,0,58,194.3l41.92-47.59a8,8,0,0,1,6-2.71Zm59.7,32.59-8.74-45A60,60,0,0,1,172,160h-4.2L198,194.31a20.09,20.09,0,0,0,17.46,5.39,20,20,0,0,0,16.23-23.11Z",
-    options: [
-      { label: "Video Games" },
-      { label: "Books, Movies & Music", shipping: true },
-    ],
-  },
-  {
-    name: "Clothing & Accessories",
-    iconPath:
-      "M216,64H176a48,48,0,0,0-96,0H40A16,16,0,0,0,24,80V200a16,16,0,0,0,16,16H216a16,16,0,0,0,16-16V80A16,16,0,0,0,216,64ZM128,32a32,32,0,0,1,32,32H96A32,32,0,0,1,128,32Zm88,168H40V80H80V96a8,8,0,0,0,16,0V80h64V96a8,8,0,0,0,16,0V80h40Z",
-    options: [
-      { label: "Bags & Luggage", shipping: true },
-      { label: "Women's clothing & shoes", shipping: true },
-      { label: "Men's clothing & shoes", shipping: true },
-      { label: "Jewelry & Accessories", shipping: true },
-    ],
-  },
-  {
-    name: "Family",
-    iconPath:
-      "M178,40c-20.65,0-38.73,8.88-50,23.89C116.73,48.88,98.65,40,78,40a62.07,62.07,0,0,0-62,62c0,70,103.79,126.66,108.21,129a8,8,0,0,0,7.58,0C136.21,228.66,240,172,240,102A62.07,62.07,0,0,0,178,40ZM128,214.8C109.74,204.16,32,155.69,32,102A46.06,46.06,0,0,1,78,56c19.45,0,35.78,10.36,42.6,27a8,8,0,0,0,14.8,0c6.82-16.67,23.15-27,42.6-27a46.06,46.06,0,0,1,46,46C224,155.61,146.24,204.15,128,214.8Z",
-    options: [
-      { label: "Health & beauty", shipping: true },
-      { label: "Pet Supplies" },
-      { label: "Baby & kids", shipping: true },
-      { label: "Toys & Games", shipping: true },
-    ],
-  },
-  {
-    name: "Electronics",
-    iconPath:
-      "M176,16H80A24,24,0,0,0,56,40V216a24,24,0,0,0,24,24h96a24,24,0,0,0,24-24V40A24,24,0,0,0,176,16ZM72,64H184V192H72Zm8-32h96a8,8,0,0,1,8,8v8H72V40A8,8,0,0,1,80,32Zm96,192H80a8,8,0,0,1-8-8v-8H184v8A8,8,0,0,1,176,224Z",
-    options: [
-      { label: "Electronics & computers", shipping: true },
-      { label: "Mobile phones", shipping: true },
-    ],
-  },
-  {
-    name: "Hobbies",
-    iconPath:
-      "M249.66,46.34l-40-40a8,8,0,0,0-11.31,11.32L200.69,20,140.52,80.16C117.73,68.3,92.21,69.29,76.75,84.74a42.27,42.27,0,0,0-9.39,14.37A8.24,8.24,0,0,1,59.81,104c-14.59.49-27.26,5.72-36.65,15.11C11.08,131.22,6,148.6,8.74,168.07,11.4,186.7,21.07,205.15,36,220s33.34,24.56,52,27.22A71.13,71.13,0,0,0,98.1,248c15.32,0,28.83-5.23,38.76-15.16,9.39-9.39,14.62-22.06,15.11-36.65a8.24,8.24,0,0,1,4.92-7.55,42.12,42.12,0,0,0,14.37-9.39c15.45-15.46,16.44-41,4.58-63.77L236,55.31l2.34,2.34a8,8,0,1,0,11.32-11.31ZM160,167.93a26.12,26.12,0,0,1-8.95,5.83,24.24,24.24,0,0,0-15,21.89c-.36,10.46-4,19.41-10.43,25.88-8.44,8.43-21,11.95-35.36,9.89C75,229.25,59.73,221.19,47.27,208.73S26.75,181,24.58,165.81c-2-14.37,1.46-26.92,9.89-35.36C40.94,124,49.89,120.37,60.35,120h0a24.22,24.22,0,0,0,21.89-15,26.12,26.12,0,0,1,5.83-9c5.49-5.49,13-8.13,21.38-8.13a49.38,49.38,0,0,1,19.13,4.19L108.5,112.19a32,32,0,1,0,35.31,35.31l20.08-20.08C170.41,142.71,169.47,158.41,160,167.93Zm-10.4-61.48a72.9,72.9,0,0,1,5.93,6.75l-15.42,15.42a32.22,32.22,0,0,0-12.68-12.68l15.42-15.43A73,73,0,0,1,149.55,106.45ZM112,128a16,16,0,0,1,16,16h0a16,16,0,1,1-16-16Zm48.85-32.85a86.94,86.94,0,0,0-6.68-6L176,67.31,188.69,80l-21.83,21.82A86.94,86.94,0,0,0,160.86,95.14ZM200,68.68,187.32,56,212,31.31,224.69,44ZM93.66,194.33a8,8,0,0,1-11.31,11.32l-32-32a8,8,0,0,1,11.32-11.31Z",
-    options: [
-      { label: "Bicycles" },
-      { label: "Arts & Crafts" },
-      { label: "Sports & Outdoors", shipping: true },
-      { label: "Auto parts" },
-      { label: "Musical Instruments" },
-      { label: "Antiques & Collectibles" },
-    ],
-  },
-  {
-    name: "Classifieds",
-    iconPath:
-      "M240,192h-8V98.67a16,16,0,0,0-7.12-13.31l-88-58.67a16,16,0,0,0-17.75,0l-88,58.67A16,16,0,0,0,24,98.67V192H16a8,8,0,0,0,0,16H240a8,8,0,0,0,0-16ZM40,98.67,128,40l88,58.66V192H192V136a8,8,0,0,0-8-8H72a8,8,0,0,0-8,8v56H40ZM176,144v16H136V144Zm-56,16H80V144h40ZM80,176h40v16H80Zm56,0h40v16H136Z",
-    options: [{ label: "Garage Sale" }, { label: "Miscellaneous" }],
-  },
-  {
-    name: "Vehicles",
-    iconPath:
-      "M240,104H229.2L201.42,41.5A16,16,0,0,0,186.8,32H69.2a16,16,0,0,0-14.62,9.5L26.8,104H16a8,8,0,0,0,0,16h8v80a16,16,0,0,0,16,16H64a16,16,0,0,0,16-16V184h96v16a16,16,0,0,0,16,16h24a16,16,0,0,0,16-16V120h8a8,8,0,0,0,0-16ZM69.2,48H186.8l24.89,56H44.31ZM64,200H40V184H64Zm128,0V184h24v16Zm24-32H40V120H216ZM56,144a8,8,0,0,1,8-8H80a8,8,0,0,1,0,16H64A8,8,0,0,1,56,144Zm112,0a8,8,0,0,1,8-8h16a8,8,0,0,1,0,16H176A8,8,0,0,1,168,144Z",
-    options: [],
-  },
-];
+const photoLightboxUrls: string[] = [];
 let selectedImageFiles: File[] = [];
-let selectedMarketplaceImageFiles: File[] = [];
 let groupPhotoAdditionQueue = Promise.resolve();
-let marketplacePhotoAdditionQueue = Promise.resolve();
 const imageContentSignatureCache = new WeakMap<File, Promise<string>>();
-let selectedMarketplaceListingType: MarketplaceListingType | undefined;
-let savedMarketplaceListings: CloudMarketplaceListing[] = [];
-let selectedMarketplaceListingIds = new Set<string>();
-let isMarketplacePostingActive = false;
-let isMarketplacePostingPaused = false;
-let isMarketplaceStopRequestPending = false;
-let isMarketplacePauseRequestPending = false;
-let isMarketplaceListingSaving = false;
-let isMarketplaceCleanupActive = false;
+let latestGroupsPhotoStatus = "";
+let latestGroupsPhotoStatusIsError = false;
 type PostingLogFilter = "all" | "posted" | "pending" | "failed";
 let groupsPostingLogFilter: PostingLogFilter = "all";
-let marketplacePostingLogFilter: PostingLogFilter = "all";
+let postingLogMessages: UiPostingStatusMessage[] = [];
 let latestGroupsPostingTiming: PostingTiming | undefined;
-let latestMarketplacePostingTiming: PostingTiming | undefined;
-let editingMarketplaceListingId: string | undefined;
-let draggedMarketplacePhotoIndex: number | undefined;
+let latestUiPostingStatusMessage: UiPostingStatusMessage | undefined;
+let latestGroupsStatusMessage = "";
+let latestGroupsStatusCount = 0;
 let draggedGroupPhotoIndex: number | undefined;
-let marketplacePhotoLightboxIndex = 0;
-let marketplacePhotoLightboxReturnFocus: HTMLElement | undefined;
-let photoLightboxSource: "groups" | "marketplace" = "marketplace";
-let marketplaceCategoryOptionElements: HTMLElement[] = [];
-let marketplaceYearOptionElements: HTMLElement[] = [];
-let preparedPosts: StoredPreparedPost[] = [];
-let editingPreparedPostId: string | undefined;
+let selectedImageDragPointer: {
+  pointerId: number;
+  index: number;
+  element: HTMLElement;
+  startX: number;
+  startY: number;
+  x: number;
+  y: number;
+  offsetX: number;
+  offsetY: number;
+  width: number;
+  height: number;
+} | null = null;
+let selectedImageDragPreview: HTMLElement | null = null;
+let selectedImageDragFrame = 0;
+let selectedImageDropTarget: HTMLElement | undefined;
+let selectedImageDropTargetIndex: number | undefined;
+let selectedImageDropSide: "before" | "after" = "before";
+let suppressNextImagePreviewClick = false;
+let photoLightboxIndex = 0;
+let photoLightboxReturnFocus: HTMLElement | undefined;
 let loadedGroups: FacebookGroup[] = [];
+let hasRenderedGroups = false;
 let selectedGroupIds = new Set<string>();
 let groupsSearchQuery = "";
+let shouldSaveDraftImages = false;
 let imagePreviewsVisible = false;
 let isPostingActive = false;
+let isPostingScheduling = false;
+let isPostingScheduled = false;
 let isPostingPaused = false;
 let isStopRequestPending = false;
 let isPauseResumeRequestPending = false;
+let isScheduleOpen = false;
+let isScheduleTimeValid = false;
 let saveSidePanelSessionTimer: number | undefined;
 let isRestoringSidePanelSession = false;
-let proMaxPostsPreference = DEFAULT_MAX_POSTS;
-let deleteConfirmationResolver: ((confirmed: boolean) => void) | undefined;
-let deleteConfirmationReturnFocus: HTMLElement | undefined;
-let marketplaceAudienceChoiceResolver:
-  | ((shareToSuggestedGroups: boolean | undefined) => void)
-  | undefined;
-let marketplaceAudienceChoiceReturnFocus: HTMLElement | undefined;
-let currentExtensionAccess:
-  | {
-      active: true;
-      sessionToken: string;
-      expiresAt: string;
-      user: AuthenticatedGoogleUser;
-      access: AccessEntitlements;
+const postEditor = initializePostEditor(() => {
+  updatePostingReadiness();
+  scheduleSaveSidePanelSession();
+});
+const postingWizard = initializePostingWizard(
+  () => ({
+    ...postEditor.getContent(),
+    images: selectedImageFiles,
+    groups: groupsInSelectionOrder(loadedGroups, Array.from(selectedGroupIds)),
+    busy: isPostingActive,
+  }),
+  updatePostingButtonState,
+  (): PostingWizardMessages => ({
+    nextSelectGroups: msg("nextSelectGroups"),
+    addTextAndImage: msg("addTextAndImageToContinue"),
+    addText: msg("addPostTextToContinue"),
+    addImage: msg("addImageToContinue"),
+    selectOneGroup: msg("selectOneGroup"),
+    oneGroupSelectedContinue: msg("oneGroupSelectedContinue"),
+    groupsSelectedContinue: (count) => msg("groupsSelectedContinue", count),
+    oneImageCount: msg("oneImageCount"),
+    imageCount: (count) => msg("imageCount", count),
+    oneGroupSelected: msg("oneGroupSelected"),
+    groupsSelectedCount: (count) => msg("groupsSelectedCount", count),
+  }),
+);
+if (!schedulePickerRoot) {
+  throw new Error("The scheduling time picker could not be initialized.");
+}
+const schedulePicker: SchedulePicker = initializeSchedulePicker(
+  schedulePickerRoot,
+  (valid) => {
+    isScheduleTimeValid = valid;
+    if (confirmScheduleButton) {
+      confirmScheduleButton.disabled = !valid;
     }
-  | undefined;
-let currentGoogleAccessToken: string | undefined;
-
-type AuthenticatedGoogleUser = {
-  id: string;
-  email: string;
-  emailVerified: boolean;
-  displayName?: string;
-  avatarUrl?: string;
-  timezone?: string;
-};
-
-type StoredAuthSession = {
-  sessionToken: string;
-  expiresAt: string;
-  user: AuthenticatedGoogleUser;
-};
-
-if (marketplaceSavedListingsCard && marketplacePostingPreferencesCard) {
-  marketplaceSavedListingsCard.before(marketplacePostingPreferencesCard);
-}
-if (marketplaceTabPanel && marketplaceCleanupCard) {
-  marketplaceTabPanel.append(marketplaceCleanupCard);
-}
-
-void initializeGeminiSettings();
-initializeCardAccordions(scheduleSaveSidePanelSession);
-const watermarkControls = initializeWatermarkControls((message) => showToast(message, "error"));
-void initializeMarketplacePostingSettings();
-void initializeMarketplaceCleanupSettings();
-void initializeApplication();
+  },
+  () => msg("twentyFourHourClock"),
+);
+updateScheduleControls();
+void initializeSidePanelSession();
+// Discard abandoned disk-backed handoffs from older builds.
+indexedDB.deleteDatabase("postika-posting-requests");
 void restorePostingQueueStatus();
-initializeMarketplaceCategorySelect();
-initializeMarketplaceYearSelect();
-initializeMarketplaceColorSelects();
-initializeDropdownTriggerIcons();
-initializeDropdownChevronIcons();
-initializeListingTypeAvailability();
-initializeVehicleTypeAvailability();
-configureMarketplaceVehicleTypeField();
-initializePasteNormalization();
-initializeDeleteConfirmation();
-initializeMarketplaceAudienceChoice();
 
-async function initializeApplication() {
-  await initializeSidePanelSession();
-  await initializeExtensionAccess();
-  if (hasActiveExtensionAccess()) {
-    await Promise.all([loadCloudPreparedPosts(), loadMarketplaceListings(), loadCloudGroupCommentSettings()]);
-  }
-}
+initializePasteNormalization();
 
 function initializePasteNormalization() {
   document.addEventListener("paste", (event) => {
@@ -1203,618 +508,6 @@ function isPasteNormalizableControl(
   );
 }
 
-function initializeDeleteConfirmation() {
-  deleteConfirmationCancel?.addEventListener("click", () => {
-    closeDeleteConfirmation(false);
-  });
-  deleteConfirmationBackdrop?.addEventListener("click", () => {
-    closeDeleteConfirmation(false);
-  });
-  deleteConfirmationConfirm?.addEventListener("click", () => {
-    closeDeleteConfirmation(true);
-  });
-  deleteConfirmation?.addEventListener("keydown", (event) => {
-    if (event.key === "Escape") {
-      event.preventDefault();
-      closeDeleteConfirmation(false);
-      return;
-    }
-    if (event.key !== "Tab") {
-      return;
-    }
-    const focusable = [
-      deleteConfirmationCancel,
-      deleteConfirmationConfirm,
-    ].filter((button): button is HTMLButtonElement => Boolean(button));
-    if (focusable.length === 0) {
-      return;
-    }
-    const currentIndex = focusable.indexOf(
-      document.activeElement as HTMLButtonElement,
-    );
-    if (event.shiftKey && currentIndex <= 0) {
-      event.preventDefault();
-      focusable[focusable.length - 1]?.focus();
-    } else if (!event.shiftKey && currentIndex === focusable.length - 1) {
-      event.preventDefault();
-      focusable[0]?.focus();
-    }
-  });
-}
-
-function requestDeleteConfirmation(
-  title: string,
-  message: string,
-): Promise<boolean> {
-  if (
-    !deleteConfirmation ||
-    !deleteConfirmationTitle ||
-    !deleteConfirmationMessage ||
-    !deleteConfirmationConfirm
-  ) {
-    return Promise.resolve(false);
-  }
-  if (deleteConfirmationResolver) {
-    closeDeleteConfirmation(false);
-  }
-  deleteConfirmationTitle.textContent = title;
-  deleteConfirmationMessage.textContent = message;
-  deleteConfirmationReturnFocus =
-    document.activeElement instanceof HTMLElement
-      ? document.activeElement
-      : undefined;
-  deleteConfirmation.hidden = false;
-  document.body.classList.add("delete-confirmation-open");
-  deleteConfirmationConfirm.focus();
-  return new Promise((resolve) => {
-    deleteConfirmationResolver = resolve;
-  });
-}
-
-function closeDeleteConfirmation(confirmed: boolean) {
-  if (!deleteConfirmationResolver) {
-    return;
-  }
-  const resolve = deleteConfirmationResolver;
-  const returnFocus = deleteConfirmationReturnFocus;
-  deleteConfirmationResolver = undefined;
-  deleteConfirmationReturnFocus = undefined;
-  if (deleteConfirmation) {
-    deleteConfirmation.hidden = true;
-  }
-  document.body.classList.remove("delete-confirmation-open");
-  resolve(confirmed);
-  returnFocus?.focus();
-}
-
-function initializeMarketplaceAudienceChoice() {
-  marketplaceAudienceChoiceCancel?.addEventListener("click", () => {
-    closeMarketplaceAudienceChoice(undefined);
-  });
-  marketplaceAudienceChoiceBackdrop?.addEventListener("click", () => {
-    closeMarketplaceAudienceChoice(undefined);
-  });
-  marketplaceAudienceChoiceMarketplaceOnly?.addEventListener("click", () => {
-    closeMarketplaceAudienceChoice(false);
-  });
-  marketplaceAudienceChoiceWithGroups?.addEventListener("click", () => {
-    closeMarketplaceAudienceChoice(true);
-  });
-  marketplaceAudienceChoice?.addEventListener("keydown", (event) => {
-    if (event.key === "Escape") {
-      event.preventDefault();
-      closeMarketplaceAudienceChoice(undefined);
-      return;
-    }
-    if (event.key !== "Tab") {
-      return;
-    }
-    const focusable = [
-      marketplaceAudienceChoiceCancel,
-      marketplaceAudienceChoiceMarketplaceOnly,
-      marketplaceAudienceChoiceWithGroups,
-    ].filter((button): button is HTMLButtonElement => Boolean(button));
-    if (focusable.length === 0) {
-      return;
-    }
-    const currentIndex = focusable.indexOf(
-      document.activeElement as HTMLButtonElement,
-    );
-    if (event.shiftKey && currentIndex <= 0) {
-      event.preventDefault();
-      focusable[focusable.length - 1]?.focus();
-    } else if (!event.shiftKey && currentIndex === focusable.length - 1) {
-      event.preventDefault();
-      focusable[0]?.focus();
-    }
-  });
-}
-
-function requestMarketplaceAudienceChoice(): Promise<boolean | undefined> {
-  if (
-    !marketplaceAudienceChoice ||
-    !marketplaceAudienceChoiceMarketplaceOnly ||
-    !marketplaceAudienceChoiceWithGroups
-  ) {
-    return Promise.resolve(undefined);
-  }
-  if (marketplaceAudienceChoiceResolver) {
-    closeMarketplaceAudienceChoice(undefined);
-  }
-  marketplaceAudienceChoiceReturnFocus =
-    document.activeElement instanceof HTMLElement
-      ? document.activeElement
-      : undefined;
-  marketplaceAudienceChoice.hidden = false;
-  document.body.classList.add("marketplace-audience-choice-open");
-  marketplaceAudienceChoiceMarketplaceOnly.focus();
-  return new Promise((resolve) => {
-    marketplaceAudienceChoiceResolver = resolve;
-  });
-}
-
-function closeMarketplaceAudienceChoice(
-  shareToSuggestedGroups: boolean | undefined,
-) {
-  if (!marketplaceAudienceChoiceResolver) {
-    return;
-  }
-  const resolve = marketplaceAudienceChoiceResolver;
-  const returnFocus = marketplaceAudienceChoiceReturnFocus;
-  marketplaceAudienceChoiceResolver = undefined;
-  marketplaceAudienceChoiceReturnFocus = undefined;
-  if (marketplaceAudienceChoice) {
-    marketplaceAudienceChoice.hidden = true;
-  }
-  document.body.classList.remove("marketplace-audience-choice-open");
-  resolve(shareToSuggestedGroups);
-  returnFocus?.focus();
-}
-
-type WorkspaceTab = "groups" | "marketplace";
-
-function initializeVehicleTypeAvailability() {
-  marketplaceVehicleTypeOptionElements.forEach((option) => {
-    const available = option.dataset.value === "car_truck";
-    option.setAttribute("aria-disabled", String(!available));
-    if (!available) {
-      option.tabIndex = -1;
-      option.setAttribute("aria-description", "Coming soon");
-    }
-  });
-}
-
-function initializeListingTypeAvailability() {
-  listingTypeOptionElements.forEach((option) => {
-    const available = option.dataset.value !== "home";
-    option.setAttribute("aria-disabled", String(!available));
-    if (!available) {
-      option.tabIndex = -1;
-      option.setAttribute("aria-description", "Coming soon");
-    }
-  });
-}
-
-function initializeDropdownTriggerIcons() {
-  document
-    .querySelectorAll<HTMLButtonElement>(".condition-select__trigger")
-    .forEach((trigger) => {
-      if (trigger.querySelector(".condition-select__icon")) {
-        return;
-      }
-
-      const icon = document.createElement("span");
-      icon.className = "condition-select__icon";
-      icon.setAttribute("aria-hidden", "true");
-
-      const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
-      svg.setAttribute("width", "32");
-      svg.setAttribute("height", "32");
-      svg.setAttribute("fill", "currentColor");
-      svg.setAttribute("viewBox", "0 0 256 256");
-
-      const path = document.createElementNS(
-        "http://www.w3.org/2000/svg",
-        "path",
-      );
-      path.setAttribute(
-        "d",
-        "M224,128a8,8,0,0,1-8,8H136v80a8,8,0,0,1-16,0V136H40a8,8,0,0,1,0-16h80V40a8,8,0,0,1,16,0v80h80A8,8,0,0,1,224,128Z",
-      );
-      svg.append(path);
-      icon.append(svg);
-      trigger.prepend(icon);
-    });
-}
-
-function initializeDropdownChevronIcons() {
-  document
-    .querySelectorAll<HTMLElement>(
-      ".custom-select__chevron, .category-select__chevron, .condition-select__chevron",
-    )
-    .forEach((chevron) => {
-      const createChevron = (className: string, pathData: string) => {
-        const svg = document.createElementNS(
-          "http://www.w3.org/2000/svg",
-          "svg",
-        );
-        svg.classList.add(className);
-        svg.setAttribute("width", "32");
-        svg.setAttribute("height", "32");
-        svg.setAttribute("fill", "currentColor");
-        svg.setAttribute("viewBox", "0 0 256 256");
-        svg.setAttribute("aria-hidden", "true");
-
-        const path = document.createElementNS(
-          "http://www.w3.org/2000/svg",
-          "path",
-        );
-        path.setAttribute("d", pathData);
-        svg.append(path);
-        return svg;
-      };
-
-      const downChevron = createChevron(
-        "dropdown-chevron__down",
-        "M213.66,101.66l-80,80a8,8,0,0,1-11.32,0l-80-80A8,8,0,0,1,53.66,90.34L128,164.69l74.34-74.35a8,8,0,0,1,11.32,11.32Z",
-      );
-      const upChevron = createChevron(
-        "dropdown-chevron__up",
-        "M213.66,165.66a8,8,0,0,1-11.32,0L128,91.31,53.66,165.66a8,8,0,0,1-11.32-11.32l80-80a8,8,0,0,1,11.32,0l80,80A8,8,0,0,1,213.66,165.66Z",
-      );
-      chevron.replaceChildren(downChevron, upChevron);
-    });
-}
-
-function selectWorkspaceTab(tab: WorkspaceTab) {
-  const groupsActive = tab === "groups";
-
-  closeListingTypeDropdown();
-  closeMarketplaceCategoryDropdown();
-  closeMarketplaceConditionDropdown();
-  closeMarketplaceVehicleTypeDropdown();
-  closeMarketplaceYearDropdown();
-  closeMarketplaceBodyStyleDropdown();
-  closeMarketplaceVehicleConditionDropdown();
-  closeMarketplaceFuelTypeDropdown();
-  closeMarketplaceTransmissionDropdown();
-  closeMarketplaceColorDropdowns();
-  closeMarketplaceRentalTypeDropdown();
-
-  groupsTab?.classList.toggle("workspace-tab--active", groupsActive);
-  groupsTab?.setAttribute("aria-selected", String(groupsActive));
-  groupsTab?.setAttribute("tabindex", groupsActive ? "0" : "-1");
-
-  marketplaceTab?.classList.toggle("workspace-tab--active", !groupsActive);
-  marketplaceTab?.setAttribute("aria-selected", String(!groupsActive));
-  marketplaceTab?.setAttribute("tabindex", groupsActive ? "-1" : "0");
-
-  if (groupsTabPanel) {
-    groupsTabPanel.hidden = !groupsActive;
-  }
-  if (marketplaceTabPanel) {
-    marketplaceTabPanel.hidden = groupsActive;
-  }
-}
-
-groupsTab?.addEventListener("click", () => selectWorkspaceTab("groups"));
-marketplaceTab?.addEventListener("click", () =>
-  selectWorkspaceTab("marketplace"),
-);
-
-function openListingTypeDropdown(focusIndex?: number, focusDirection = 1) {
-  if (!listingTypeSelect || !listingTypeTrigger || !listingTypeOptions) {
-    return;
-  }
-
-  closeMarketplaceCategoryDropdown();
-  closeMarketplaceConditionDropdown();
-  closeMarketplaceVehicleTypeDropdown();
-  closeMarketplaceYearDropdown();
-  closeMarketplaceBodyStyleDropdown();
-  closeMarketplaceVehicleConditionDropdown();
-  closeMarketplaceFuelTypeDropdown();
-  closeMarketplaceTransmissionDropdown();
-  closeMarketplaceColorDropdowns();
-  closeMarketplaceRentalTypeDropdown();
-  listingTypeOptions.hidden = false;
-  listingTypeSelect.classList.add("custom-select--open");
-  listingTypeTrigger.setAttribute("aria-expanded", "true");
-
-  if (focusIndex !== undefined) {
-    focusListingTypeOption(focusIndex, focusDirection);
-  }
-}
-
-function closeListingTypeDropdown(returnFocus = false) {
-  if (!listingTypeSelect || !listingTypeTrigger || !listingTypeOptions) {
-    return;
-  }
-
-  listingTypeOptions.hidden = true;
-  listingTypeSelect.classList.remove("custom-select--open");
-  listingTypeTrigger.setAttribute("aria-expanded", "false");
-
-  if (returnFocus) {
-    listingTypeTrigger.focus();
-  }
-}
-
-function selectListingType(option: HTMLElement, allowDisabled = false) {
-  if (!allowDisabled && option.getAttribute("aria-disabled") === "true") {
-    return;
-  }
-
-  const value = option.dataset.value;
-  const label = option.querySelector("strong")?.textContent?.trim();
-
-  if (!value || !label) {
-    return;
-  }
-
-  if (!(value in MARKETPLACE_PHOTO_LIMITS)) {
-    return;
-  }
-
-  listingTypeOptionElements.forEach((candidate) => {
-    candidate.setAttribute("aria-selected", String(candidate === option));
-  });
-
-  if (listingTypeValue) {
-    listingTypeValue.textContent = label;
-  }
-  if (listingTypeSelectedIcon) {
-    const selectedIcon = option.querySelector("svg")?.cloneNode(true);
-    if (selectedIcon) {
-      listingTypeSelectedIcon.replaceChildren(selectedIcon);
-    }
-  }
-  if (marketplaceListingTypeInput) {
-    marketplaceListingTypeInput.value = value;
-  }
-
-  configureMarketplacePhotoUploader(value as MarketplaceListingType);
-  configureMarketplaceVehicleTypeField(value as MarketplaceListingType);
-  updateMarketplaceSaveListingButtonState();
-
-  closeListingTypeDropdown(true);
-}
-
-function configureMarketplacePhotoUploader(type: MarketplaceListingType) {
-  selectedMarketplaceListingType = type;
-  const limit = MARKETPLACE_PHOTO_LIMITS[type];
-
-  marketplacePhotosField?.classList.remove("marketplace-photos--disabled");
-  marketplacePhotoDropzone?.setAttribute("aria-disabled", "false");
-  if (marketplaceImagesInput) {
-    marketplaceImagesInput.disabled = false;
-  }
-  if (marketplacePhotoLimit) {
-    marketplacePhotoLimit.textContent = String(limit);
-  }
-  if (marketplacePhotoGuidance) {
-    marketplacePhotoGuidance.textContent = `You can add up to ${limit} photos.`;
-  }
-
-  if (selectedMarketplaceImageFiles.length > limit) {
-    const removedCount = selectedMarketplaceImageFiles.length - limit;
-    selectedMarketplaceImageFiles = selectedMarketplaceImageFiles.slice(
-      0,
-      limit,
-    );
-    showMarketplacePhotoStatus(
-      `${removedCount} ${removedCount === 1 ? "photo was" : "photos were"} removed to match the ${limit}-photo limit.`,
-      true,
-    );
-  } else {
-    hideMarketplacePhotoStatus();
-  }
-
-  syncMarketplaceImagesInput();
-  renderMarketplacePhotoPreviews();
-  updateMarketplaceSaveListingButtonState();
-}
-
-function configureMarketplaceVehicleTypeField(type?: MarketplaceListingType) {
-  const listingSelected = Boolean(type);
-  const itemSelected = type === "item";
-  const vehicleSelected = type === "vehicle";
-  const homeSelected = type === "home";
-
-  arrangeMarketplaceListingFields(type);
-
-  setMarketplaceFieldAvailability(marketplaceListingFields, listingSelected);
-  setMarketplaceFieldAvailability(marketplaceVehicleTypeField, vehicleSelected);
-  setMarketplaceFieldAvailability(marketplaceYearField, vehicleSelected);
-  setMarketplaceFieldAvailability(
-    marketplaceVehicleDetailsFields,
-    vehicleSelected,
-  );
-  setMarketplaceFieldAvailability(marketplaceRentalTypeField, homeSelected);
-  setMarketplaceFieldAvailability(marketplaceHomeDetailsFields, homeSelected);
-  setMarketplaceFieldAvailability(
-    marketplaceTitleField,
-    itemSelected || homeSelected,
-  );
-  setMarketplaceFieldAvailability(marketplacePriceField, listingSelected);
-  setMarketplaceFieldAvailability(
-    marketplaceCategoryField,
-    itemSelected || homeSelected,
-  );
-  setMarketplaceFieldAvailability(
-    marketplaceConditionField,
-    itemSelected || homeSelected,
-  );
-  setMarketplaceFieldAvailability(marketplaceDescriptionField, listingSelected);
-  setMarketplaceFieldAvailability(marketplaceLocationField, listingSelected);
-  marketplaceVehicleExtraFields.forEach((field) => {
-    setMarketplaceFieldAvailability(field, vehicleSelected);
-  });
-
-  if (!vehicleSelected) {
-    closeMarketplaceVehicleTypeDropdown();
-    closeMarketplaceYearDropdown();
-    closeMarketplaceBodyStyleDropdown();
-    closeMarketplaceVehicleConditionDropdown();
-    closeMarketplaceFuelTypeDropdown();
-    closeMarketplaceTransmissionDropdown();
-    closeMarketplaceColorDropdowns();
-  }
-  if (!homeSelected) {
-    closeMarketplaceRentalTypeDropdown();
-  }
-  if (vehicleSelected) {
-    closeMarketplaceCategoryDropdown();
-    closeMarketplaceConditionDropdown();
-  }
-}
-
-function arrangeMarketplaceListingFields(type?: MarketplaceListingType) {
-  if (
-    !marketplaceListingFields ||
-    !marketplacePhotosField ||
-    !marketplaceVehicleTypeField ||
-    !marketplaceTitleField ||
-    !marketplacePriceField ||
-    !marketplaceCategoryField ||
-    !marketplaceDescriptionField ||
-    !marketplaceLocationField
-  ) {
-    return;
-  }
-
-  if (type === "vehicle") {
-    marketplaceListingFields.insertBefore(
-      marketplaceVehicleTypeField,
-      marketplacePhotosField,
-    );
-    marketplacePhotosField.insertAdjacentElement(
-      "afterend",
-      marketplaceLocationField,
-    );
-    marketplaceVehicleMileageField?.insertAdjacentElement(
-      "afterend",
-      marketplacePriceField,
-    );
-    return;
-  }
-
-  marketplacePhotosField.insertAdjacentElement(
-    "afterend",
-    marketplaceVehicleTypeField,
-  );
-  marketplaceTitleField.insertAdjacentElement(
-    "afterend",
-    marketplacePriceField,
-  );
-  marketplaceDescriptionField.insertAdjacentElement(
-    "afterend",
-    marketplaceLocationField,
-  );
-}
-
-function setMarketplaceFieldAvailability(
-  container: HTMLElement | null,
-  available: boolean,
-) {
-  if (!container) {
-    return;
-  }
-
-  container.hidden = !available;
-  container
-    .querySelectorAll<
-      HTMLInputElement | HTMLButtonElement | HTMLTextAreaElement
-    >("input, button, textarea")
-    .forEach((control) => {
-      control.disabled = !available;
-    });
-}
-
-function isMarketplaceListingFormComplete() {
-  if (
-    !selectedMarketplaceListingType ||
-    selectedMarketplaceImageFiles.length === 0 ||
-    !marketplaceListingFields
-  ) {
-    return false;
-  }
-
-  const controls = Array.from(
-    marketplaceListingFields.querySelectorAll<
-      HTMLInputElement | HTMLTextAreaElement
-    >("input[name]:not(:disabled), textarea[name]:not(:disabled)"),
-  ).filter(
-    (control) =>
-      !(control instanceof HTMLInputElement) ||
-      (control.type !== "file" && control.type !== "checkbox"),
-  );
-
-  if (!controls.every((control) => control.value.trim().length > 0)) {
-    return false;
-  }
-
-  if (selectedMarketplaceListingType === "vehicle") {
-    const mileage = Number(marketplaceVehicleMileageInput?.value ?? 0);
-    if (!Number.isInteger(mileage) || mileage < 300 || mileage > 1_000_000) {
-      return false;
-    }
-  }
-
-  return true;
-}
-
-function updateMarketplaceSaveListingButtonState() {
-  if (!saveMarketplaceListingButton) {
-    return;
-  }
-  const complete = isMarketplaceListingFormComplete();
-  const savedLimitReached =
-    !editingMarketplaceListingId &&
-    currentExtensionAccess?.access.remaining.saved_marketplace_listings === 0;
-  saveMarketplaceListingButton.disabled =
-    isMarketplaceListingSaving || !complete || savedLimitReached;
-  saveMarketplaceListingButton.title = savedLimitReached
-    ? "Free accounts can save 1 Marketplace listing. Upgrade to add unlimited listings."
-    : complete
-      ? editingMarketplaceListingId
-        ? "Update this listing"
-        : "Save this listing"
-      : "Complete all listing fields and add at least one photo";
-}
-
-function updatePreparedPostSaveButtonState() {
-  if (!savePreparedPostButton) {
-    return;
-  }
-  const savedLimitReached =
-    !editingPreparedPostId &&
-    currentExtensionAccess?.access.remaining.saved_group_posts === 0;
-  const hasRequiredContent =
-    (postBodyInput?.value.trim().length ?? 0) > 0 &&
-    selectedImageFiles.length > 0;
-  savePreparedPostButton.disabled = savedLimitReached || !hasRequiredContent;
-  savePreparedPostButton.title = savedLimitReached
-    ? "Free accounts can save 1 reusable Group post. Upgrade to add unlimited posts."
-    : !hasRequiredContent
-      ? "Add a post body and at least one image"
-      : editingPreparedPostId
-        ? "Update this reusable post"
-        : "Add this reusable post";
-}
-
-function syncMarketplaceImagesInput() {
-  if (!marketplaceImagesInput) {
-    return;
-  }
-
-  const dataTransfer = new DataTransfer();
-  selectedMarketplaceImageFiles.forEach((file) => {
-    dataTransfer.items.add(file);
-  });
-  marketplaceImagesInput.files = dataTransfer.files;
-}
-
 function getImageContentSignature(file: File): Promise<string> {
   const cachedSignature = imageContentSignatureCache.get(file);
   if (cachedSignature) {
@@ -1857,322 +550,70 @@ async function removeDuplicateImages(
   return { uniqueImages, duplicateCount };
 }
 
-function queueMarketplacePhotos(files: File[]) {
-  marketplacePhotoAdditionQueue = marketplacePhotoAdditionQueue
-    .then(() => addMarketplacePhotos(files))
-    .catch((error: unknown) => {
-      showMarketplacePhotoStatus(
-        error instanceof Error ? error.message : "Unable to add photos.",
-        true,
-      );
-    });
-}
-
-async function addMarketplacePhotos(files: File[]) {
-  if (!selectedMarketplaceListingType) {
-    showMarketplacePhotoStatus(
-      "Select a listing type before adding photos.",
-      true,
-    );
-    return;
-  }
-
-  const limit = MARKETPLACE_PHOTO_LIMITS[selectedMarketplaceListingType];
-  const imageFiles = files.filter((file) => file.type.startsWith("image/"));
-  const { uniqueImages, duplicateCount } = await removeDuplicateImages(
-    imageFiles,
-    selectedMarketplaceImageFiles,
-  );
-  const remainingSlots = Math.max(
-    limit - selectedMarketplaceImageFiles.length,
-    0,
-  );
-  const acceptedImages = uniqueImages.slice(0, remainingSlots);
-
-  selectedMarketplaceImageFiles.push(...acceptedImages);
-  syncMarketplaceImagesInput();
-  renderMarketplacePhotoPreviews();
-
-  const rejectedForType = files.length - imageFiles.length;
-  const rejectedForLimit = uniqueImages.length - acceptedImages.length;
-
-  if (rejectedForLimit > 0) {
-    showMarketplacePhotoStatus(
-      `Only ${limit} photos are allowed for this listing type. ${rejectedForLimit} ${rejectedForLimit === 1 ? "photo was" : "photos were"} not added.`,
-      true,
-    );
-  } else if (rejectedForType > 0) {
-    showMarketplacePhotoStatus("Only image files can be added.", true);
-  } else if (duplicateCount > 0) {
-    showMarketplacePhotoStatus(
-      `${duplicateCount} duplicate ${duplicateCount === 1 ? "photo was" : "photos were"} skipped.`,
-    );
-  } else {
-    hideMarketplacePhotoStatus();
-  }
-}
-
-function clearMarketplacePhotoPreviewUrls() {
-  marketplacePhotoPreviewUrls.forEach((url) => URL.revokeObjectURL(url));
-  marketplacePhotoPreviewUrls.length = 0;
-}
-
-function renderMarketplacePhotoPreviews() {
-  if (!marketplacePhotoPreviews) {
-    return;
-  }
-
-  clearMarketplacePhotoPreviewUrls();
-  if (marketplacePhotoCount) {
-    marketplacePhotoCount.textContent = String(
-      selectedMarketplaceImageFiles.length,
-    );
-  }
-
-  if (selectedMarketplaceImageFiles.length === 0) {
-    marketplacePhotoPreviews.hidden = true;
-    marketplacePhotoPreviews.replaceChildren();
-    updateMarketplaceSaveListingButtonState();
-    return;
-  }
-
-  const previews = selectedMarketplaceImageFiles.map((file, index) => {
-    const previewUrl = URL.createObjectURL(file);
-    marketplacePhotoPreviewUrls.push(previewUrl);
-
-    const preview = document.createElement("figure");
-    preview.className = "marketplace-photo-preview";
-    preview.draggable = true;
-    preview.tabIndex = 0;
-    preview.dataset.photoIndex = String(index);
-    preview.setAttribute(
-      "aria-label",
-      `Photo ${index + 1} of ${selectedMarketplaceImageFiles.length}. Click to preview or drag to reorder.`,
-    );
-
-    const image = document.createElement("img");
-    image.src = previewUrl;
-    image.alt = file.name;
-    image.draggable = false;
-    image.addEventListener("click", () => {
-      openMarketplacePhotoLightbox(index, preview);
-    });
-
-    const removeButton = document.createElement("button");
-    removeButton.type = "button";
-    removeButton.className = "marketplace-photo-preview__remove";
-    removeButton.setAttribute("aria-label", `Remove ${file.name}`);
-
-    const removeIcon = document.createElementNS(
-      "http://www.w3.org/2000/svg",
-      "svg",
-    );
-    removeIcon.setAttribute("width", "32");
-    removeIcon.setAttribute("height", "32");
-    removeIcon.setAttribute("fill", "currentColor");
-    removeIcon.setAttribute("viewBox", "0 0 256 256");
-    removeIcon.setAttribute("aria-hidden", "true");
-
-    const removeIconPath = document.createElementNS(
-      "http://www.w3.org/2000/svg",
-      "path",
-    );
-    removeIconPath.setAttribute(
-      "d",
-      "M205.66,194.34a8,8,0,0,1-11.32,11.32L128,139.31,61.66,205.66a8,8,0,0,1-11.32-11.32L116.69,128,50.34,61.66A8,8,0,0,1,61.66,50.34L128,116.69l66.34-66.35a8,8,0,0,1,11.32,11.32L139.31,128Z",
-    );
-    removeIcon.append(removeIconPath);
-    removeButton.append(removeIcon);
-    removeButton.addEventListener("click", () => {
-      selectedMarketplaceImageFiles.splice(index, 1);
-      syncMarketplaceImagesInput();
-      renderMarketplacePhotoPreviews();
-      hideMarketplacePhotoStatus();
-    });
-
-    preview.addEventListener("dragstart", (event) => {
-      if (event.target instanceof Element && event.target.closest("button")) {
-        event.preventDefault();
-        return;
-      }
-
-      draggedMarketplacePhotoIndex = index;
-      preview.classList.add("marketplace-photo-preview--dragging");
-      if (event.dataTransfer) {
-        event.dataTransfer.effectAllowed = "move";
-        event.dataTransfer.setData("text/plain", String(index));
-      }
-    });
-
-    preview.addEventListener("dragover", (event) => {
-      if (
-        draggedMarketplacePhotoIndex === undefined ||
-        draggedMarketplacePhotoIndex === index
-      ) {
-        return;
-      }
-
-      event.preventDefault();
-      preview.classList.add("marketplace-photo-preview--drop-target");
-      if (event.dataTransfer) {
-        event.dataTransfer.dropEffect = "move";
-      }
-    });
-
-    preview.addEventListener("dragleave", () => {
-      preview.classList.remove("marketplace-photo-preview--drop-target");
-    });
-
-    preview.addEventListener("drop", (event) => {
-      event.preventDefault();
-      preview.classList.remove("marketplace-photo-preview--drop-target");
-
-      if (draggedMarketplacePhotoIndex === undefined) {
-        return;
-      }
-
-      moveMarketplacePhoto(draggedMarketplacePhotoIndex, index);
-    });
-
-    preview.addEventListener("dragend", () => {
-      draggedMarketplacePhotoIndex = undefined;
-      marketplacePhotoPreviews
-        .querySelectorAll<HTMLElement>(".marketplace-photo-preview")
-        .forEach((candidate) => {
-          candidate.classList.remove(
-            "marketplace-photo-preview--dragging",
-            "marketplace-photo-preview--drop-target",
-          );
-        });
-    });
-
-    preview.addEventListener("keydown", (event) => {
-      if (
-        event.target === preview &&
-        (event.key === "Enter" || event.key === " ")
-      ) {
-        event.preventDefault();
-        openMarketplacePhotoLightbox(index, preview);
-      }
-    });
-
-    preview.append(image, removeButton);
-    return preview;
-  });
-
-  marketplacePhotoPreviews.hidden = false;
-  marketplacePhotoPreviews.replaceChildren(...previews);
-  updateMarketplaceSaveListingButtonState();
-}
-
-function moveMarketplacePhoto(fromIndex: number, toIndex: number) {
-  if (
-    fromIndex === toIndex ||
-    fromIndex < 0 ||
-    toIndex < 0 ||
-    fromIndex >= selectedMarketplaceImageFiles.length ||
-    toIndex >= selectedMarketplaceImageFiles.length
-  ) {
-    return;
-  }
-
-  const [movedPhoto] = selectedMarketplaceImageFiles.splice(fromIndex, 1);
-  if (!movedPhoto) {
-    return;
-  }
-
-  selectedMarketplaceImageFiles.splice(toIndex, 0, movedPhoto);
-  draggedMarketplacePhotoIndex = undefined;
-  syncMarketplaceImagesInput();
-  renderMarketplacePhotoPreviews();
-  showMarketplacePhotoStatus("Photo order updated.");
-}
-
-function openMarketplacePhotoLightbox(index: number, returnFocus: HTMLElement) {
-  openPhotoLightbox("marketplace", index, returnFocus);
-}
-
 function openGroupsPhotoLightbox(index: number, returnFocus: HTMLElement) {
-  openPhotoLightbox("groups", index, returnFocus);
+  openPhotoLightbox(index, returnFocus);
 }
 
 function getPhotoLightboxFiles() {
-  return photoLightboxSource === "groups"
-    ? selectedImageFiles
-    : selectedMarketplaceImageFiles;
+  return selectedImageFiles;
 }
 
-function openPhotoLightbox(
-  source: "groups" | "marketplace",
-  index: number,
-  returnFocus: HTMLElement,
-) {
-  const files =
-    source === "groups" ? selectedImageFiles : selectedMarketplaceImageFiles;
-  if (!marketplacePhotoLightbox || index < 0 || index >= files.length) {
+function openPhotoLightbox(index: number, returnFocus: HTMLElement) {
+  const files = selectedImageFiles;
+  if (!photoLightbox || index < 0 || index >= files.length) {
     return;
   }
 
-  closeMarketplacePhotoLightbox(false);
-  photoLightboxSource = source;
-  marketplacePhotoLightboxReturnFocus = returnFocus;
-  marketplacePhotoLightboxIndex = index;
+  closePhotoLightbox(false);
+  photoLightboxReturnFocus = returnFocus;
+  photoLightboxIndex = index;
 
   files.forEach((file) => {
-    marketplacePhotoLightboxUrls.push(URL.createObjectURL(file));
+    photoLightboxUrls.push(URL.createObjectURL(file));
   });
 
-  if (marketplacePhotoLightboxTitle) {
-    marketplacePhotoLightboxTitle.textContent =
-      source === "groups" ? "Post image preview" : "Photo preview";
+  if (photoLightboxTitle) {
+    photoLightboxTitle.textContent = msg("photoImagePreview");
   }
 
-  marketplacePhotoLightbox.hidden = false;
-  document.body.classList.add("marketplace-lightbox-open");
-  renderMarketplacePhotoLightboxThumbnails();
-  renderMarketplacePhotoLightbox();
-  marketplacePhotoLightboxClose?.focus();
+  photoLightbox.hidden = false;
+  document.body.classList.add("photo-lightbox-open");
+  renderPhotoLightboxThumbnails();
+  renderPhotoLightbox();
+  photoLightboxClose?.focus();
 }
 
-function renderMarketplacePhotoLightbox() {
+function renderPhotoLightbox() {
   const files = getPhotoLightboxFiles();
-  const file = files[marketplacePhotoLightboxIndex];
-  const previewUrl =
-    marketplacePhotoLightboxUrls[marketplacePhotoLightboxIndex];
+  const file = files[photoLightboxIndex];
+  const previewUrl = photoLightboxUrls[photoLightboxIndex];
   if (!file || !previewUrl) {
-    closeMarketplacePhotoLightbox();
+    closePhotoLightbox();
     return;
   }
 
-  if (marketplacePhotoLightboxImage) {
-    marketplacePhotoLightboxImage.src = previewUrl;
-    marketplacePhotoLightboxImage.alt = file.name;
+  if (photoLightboxImage) {
+    photoLightboxImage.src = previewUrl;
+    photoLightboxImage.alt = file.name;
   }
-  if (marketplacePhotoLightboxCounter) {
-    marketplacePhotoLightboxCounter.textContent = `${marketplacePhotoLightboxIndex + 1} / ${files.length}`;
+  if (photoLightboxCounter) {
+    photoLightboxCounter.textContent = `${photoLightboxIndex + 1} / ${files.length}`;
   }
-  if (marketplacePhotoLightboxFilename) {
-    marketplacePhotoLightboxFilename.textContent = file.name;
+  if (photoLightboxFilename) {
+    photoLightboxFilename.textContent = file.name;
   }
-  if (marketplacePhotoLightboxPrevious) {
-    marketplacePhotoLightboxPrevious.disabled =
-      marketplacePhotoLightboxIndex === 0;
+  if (photoLightboxPrevious) {
+    photoLightboxPrevious.disabled = photoLightboxIndex === 0;
   }
-  if (marketplacePhotoLightboxNext) {
-    marketplacePhotoLightboxNext.disabled =
-      marketplacePhotoLightboxIndex === files.length - 1;
+  if (photoLightboxNext) {
+    photoLightboxNext.disabled = photoLightboxIndex === files.length - 1;
   }
 
-  marketplacePhotoLightboxThumbnails
-    ?.querySelectorAll<HTMLButtonElement>(
-      ".marketplace-photo-lightbox__thumbnail",
-    )
+  photoLightboxThumbnails
+    ?.querySelectorAll<HTMLButtonElement>(".photo-lightbox__thumbnail")
     .forEach((thumbnail, index) => {
-      const active = index === marketplacePhotoLightboxIndex;
-      thumbnail.classList.toggle(
-        "marketplace-photo-lightbox__thumbnail--active",
-        active,
-      );
+      const active = index === photoLightboxIndex;
+      thumbnail.classList.toggle("photo-lightbox__thumbnail--active", active);
       thumbnail.setAttribute("aria-current", active ? "true" : "false");
       if (active) {
         thumbnail.scrollIntoView({ block: "nearest", inline: "center" });
@@ -2180,2268 +621,94 @@ function renderMarketplacePhotoLightbox() {
     });
 }
 
-function renderMarketplacePhotoLightboxThumbnails() {
-  if (!marketplacePhotoLightboxThumbnails) {
+function renderPhotoLightboxThumbnails() {
+  if (!photoLightboxThumbnails) {
     return;
   }
 
   const thumbnails = getPhotoLightboxFiles().map((file, index) => {
     const button = document.createElement("button");
     button.type = "button";
-    button.className = "marketplace-photo-lightbox__thumbnail";
-    button.setAttribute("aria-label", `View photo ${index + 1}: ${file.name}`);
+    button.className = "photo-lightbox__thumbnail";
+    button.setAttribute("aria-label", msg("viewPhoto", index + 1, file.name));
 
     const image = document.createElement("img");
-    image.src = marketplacePhotoLightboxUrls[index] ?? "";
+    image.src = photoLightboxUrls[index] ?? "";
     image.alt = "";
     image.draggable = false;
 
     button.append(image);
     button.addEventListener("click", () => {
-      marketplacePhotoLightboxIndex = index;
-      renderMarketplacePhotoLightbox();
+      photoLightboxIndex = index;
+      renderPhotoLightbox();
     });
     return button;
   });
 
-  marketplacePhotoLightboxThumbnails.replaceChildren(...thumbnails);
+  photoLightboxThumbnails.replaceChildren(...thumbnails);
 }
 
-function moveMarketplacePhotoLightbox(direction: -1 | 1) {
-  const nextIndex = marketplacePhotoLightboxIndex + direction;
+function movePhotoLightbox(direction: -1 | 1) {
+  const nextIndex = photoLightboxIndex + direction;
   if (nextIndex < 0 || nextIndex >= getPhotoLightboxFiles().length) {
     return;
   }
 
-  marketplacePhotoLightboxIndex = nextIndex;
-  renderMarketplacePhotoLightbox();
+  photoLightboxIndex = nextIndex;
+  renderPhotoLightbox();
 }
 
-function closeMarketplacePhotoLightbox(returnFocus = true) {
-  if (!marketplacePhotoLightbox) {
+function closePhotoLightbox(returnFocus = true) {
+  if (!photoLightbox) {
     return;
   }
 
-  marketplacePhotoLightbox.hidden = true;
-  document.body.classList.remove("marketplace-lightbox-open");
-  if (marketplacePhotoLightboxImage) {
-    marketplacePhotoLightboxImage.src = "";
-    marketplacePhotoLightboxImage.alt = "";
+  photoLightbox.hidden = true;
+  document.body.classList.remove("photo-lightbox-open");
+  if (photoLightboxImage) {
+    photoLightboxImage.src = "";
+    photoLightboxImage.alt = "";
   }
-  marketplacePhotoLightboxThumbnails?.replaceChildren();
-  marketplacePhotoLightboxUrls.forEach((url) => URL.revokeObjectURL(url));
-  marketplacePhotoLightboxUrls.length = 0;
+  photoLightboxThumbnails?.replaceChildren();
+  photoLightboxUrls.forEach((url) => URL.revokeObjectURL(url));
+  photoLightboxUrls.length = 0;
 
   if (returnFocus) {
-    marketplacePhotoLightboxReturnFocus?.focus();
+    photoLightboxReturnFocus?.focus();
   }
-  marketplacePhotoLightboxReturnFocus = undefined;
+  photoLightboxReturnFocus = undefined;
 }
 
-function showMarketplacePhotoStatus(message: string, isError = false) {
-  if (!marketplacePhotoStatus) {
-    return;
-  }
-
-  marketplacePhotoStatus.hidden = false;
-  marketplacePhotoStatus.textContent = message;
-  marketplacePhotoStatus.classList.toggle(
-    "marketplace-photo-status--error",
-    isError,
-  );
-}
-
-function hideMarketplacePhotoStatus() {
-  if (!marketplacePhotoStatus) {
-    return;
-  }
-
-  marketplacePhotoStatus.hidden = true;
-  marketplacePhotoStatus.textContent = "";
-  marketplacePhotoStatus.classList.remove("marketplace-photo-status--error");
-}
-
-function focusListingTypeOption(index: number, direction = 1) {
-  const optionCount = listingTypeOptionElements.length;
-  if (optionCount === 0) {
-    return;
-  }
-
-  let candidateIndex = (index + optionCount) % optionCount;
-  for (let attempts = 0; attempts < optionCount; attempts += 1) {
-    const candidate = listingTypeOptionElements[candidateIndex];
-    if (candidate?.getAttribute("aria-disabled") !== "true") {
-      candidate.focus();
-      return;
-    }
-    candidateIndex = (candidateIndex + direction + optionCount) % optionCount;
-  }
-}
-
-listingTypeTrigger?.addEventListener("click", () => {
-  closeMarketplaceCategoryDropdown();
-  closeMarketplaceConditionDropdown();
-  if (listingTypeOptions?.hidden) {
-    const selectedIndex = listingTypeOptionElements.findIndex(
-      (option) => option.getAttribute("aria-selected") === "true",
-    );
-    openListingTypeDropdown(selectedIndex >= 0 ? selectedIndex : 0);
-  } else {
-    closeListingTypeDropdown();
-  }
+photoLightboxClose?.addEventListener("click", () => {
+  closePhotoLightbox();
 });
 
-listingTypeTrigger?.addEventListener("keydown", (event) => {
-  if (!["ArrowDown", "ArrowUp", "Home", "End"].includes(event.key)) {
-    return;
-  }
-
-  event.preventDefault();
-  const lastIndex = listingTypeOptionElements.length - 1;
-  const backwards = event.key === "ArrowUp" || event.key === "End";
-  openListingTypeDropdown(backwards ? lastIndex : 0, backwards ? -1 : 1);
+photoLightboxBackdrop?.addEventListener("click", () => {
+  closePhotoLightbox();
 });
 
-listingTypeOptionElements.forEach((option, index) => {
-  option.addEventListener("click", () => {
-    if (option.getAttribute("aria-disabled") !== "true") {
-      selectListingType(option);
-    }
-  });
-  option.addEventListener("keydown", (event) => {
-    if (option.getAttribute("aria-disabled") === "true") {
-      return;
-    }
-    if (event.key === "ArrowDown") {
-      event.preventDefault();
-      focusListingTypeOption(index + 1, 1);
-    } else if (event.key === "ArrowUp") {
-      event.preventDefault();
-      focusListingTypeOption(index - 1, -1);
-    } else if (event.key === "Home") {
-      event.preventDefault();
-      focusListingTypeOption(0);
-    } else if (event.key === "End") {
-      event.preventDefault();
-      focusListingTypeOption(listingTypeOptionElements.length - 1, -1);
-    } else if (event.key === "Enter" || event.key === " ") {
-      event.preventDefault();
-      selectListingType(option);
-    } else if (event.key === "Escape") {
-      event.preventDefault();
-      closeListingTypeDropdown(true);
-    } else if (event.key === "Tab") {
-      closeListingTypeDropdown();
-    }
-  });
+photoLightboxPrevious?.addEventListener("click", () => {
+  movePhotoLightbox(-1);
 });
 
-function createMarketplaceCategoryIcon(pathData: string) {
-  const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
-  svg.setAttribute("width", "32");
-  svg.setAttribute("height", "32");
-  svg.setAttribute("fill", "currentColor");
-  svg.setAttribute("viewBox", "0 0 256 256");
-  svg.setAttribute("aria-hidden", "true");
-
-  const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
-  path.setAttribute("d", pathData);
-  svg.append(path);
-  return svg;
-}
-
-function initializeMarketplaceCategorySelect() {
-  if (!marketplaceCategoryOptions) {
-    return;
-  }
-
-  const groups = MARKETPLACE_CATEGORY_GROUPS.map((group) => {
-    const groupElement = document.createElement("section");
-    groupElement.className = "category-select__group";
-    groupElement.setAttribute("role", "group");
-    groupElement.setAttribute("aria-label", group.name);
-
-    if (group.options.length === 0) {
-      groupElement.append(createMarketplaceCategoryOption(group, undefined));
-      return groupElement;
-    }
-
-    const heading = document.createElement("div");
-    heading.className = "category-select__group-heading";
-
-    const icon = document.createElement("span");
-    icon.className = "category-select__group-icon";
-    icon.setAttribute("aria-hidden", "true");
-    icon.append(createMarketplaceCategoryIcon(group.iconPath));
-
-    const name = document.createElement("strong");
-    name.textContent = group.name;
-    heading.append(icon, name);
-
-    const options = group.options.map((option) =>
-      createMarketplaceCategoryOption(group, option),
-    );
-    groupElement.append(heading, ...options);
-    return groupElement;
-  });
-
-  marketplaceCategoryOptions.replaceChildren(...groups);
-  marketplaceCategoryOptionElements = Array.from(
-    marketplaceCategoryOptions.querySelectorAll<HTMLElement>(
-      ".category-select__option",
-    ),
-  );
-
-  marketplaceCategoryOptionElements.forEach((option, index) => {
-    option.addEventListener("click", () => selectMarketplaceCategory(option));
-    option.addEventListener("keydown", (event) => {
-      if (event.key === "ArrowDown") {
-        event.preventDefault();
-        focusMarketplaceCategoryOption(index + 1);
-      } else if (event.key === "ArrowUp") {
-        event.preventDefault();
-        focusMarketplaceCategoryOption(index - 1);
-      } else if (event.key === "Home") {
-        event.preventDefault();
-        focusMarketplaceCategoryOption(0);
-      } else if (event.key === "End") {
-        event.preventDefault();
-        focusMarketplaceCategoryOption(
-          marketplaceCategoryOptionElements.length - 1,
-        );
-      } else if (event.key === "Enter" || event.key === " ") {
-        event.preventDefault();
-        selectMarketplaceCategory(option);
-      } else if (event.key === "Escape") {
-        event.preventDefault();
-        closeMarketplaceCategoryDropdown(true);
-      } else if (event.key === "Tab") {
-        closeMarketplaceCategoryDropdown();
-      }
-    });
-  });
-}
-
-function createMarketplaceCategoryOption(
-  group: MarketplaceCategoryGroup,
-  option: MarketplaceCategoryOption | undefined,
-) {
-  const optionElement = document.createElement("div");
-  optionElement.className = "category-select__option";
-  optionElement.setAttribute("role", "option");
-  optionElement.setAttribute("aria-selected", "false");
-  optionElement.tabIndex = -1;
-  optionElement.dataset.category = group.name;
-  optionElement.dataset.value = option?.label ?? group.name;
-
-  if (!option) {
-    optionElement.classList.add("category-select__option--standalone");
-    const icon = document.createElement("span");
-    icon.className = "category-select__group-icon";
-    icon.setAttribute("aria-hidden", "true");
-    icon.append(createMarketplaceCategoryIcon(group.iconPath));
-    optionElement.append(icon);
-  }
-
-  const copy = document.createElement("span");
-  copy.className = "category-select__option-copy";
-  const label = document.createElement("strong");
-  label.textContent = option?.label ?? group.name;
-  copy.append(label);
-
-  if (option?.shipping) {
-    const shipping = document.createElement("small");
-    shipping.textContent = "Shipping available";
-    copy.append(shipping);
-  }
-
-  const check = document.createElement("span");
-  check.className = "category-select__check";
-  check.setAttribute("aria-hidden", "true");
-  check.textContent = "✓";
-  optionElement.append(copy, check);
-  return optionElement;
-}
-
-function openMarketplaceCategoryDropdown(focusIndex?: number) {
-  if (
-    !marketplaceCategorySelect ||
-    !marketplaceCategoryTrigger ||
-    !marketplaceCategoryOptions
-  ) {
-    return;
-  }
-
-  closeListingTypeDropdown();
-  closeMarketplaceConditionDropdown();
-  closeMarketplaceVehicleTypeDropdown();
-  closeMarketplaceYearDropdown();
-  closeMarketplaceBodyStyleDropdown();
-  closeMarketplaceVehicleConditionDropdown();
-  closeMarketplaceFuelTypeDropdown();
-  closeMarketplaceTransmissionDropdown();
-  closeMarketplaceColorDropdowns();
-  marketplaceCategoryOptions.hidden = false;
-  marketplaceCategorySelect.classList.add("category-select--open");
-  marketplaceCategoryTrigger.setAttribute("aria-expanded", "true");
-  positionMarketplaceCategoryDropdown();
-
-  if (focusIndex !== undefined) {
-    marketplaceCategoryOptionElements[focusIndex]?.focus();
-  }
-}
-
-function closeMarketplaceCategoryDropdown(returnFocus = false) {
-  if (
-    !marketplaceCategorySelect ||
-    !marketplaceCategoryTrigger ||
-    !marketplaceCategoryOptions
-  ) {
-    return;
-  }
-
-  marketplaceCategoryOptions.hidden = true;
-  marketplaceCategoryOptions.style.maxHeight = "";
-  marketplaceCategorySelect.classList.remove(
-    "category-select--open",
-    "category-select--open-upward",
-  );
-  marketplaceCategoryTrigger.setAttribute("aria-expanded", "false");
-
-  if (returnFocus) {
-    marketplaceCategoryTrigger.focus();
-  }
-}
-
-function positionMarketplaceCategoryDropdown() {
-  if (
-    !marketplaceCategorySelect ||
-    !marketplaceCategoryTrigger ||
-    !marketplaceCategoryOptions ||
-    marketplaceCategoryOptions.hidden
-  ) {
-    return;
-  }
-
-  marketplaceCategorySelect.classList.remove("category-select--open-upward");
-  marketplaceCategoryOptions.style.maxHeight = "";
-
-  const viewportPadding = remToPixels(1.2);
-  const triggerRect = marketplaceCategoryTrigger.getBoundingClientRect();
-  const spaceAbove = Math.max(triggerRect.top - viewportPadding, 0);
-  const spaceBelow = Math.max(
-    window.innerHeight - triggerRect.bottom - viewportPadding,
-    0,
-  );
-  const preferredHeight = Math.min(
-    marketplaceCategoryOptions.scrollHeight,
-    window.innerHeight * 0.65,
-    remToPixels(42),
-  );
-  const openUpward = spaceBelow < preferredHeight && spaceAbove > spaceBelow;
-  const availableSpace = openUpward ? spaceAbove : spaceBelow;
-
-  marketplaceCategorySelect.classList.toggle(
-    "category-select--open-upward",
-    openUpward,
-  );
-  marketplaceCategoryOptions.style.maxHeight = pixelsToRem(Math.max(
-    Math.min(preferredHeight, availableSpace - remToPixels(0.7)),
-    remToPixels(12),
-  ));
-}
-
-function selectMarketplaceCategory(option: HTMLElement) {
-  const value = option.dataset.value;
-  const category = option.dataset.category;
-  if (!value || !category) {
-    return;
-  }
-
-  marketplaceCategoryOptionElements.forEach((candidate) => {
-    candidate.setAttribute("aria-selected", String(candidate === option));
-  });
-
-  if (marketplaceCategoryValue) {
-    marketplaceCategoryValue.textContent = value;
-  }
-  if (marketplaceCategoryInput) {
-    marketplaceCategoryInput.value = value;
-  }
-  if (marketplaceCategoryGroupInput) {
-    marketplaceCategoryGroupInput.value = category;
-  }
-
-  const selectedIcon = option
-    .closest<HTMLElement>(".category-select__group")
-    ?.querySelector(".category-select__group-icon svg")
-    ?.cloneNode(true);
-  if (marketplaceCategorySelectedIcon && selectedIcon) {
-    marketplaceCategorySelectedIcon.replaceChildren(selectedIcon);
-  }
-
-  closeMarketplaceCategoryDropdown(true);
-}
-
-function focusMarketplaceCategoryOption(index: number) {
-  const optionCount = marketplaceCategoryOptionElements.length;
-  if (optionCount === 0) {
-    return;
-  }
-
-  const wrappedIndex = (index + optionCount) % optionCount;
-  marketplaceCategoryOptionElements[wrappedIndex]?.focus();
-}
-
-marketplaceCategoryTrigger?.addEventListener("click", () => {
-  if (marketplaceCategoryOptions?.hidden) {
-    const selectedIndex = marketplaceCategoryOptionElements.findIndex(
-      (option) => option.getAttribute("aria-selected") === "true",
-    );
-    openMarketplaceCategoryDropdown(selectedIndex >= 0 ? selectedIndex : 0);
-  } else {
-    closeMarketplaceCategoryDropdown();
-  }
-});
-
-marketplaceCategoryTrigger?.addEventListener("keydown", (event) => {
-  if (!["ArrowDown", "ArrowUp", "Home", "End"].includes(event.key)) {
-    return;
-  }
-
-  event.preventDefault();
-  const lastIndex = marketplaceCategoryOptionElements.length - 1;
-  openMarketplaceCategoryDropdown(
-    event.key === "ArrowUp" || event.key === "End" ? lastIndex : 0,
-  );
-});
-
-function openMarketplaceConditionDropdown(focusIndex?: number) {
-  if (
-    !marketplaceConditionSelect ||
-    !marketplaceConditionTrigger ||
-    !marketplaceConditionOptions
-  ) {
-    return;
-  }
-
-  closeListingTypeDropdown();
-  closeMarketplaceCategoryDropdown();
-  closeMarketplaceVehicleTypeDropdown();
-  closeMarketplaceYearDropdown();
-  closeMarketplaceBodyStyleDropdown();
-  closeMarketplaceVehicleConditionDropdown();
-  closeMarketplaceFuelTypeDropdown();
-  closeMarketplaceTransmissionDropdown();
-  closeMarketplaceColorDropdowns();
-  marketplaceConditionOptions.hidden = false;
-  marketplaceConditionSelect.classList.add("condition-select--open");
-  marketplaceConditionTrigger.setAttribute("aria-expanded", "true");
-  positionMarketplaceConditionDropdown();
-
-  if (focusIndex !== undefined) {
-    marketplaceConditionOptionElements[focusIndex]?.focus();
-  }
-}
-
-function closeMarketplaceConditionDropdown(returnFocus = false) {
-  if (
-    !marketplaceConditionSelect ||
-    !marketplaceConditionTrigger ||
-    !marketplaceConditionOptions
-  ) {
-    return;
-  }
-
-  marketplaceConditionOptions.hidden = true;
-  marketplaceConditionOptions.style.maxHeight = "";
-  marketplaceConditionSelect.classList.remove(
-    "condition-select--open",
-    "condition-select--open-upward",
-  );
-  marketplaceConditionTrigger.setAttribute("aria-expanded", "false");
-
-  if (returnFocus) {
-    marketplaceConditionTrigger.focus();
-  }
-}
-
-function selectMarketplaceCondition(option: HTMLElement) {
-  const value = option.dataset.value;
-  const label = option.querySelector("span")?.textContent?.trim();
-  if (!value || !label) {
-    return;
-  }
-
-  marketplaceConditionOptionElements.forEach((candidate) => {
-    candidate.setAttribute("aria-selected", String(candidate === option));
-  });
-  if (marketplaceConditionValue) {
-    marketplaceConditionValue.textContent = label;
-  }
-  if (marketplaceConditionInput) {
-    marketplaceConditionInput.value = value;
-  }
-
-  closeMarketplaceConditionDropdown(true);
-}
-
-function focusMarketplaceConditionOption(index: number) {
-  const optionCount = marketplaceConditionOptionElements.length;
-  if (optionCount === 0) {
-    return;
-  }
-
-  const wrappedIndex = (index + optionCount) % optionCount;
-  marketplaceConditionOptionElements[wrappedIndex]?.focus();
-}
-
-function positionMarketplaceConditionDropdown() {
-  if (
-    !marketplaceConditionSelect ||
-    !marketplaceConditionTrigger ||
-    !marketplaceConditionOptions ||
-    marketplaceConditionOptions.hidden
-  ) {
-    return;
-  }
-
-  marketplaceConditionSelect.classList.remove("condition-select--open-upward");
-  marketplaceConditionOptions.style.maxHeight = "";
-
-  const viewportPadding = remToPixels(1.2);
-  const triggerRect = marketplaceConditionTrigger.getBoundingClientRect();
-  const spaceAbove = Math.max(triggerRect.top - viewportPadding, 0);
-  const spaceBelow = Math.max(
-    window.innerHeight - triggerRect.bottom - viewportPadding,
-    0,
-  );
-  const preferredHeight = Math.min(
-    marketplaceConditionOptions.scrollHeight,
-    window.innerHeight * 0.55,
-    remToPixels(28),
-  );
-  const openUpward = spaceBelow < preferredHeight && spaceAbove > spaceBelow;
-  const availableSpace = openUpward ? spaceAbove : spaceBelow;
-
-  marketplaceConditionSelect.classList.toggle(
-    "condition-select--open-upward",
-    openUpward,
-  );
-  marketplaceConditionOptions.style.maxHeight = pixelsToRem(Math.max(
-    Math.min(preferredHeight, availableSpace - remToPixels(0.7)),
-    remToPixels(12),
-  ));
-}
-
-marketplaceConditionTrigger?.addEventListener("click", () => {
-  if (marketplaceConditionOptions?.hidden) {
-    const selectedIndex = marketplaceConditionOptionElements.findIndex(
-      (option) => option.getAttribute("aria-selected") === "true",
-    );
-    openMarketplaceConditionDropdown(selectedIndex >= 0 ? selectedIndex : 0);
-  } else {
-    closeMarketplaceConditionDropdown();
-  }
-});
-
-marketplaceConditionTrigger?.addEventListener("keydown", (event) => {
-  if (!["ArrowDown", "ArrowUp", "Home", "End"].includes(event.key)) {
-    return;
-  }
-
-  event.preventDefault();
-  const lastIndex = marketplaceConditionOptionElements.length - 1;
-  openMarketplaceConditionDropdown(
-    event.key === "ArrowUp" || event.key === "End" ? lastIndex : 0,
-  );
-});
-
-marketplaceConditionOptionElements.forEach((option, index) => {
-  option.addEventListener("click", () => selectMarketplaceCondition(option));
-  option.addEventListener("keydown", (event) => {
-    if (event.key === "ArrowDown") {
-      event.preventDefault();
-      focusMarketplaceConditionOption(index + 1);
-    } else if (event.key === "ArrowUp") {
-      event.preventDefault();
-      focusMarketplaceConditionOption(index - 1);
-    } else if (event.key === "Home") {
-      event.preventDefault();
-      focusMarketplaceConditionOption(0);
-    } else if (event.key === "End") {
-      event.preventDefault();
-      focusMarketplaceConditionOption(
-        marketplaceConditionOptionElements.length - 1,
-      );
-    } else if (event.key === "Enter" || event.key === " ") {
-      event.preventDefault();
-      selectMarketplaceCondition(option);
-    } else if (event.key === "Escape") {
-      event.preventDefault();
-      closeMarketplaceConditionDropdown(true);
-    } else if (event.key === "Tab") {
-      closeMarketplaceConditionDropdown();
-    }
-  });
-});
-
-function initializeMarketplaceYearSelect() {
-  if (!marketplaceYearOptions) {
-    return;
-  }
-
-  const options: HTMLElement[] = [];
-  for (let year = 2027; year >= 1901; year -= 1) {
-    const option = document.createElement("div");
-    option.className = "condition-select__option year-select__option";
-    option.setAttribute("role", "option");
-    option.setAttribute("aria-selected", "false");
-    option.tabIndex = -1;
-    option.dataset.value = String(year);
-
-    const label = document.createElement("span");
-    label.textContent = String(year);
-    const check = document.createElement("span");
-    check.className = "condition-select__check";
-    check.setAttribute("aria-hidden", "true");
-    check.textContent = "✓";
-    option.append(label, check);
-    options.push(option);
-  }
-
-  marketplaceYearOptions.replaceChildren(...options);
-  marketplaceYearOptionElements = options;
-
-  marketplaceYearOptionElements.forEach((option, index) => {
-    option.addEventListener("click", () => selectMarketplaceYear(option));
-    option.addEventListener("keydown", (event) => {
-      if (event.key === "ArrowDown") {
-        event.preventDefault();
-        focusMarketplaceYearOption(index + 1);
-      } else if (event.key === "ArrowUp") {
-        event.preventDefault();
-        focusMarketplaceYearOption(index - 1);
-      } else if (event.key === "Home") {
-        event.preventDefault();
-        focusMarketplaceYearOption(0);
-      } else if (event.key === "End") {
-        event.preventDefault();
-        focusMarketplaceYearOption(marketplaceYearOptionElements.length - 1);
-      } else if (event.key === "Enter" || event.key === " ") {
-        event.preventDefault();
-        selectMarketplaceYear(option);
-      } else if (event.key === "Escape") {
-        event.preventDefault();
-        closeMarketplaceYearDropdown(true);
-      } else if (event.key === "Tab") {
-        closeMarketplaceYearDropdown();
-      }
-    });
-  });
-}
-
-function openMarketplaceYearDropdown(focusIndex?: number) {
-  if (
-    !marketplaceYearSelect ||
-    !marketplaceYearTrigger ||
-    !marketplaceYearOptions
-  ) {
-    return;
-  }
-
-  closeListingTypeDropdown();
-  closeMarketplaceCategoryDropdown();
-  closeMarketplaceConditionDropdown();
-  closeMarketplaceVehicleTypeDropdown();
-  closeMarketplaceBodyStyleDropdown();
-  closeMarketplaceVehicleConditionDropdown();
-  closeMarketplaceFuelTypeDropdown();
-  closeMarketplaceTransmissionDropdown();
-  closeMarketplaceColorDropdowns();
-  marketplaceYearOptions.hidden = false;
-  marketplaceYearSelect.classList.add("condition-select--open");
-  marketplaceYearTrigger.setAttribute("aria-expanded", "true");
-  positionMarketplaceYearDropdown();
-
-  if (focusIndex !== undefined) {
-    marketplaceYearOptionElements[focusIndex]?.focus();
-  }
-}
-
-function closeMarketplaceYearDropdown(returnFocus = false) {
-  if (
-    !marketplaceYearSelect ||
-    !marketplaceYearTrigger ||
-    !marketplaceYearOptions
-  ) {
-    return;
-  }
-
-  marketplaceYearOptions.hidden = true;
-  marketplaceYearOptions.style.maxHeight = "";
-  marketplaceYearSelect.classList.remove(
-    "condition-select--open",
-    "condition-select--open-upward",
-  );
-  marketplaceYearTrigger.setAttribute("aria-expanded", "false");
-
-  if (returnFocus) {
-    marketplaceYearTrigger.focus();
-  }
-}
-
-function selectMarketplaceYear(option: HTMLElement) {
-  const value = option.dataset.value;
-  if (!value) {
-    return;
-  }
-
-  marketplaceYearOptionElements.forEach((candidate) => {
-    candidate.setAttribute("aria-selected", String(candidate === option));
-  });
-  if (marketplaceYearValue) {
-    marketplaceYearValue.textContent = value;
-  }
-  if (marketplaceYearInput) {
-    marketplaceYearInput.value = value;
-  }
-
-  closeMarketplaceYearDropdown(true);
-}
-
-function focusMarketplaceYearOption(index: number) {
-  const optionCount = marketplaceYearOptionElements.length;
-  if (optionCount === 0) {
-    return;
-  }
-
-  const wrappedIndex = (index + optionCount) % optionCount;
-  marketplaceYearOptionElements[wrappedIndex]?.focus();
-}
-
-function positionMarketplaceYearDropdown() {
-  if (
-    !marketplaceYearSelect ||
-    !marketplaceYearTrigger ||
-    !marketplaceYearOptions ||
-    marketplaceYearOptions.hidden
-  ) {
-    return;
-  }
-
-  marketplaceYearSelect.classList.remove("condition-select--open-upward");
-  marketplaceYearOptions.style.maxHeight = "";
-
-  const viewportPadding = remToPixels(1.2);
-  const triggerRect = marketplaceYearTrigger.getBoundingClientRect();
-  const spaceAbove = Math.max(triggerRect.top - viewportPadding, 0);
-  const spaceBelow = Math.max(
-    window.innerHeight - triggerRect.bottom - viewportPadding,
-    0,
-  );
-  const preferredHeight = Math.min(
-    marketplaceYearOptions.scrollHeight,
-    window.innerHeight * 0.65,
-    remToPixels(42),
-  );
-  const openUpward = spaceBelow < preferredHeight && spaceAbove > spaceBelow;
-  const availableSpace = openUpward ? spaceAbove : spaceBelow;
-
-  marketplaceYearSelect.classList.toggle(
-    "condition-select--open-upward",
-    openUpward,
-  );
-  marketplaceYearOptions.style.maxHeight = pixelsToRem(Math.max(
-    Math.min(preferredHeight, availableSpace - remToPixels(0.7)),
-    remToPixels(12),
-  ));
-}
-
-marketplaceYearTrigger?.addEventListener("click", () => {
-  if (marketplaceYearOptions?.hidden) {
-    const selectedIndex = marketplaceYearOptionElements.findIndex(
-      (option) => option.getAttribute("aria-selected") === "true",
-    );
-    openMarketplaceYearDropdown(selectedIndex >= 0 ? selectedIndex : 0);
-  } else {
-    closeMarketplaceYearDropdown();
-  }
-});
-
-marketplaceYearTrigger?.addEventListener("keydown", (event) => {
-  if (!["ArrowDown", "ArrowUp", "Home", "End"].includes(event.key)) {
-    return;
-  }
-
-  event.preventDefault();
-  const lastIndex = marketplaceYearOptionElements.length - 1;
-  openMarketplaceYearDropdown(
-    event.key === "ArrowUp" || event.key === "End" ? lastIndex : 0,
-  );
-});
-
-function openMarketplaceVehicleTypeDropdown(focusIndex?: number) {
-  if (
-    !marketplaceVehicleTypeSelect ||
-    !marketplaceVehicleTypeTrigger ||
-    !marketplaceVehicleTypeOptions
-  ) {
-    return;
-  }
-
-  closeListingTypeDropdown();
-  closeMarketplaceCategoryDropdown();
-  closeMarketplaceConditionDropdown();
-  closeMarketplaceYearDropdown();
-  closeMarketplaceBodyStyleDropdown();
-  closeMarketplaceVehicleConditionDropdown();
-  closeMarketplaceFuelTypeDropdown();
-  closeMarketplaceTransmissionDropdown();
-  closeMarketplaceColorDropdowns();
-  marketplaceVehicleTypeOptions.hidden = false;
-  marketplaceVehicleTypeSelect.classList.add("condition-select--open");
-  marketplaceVehicleTypeTrigger.setAttribute("aria-expanded", "true");
-  positionMarketplaceVehicleTypeDropdown();
-
-  if (focusIndex !== undefined) {
-    focusMarketplaceVehicleTypeOption(focusIndex);
-  }
-}
-
-function closeMarketplaceVehicleTypeDropdown(returnFocus = false) {
-  if (
-    !marketplaceVehicleTypeSelect ||
-    !marketplaceVehicleTypeTrigger ||
-    !marketplaceVehicleTypeOptions
-  ) {
-    return;
-  }
-
-  marketplaceVehicleTypeOptions.hidden = true;
-  marketplaceVehicleTypeOptions.style.maxHeight = "";
-  marketplaceVehicleTypeSelect.classList.remove(
-    "condition-select--open",
-    "condition-select--open-upward",
-  );
-  marketplaceVehicleTypeTrigger.setAttribute("aria-expanded", "false");
-
-  if (returnFocus) {
-    marketplaceVehicleTypeTrigger.focus();
-  }
-}
-
-function selectMarketplaceVehicleType(option: HTMLElement) {
-  if (option.getAttribute("aria-disabled") === "true") {
-    return;
-  }
-
-  const value = option.dataset.value;
-  const label = option.querySelector("span")?.textContent?.trim();
-  if (!value || !label) {
-    return;
-  }
-
-  marketplaceVehicleTypeOptionElements.forEach((candidate) => {
-    candidate.setAttribute("aria-selected", String(candidate === option));
-  });
-  if (marketplaceVehicleTypeValue) {
-    marketplaceVehicleTypeValue.textContent = label;
-  }
-  if (marketplaceVehicleTypeInput) {
-    marketplaceVehicleTypeInput.value = value;
-  }
-
-  closeMarketplaceVehicleTypeDropdown(true);
-}
-
-function focusMarketplaceVehicleTypeOption(index: number) {
-  const optionCount = marketplaceVehicleTypeOptionElements.length;
-  if (optionCount === 0) {
-    return;
-  }
-
-  const direction = index < 0 ? -1 : 1;
-  let candidateIndex = (index + optionCount) % optionCount;
-
-  for (let attempts = 0; attempts < optionCount; attempts += 1) {
-    const candidate = marketplaceVehicleTypeOptionElements[candidateIndex];
-    if (candidate?.getAttribute("aria-disabled") !== "true") {
-      candidate.focus();
-      return;
-    }
-    candidateIndex = (candidateIndex + direction + optionCount) % optionCount;
-  }
-}
-
-function positionMarketplaceVehicleTypeDropdown() {
-  if (
-    !marketplaceVehicleTypeSelect ||
-    !marketplaceVehicleTypeTrigger ||
-    !marketplaceVehicleTypeOptions ||
-    marketplaceVehicleTypeOptions.hidden
-  ) {
-    return;
-  }
-
-  marketplaceVehicleTypeSelect.classList.remove(
-    "condition-select--open-upward",
-  );
-  marketplaceVehicleTypeOptions.style.maxHeight = "";
-
-  const viewportPadding = remToPixels(1.2);
-  const triggerRect = marketplaceVehicleTypeTrigger.getBoundingClientRect();
-  const spaceAbove = Math.max(triggerRect.top - viewportPadding, 0);
-  const spaceBelow = Math.max(
-    window.innerHeight - triggerRect.bottom - viewportPadding,
-    0,
-  );
-  const preferredHeight = Math.min(
-    marketplaceVehicleTypeOptions.scrollHeight,
-    window.innerHeight * 0.65,
-    remToPixels(36),
-  );
-  const openUpward = spaceBelow < preferredHeight && spaceAbove > spaceBelow;
-  const availableSpace = openUpward ? spaceAbove : spaceBelow;
-
-  marketplaceVehicleTypeSelect.classList.toggle(
-    "condition-select--open-upward",
-    openUpward,
-  );
-  marketplaceVehicleTypeOptions.style.maxHeight = pixelsToRem(Math.max(
-    Math.min(preferredHeight, availableSpace - remToPixels(0.7)),
-    remToPixels(12),
-  ));
-}
-
-marketplaceVehicleTypeTrigger?.addEventListener("click", () => {
-  if (marketplaceVehicleTypeOptions?.hidden) {
-    const selectedIndex = marketplaceVehicleTypeOptionElements.findIndex(
-      (option) => option.getAttribute("aria-selected") === "true",
-    );
-    openMarketplaceVehicleTypeDropdown(selectedIndex >= 0 ? selectedIndex : 0);
-  } else {
-    closeMarketplaceVehicleTypeDropdown();
-  }
-});
-
-marketplaceVehicleTypeTrigger?.addEventListener("keydown", (event) => {
-  if (!["ArrowDown", "ArrowUp", "Home", "End"].includes(event.key)) {
-    return;
-  }
-
-  event.preventDefault();
-  const lastIndex = marketplaceVehicleTypeOptionElements.length - 1;
-  openMarketplaceVehicleTypeDropdown(
-    event.key === "ArrowUp" || event.key === "End" ? lastIndex : 0,
-  );
-});
-
-marketplaceVehicleTypeOptionElements.forEach((option, index) => {
-  option.addEventListener("click", () => {
-    if (option.getAttribute("aria-disabled") !== "true") {
-      selectMarketplaceVehicleType(option);
-    }
-  });
-  option.addEventListener("keydown", (event) => {
-    if (option.getAttribute("aria-disabled") === "true") {
-      return;
-    }
-    if (event.key === "ArrowDown") {
-      event.preventDefault();
-      focusMarketplaceVehicleTypeOption(index + 1);
-    } else if (event.key === "ArrowUp") {
-      event.preventDefault();
-      focusMarketplaceVehicleTypeOption(index - 1);
-    } else if (event.key === "Home") {
-      event.preventDefault();
-      focusMarketplaceVehicleTypeOption(0);
-    } else if (event.key === "End") {
-      event.preventDefault();
-      focusMarketplaceVehicleTypeOption(
-        marketplaceVehicleTypeOptionElements.length - 1,
-      );
-    } else if (event.key === "Enter" || event.key === " ") {
-      event.preventDefault();
-      selectMarketplaceVehicleType(option);
-    } else if (event.key === "Escape") {
-      event.preventDefault();
-      closeMarketplaceVehicleTypeDropdown(true);
-    } else if (event.key === "Tab") {
-      closeMarketplaceVehicleTypeDropdown();
-    }
-  });
-});
-
-function openMarketplaceBodyStyleDropdown(focusIndex?: number) {
-  if (
-    !marketplaceBodyStyleSelect ||
-    !marketplaceBodyStyleTrigger ||
-    !marketplaceBodyStyleOptions
-  ) {
-    return;
-  }
-
-  closeListingTypeDropdown();
-  closeMarketplaceCategoryDropdown();
-  closeMarketplaceConditionDropdown();
-  closeMarketplaceVehicleTypeDropdown();
-  closeMarketplaceYearDropdown();
-  closeMarketplaceVehicleConditionDropdown();
-  closeMarketplaceFuelTypeDropdown();
-  closeMarketplaceTransmissionDropdown();
-  closeMarketplaceColorDropdowns();
-  marketplaceBodyStyleOptions.hidden = false;
-  marketplaceBodyStyleSelect.classList.add("condition-select--open");
-  marketplaceBodyStyleTrigger.setAttribute("aria-expanded", "true");
-  positionMarketplaceBodyStyleDropdown();
-
-  if (focusIndex !== undefined) {
-    marketplaceBodyStyleOptionElements[focusIndex]?.focus();
-  }
-}
-
-function closeMarketplaceBodyStyleDropdown(returnFocus = false) {
-  if (
-    !marketplaceBodyStyleSelect ||
-    !marketplaceBodyStyleTrigger ||
-    !marketplaceBodyStyleOptions
-  ) {
-    return;
-  }
-
-  marketplaceBodyStyleOptions.hidden = true;
-  marketplaceBodyStyleOptions.style.maxHeight = "";
-  marketplaceBodyStyleSelect.classList.remove(
-    "condition-select--open",
-    "condition-select--open-upward",
-  );
-  marketplaceBodyStyleTrigger.setAttribute("aria-expanded", "false");
-
-  if (returnFocus) {
-    marketplaceBodyStyleTrigger.focus();
-  }
-}
-
-function selectMarketplaceBodyStyle(option: HTMLElement) {
-  const value = option.dataset.value;
-  const label = option.querySelector("span")?.textContent?.trim();
-  if (!value || !label) {
-    return;
-  }
-
-  marketplaceBodyStyleOptionElements.forEach((candidate) => {
-    candidate.setAttribute("aria-selected", String(candidate === option));
-  });
-  if (marketplaceBodyStyleValue) {
-    marketplaceBodyStyleValue.textContent = label;
-  }
-  if (marketplaceBodyStyleInput) {
-    marketplaceBodyStyleInput.value = value;
-  }
-
-  closeMarketplaceBodyStyleDropdown(true);
-}
-
-function focusMarketplaceBodyStyleOption(index: number) {
-  const optionCount = marketplaceBodyStyleOptionElements.length;
-  if (optionCount === 0) {
-    return;
-  }
-
-  const wrappedIndex = (index + optionCount) % optionCount;
-  marketplaceBodyStyleOptionElements[wrappedIndex]?.focus();
-}
-
-function positionMarketplaceBodyStyleDropdown() {
-  if (
-    !marketplaceBodyStyleSelect ||
-    !marketplaceBodyStyleTrigger ||
-    !marketplaceBodyStyleOptions ||
-    marketplaceBodyStyleOptions.hidden
-  ) {
-    return;
-  }
-
-  marketplaceBodyStyleSelect.classList.remove("condition-select--open-upward");
-  marketplaceBodyStyleOptions.style.maxHeight = "";
-
-  const viewportPadding = remToPixels(1.2);
-  const triggerRect = marketplaceBodyStyleTrigger.getBoundingClientRect();
-  const spaceAbove = Math.max(triggerRect.top - viewportPadding, 0);
-  const spaceBelow = Math.max(
-    window.innerHeight - triggerRect.bottom - viewportPadding,
-    0,
-  );
-  const preferredHeight = Math.min(
-    marketplaceBodyStyleOptions.scrollHeight,
-    window.innerHeight * 0.65,
-    remToPixels(42),
-  );
-  const openUpward = spaceBelow < preferredHeight && spaceAbove > spaceBelow;
-  const availableSpace = openUpward ? spaceAbove : spaceBelow;
-
-  marketplaceBodyStyleSelect.classList.toggle(
-    "condition-select--open-upward",
-    openUpward,
-  );
-  marketplaceBodyStyleOptions.style.maxHeight = pixelsToRem(Math.max(
-    Math.min(preferredHeight, availableSpace - remToPixels(0.7)),
-    remToPixels(12),
-  ));
-}
-
-marketplaceBodyStyleTrigger?.addEventListener("click", () => {
-  if (marketplaceBodyStyleOptions?.hidden) {
-    const selectedIndex = marketplaceBodyStyleOptionElements.findIndex(
-      (option) => option.getAttribute("aria-selected") === "true",
-    );
-    openMarketplaceBodyStyleDropdown(selectedIndex >= 0 ? selectedIndex : 0);
-  } else {
-    closeMarketplaceBodyStyleDropdown();
-  }
-});
-
-marketplaceBodyStyleTrigger?.addEventListener("keydown", (event) => {
-  if (!["ArrowDown", "ArrowUp", "Home", "End"].includes(event.key)) {
-    return;
-  }
-
-  event.preventDefault();
-  const lastIndex = marketplaceBodyStyleOptionElements.length - 1;
-  openMarketplaceBodyStyleDropdown(
-    event.key === "ArrowUp" || event.key === "End" ? lastIndex : 0,
-  );
-});
-
-marketplaceBodyStyleOptionElements.forEach((option, index) => {
-  option.addEventListener("click", () => selectMarketplaceBodyStyle(option));
-  option.addEventListener("keydown", (event) => {
-    if (event.key === "ArrowDown") {
-      event.preventDefault();
-      focusMarketplaceBodyStyleOption(index + 1);
-    } else if (event.key === "ArrowUp") {
-      event.preventDefault();
-      focusMarketplaceBodyStyleOption(index - 1);
-    } else if (event.key === "Home") {
-      event.preventDefault();
-      focusMarketplaceBodyStyleOption(0);
-    } else if (event.key === "End") {
-      event.preventDefault();
-      focusMarketplaceBodyStyleOption(
-        marketplaceBodyStyleOptionElements.length - 1,
-      );
-    } else if (event.key === "Enter" || event.key === " ") {
-      event.preventDefault();
-      selectMarketplaceBodyStyle(option);
-    } else if (event.key === "Escape") {
-      event.preventDefault();
-      closeMarketplaceBodyStyleDropdown(true);
-    } else if (event.key === "Tab") {
-      closeMarketplaceBodyStyleDropdown();
-    }
-  });
-});
-
-function openMarketplaceVehicleConditionDropdown(focusIndex?: number) {
-  if (
-    !marketplaceVehicleConditionSelect ||
-    !marketplaceVehicleConditionTrigger ||
-    !marketplaceVehicleConditionOptions
-  ) {
-    return;
-  }
-
-  closeListingTypeDropdown();
-  closeMarketplaceCategoryDropdown();
-  closeMarketplaceConditionDropdown();
-  closeMarketplaceVehicleTypeDropdown();
-  closeMarketplaceYearDropdown();
-  closeMarketplaceBodyStyleDropdown();
-  closeMarketplaceFuelTypeDropdown();
-  closeMarketplaceTransmissionDropdown();
-  closeMarketplaceColorDropdowns();
-  marketplaceVehicleConditionOptions.hidden = false;
-  marketplaceVehicleConditionSelect.classList.add("condition-select--open");
-  marketplaceVehicleConditionTrigger.setAttribute("aria-expanded", "true");
-  positionMarketplaceVehicleConditionDropdown();
-
-  if (focusIndex !== undefined) {
-    marketplaceVehicleConditionOptionElements[focusIndex]?.focus();
-  }
-}
-
-function closeMarketplaceVehicleConditionDropdown(returnFocus = false) {
-  if (
-    !marketplaceVehicleConditionSelect ||
-    !marketplaceVehicleConditionTrigger ||
-    !marketplaceVehicleConditionOptions
-  ) {
-    return;
-  }
-
-  marketplaceVehicleConditionOptions.hidden = true;
-  marketplaceVehicleConditionOptions.style.maxHeight = "";
-  marketplaceVehicleConditionSelect.classList.remove(
-    "condition-select--open",
-    "condition-select--open-upward",
-  );
-  marketplaceVehicleConditionTrigger.setAttribute("aria-expanded", "false");
-
-  if (returnFocus) {
-    marketplaceVehicleConditionTrigger.focus();
-  }
-}
-
-function selectMarketplaceVehicleCondition(option: HTMLElement) {
-  const value = option.dataset.value;
-  const label = option.querySelector("span")?.textContent?.trim();
-  if (!value || !label) {
-    return;
-  }
-
-  marketplaceVehicleConditionOptionElements.forEach((candidate) => {
-    candidate.setAttribute("aria-selected", String(candidate === option));
-  });
-  if (marketplaceVehicleConditionValue) {
-    marketplaceVehicleConditionValue.textContent = label;
-  }
-  if (marketplaceVehicleConditionInput) {
-    marketplaceVehicleConditionInput.value = value;
-  }
-
-  closeMarketplaceVehicleConditionDropdown(true);
-}
-
-function focusMarketplaceVehicleConditionOption(index: number) {
-  const optionCount = marketplaceVehicleConditionOptionElements.length;
-  if (optionCount === 0) {
-    return;
-  }
-
-  const wrappedIndex = (index + optionCount) % optionCount;
-  marketplaceVehicleConditionOptionElements[wrappedIndex]?.focus();
-}
-
-function positionMarketplaceVehicleConditionDropdown() {
-  if (
-    !marketplaceVehicleConditionSelect ||
-    !marketplaceVehicleConditionTrigger ||
-    !marketplaceVehicleConditionOptions ||
-    marketplaceVehicleConditionOptions.hidden
-  ) {
-    return;
-  }
-
-  marketplaceVehicleConditionSelect.classList.remove(
-    "condition-select--open-upward",
-  );
-  marketplaceVehicleConditionOptions.style.maxHeight = "";
-
-  const viewportPadding = remToPixels(1.2);
-  const triggerRect =
-    marketplaceVehicleConditionTrigger.getBoundingClientRect();
-  const spaceAbove = Math.max(triggerRect.top - viewportPadding, 0);
-  const spaceBelow = Math.max(
-    window.innerHeight - triggerRect.bottom - viewportPadding,
-    0,
-  );
-  const preferredHeight = Math.min(
-    marketplaceVehicleConditionOptions.scrollHeight,
-    window.innerHeight * 0.55,
-    remToPixels(28),
-  );
-  const openUpward = spaceBelow < preferredHeight && spaceAbove > spaceBelow;
-  const availableSpace = openUpward ? spaceAbove : spaceBelow;
-
-  marketplaceVehicleConditionSelect.classList.toggle(
-    "condition-select--open-upward",
-    openUpward,
-  );
-  marketplaceVehicleConditionOptions.style.maxHeight = pixelsToRem(Math.max(
-    Math.min(preferredHeight, availableSpace - remToPixels(0.7)),
-    remToPixels(12),
-  ));
-}
-
-marketplaceVehicleConditionTrigger?.addEventListener("click", () => {
-  if (marketplaceVehicleConditionOptions?.hidden) {
-    const selectedIndex = marketplaceVehicleConditionOptionElements.findIndex(
-      (option) => option.getAttribute("aria-selected") === "true",
-    );
-    openMarketplaceVehicleConditionDropdown(
-      selectedIndex >= 0 ? selectedIndex : 0,
-    );
-  } else {
-    closeMarketplaceVehicleConditionDropdown();
-  }
-});
-
-marketplaceVehicleConditionTrigger?.addEventListener("keydown", (event) => {
-  if (!["ArrowDown", "ArrowUp", "Home", "End"].includes(event.key)) {
-    return;
-  }
-
-  event.preventDefault();
-  const lastIndex = marketplaceVehicleConditionOptionElements.length - 1;
-  openMarketplaceVehicleConditionDropdown(
-    event.key === "ArrowUp" || event.key === "End" ? lastIndex : 0,
-  );
-});
-
-marketplaceVehicleConditionOptionElements.forEach((option, index) => {
-  option.addEventListener("click", () =>
-    selectMarketplaceVehicleCondition(option),
-  );
-  option.addEventListener("keydown", (event) => {
-    if (event.key === "ArrowDown") {
-      event.preventDefault();
-      focusMarketplaceVehicleConditionOption(index + 1);
-    } else if (event.key === "ArrowUp") {
-      event.preventDefault();
-      focusMarketplaceVehicleConditionOption(index - 1);
-    } else if (event.key === "Home") {
-      event.preventDefault();
-      focusMarketplaceVehicleConditionOption(0);
-    } else if (event.key === "End") {
-      event.preventDefault();
-      focusMarketplaceVehicleConditionOption(
-        marketplaceVehicleConditionOptionElements.length - 1,
-      );
-    } else if (event.key === "Enter" || event.key === " ") {
-      event.preventDefault();
-      selectMarketplaceVehicleCondition(option);
-    } else if (event.key === "Escape") {
-      event.preventDefault();
-      closeMarketplaceVehicleConditionDropdown(true);
-    } else if (event.key === "Tab") {
-      closeMarketplaceVehicleConditionDropdown();
-    }
-  });
-});
-
-function openMarketplaceFuelTypeDropdown(focusIndex?: number) {
-  if (
-    !marketplaceFuelTypeSelect ||
-    !marketplaceFuelTypeTrigger ||
-    !marketplaceFuelTypeOptions
-  ) {
-    return;
-  }
-
-  closeListingTypeDropdown();
-  closeMarketplaceCategoryDropdown();
-  closeMarketplaceConditionDropdown();
-  closeMarketplaceVehicleTypeDropdown();
-  closeMarketplaceYearDropdown();
-  closeMarketplaceBodyStyleDropdown();
-  closeMarketplaceVehicleConditionDropdown();
-  closeMarketplaceTransmissionDropdown();
-  closeMarketplaceColorDropdowns();
-  marketplaceFuelTypeOptions.hidden = false;
-  marketplaceFuelTypeSelect.classList.add("condition-select--open");
-  marketplaceFuelTypeTrigger.setAttribute("aria-expanded", "true");
-  positionMarketplaceFuelTypeDropdown();
-
-  if (focusIndex !== undefined) {
-    marketplaceFuelTypeOptionElements[focusIndex]?.focus();
-  }
-}
-
-function closeMarketplaceFuelTypeDropdown(returnFocus = false) {
-  if (
-    !marketplaceFuelTypeSelect ||
-    !marketplaceFuelTypeTrigger ||
-    !marketplaceFuelTypeOptions
-  ) {
-    return;
-  }
-
-  marketplaceFuelTypeOptions.hidden = true;
-  marketplaceFuelTypeOptions.style.maxHeight = "";
-  marketplaceFuelTypeSelect.classList.remove(
-    "condition-select--open",
-    "condition-select--open-upward",
-  );
-  marketplaceFuelTypeTrigger.setAttribute("aria-expanded", "false");
-
-  if (returnFocus) {
-    marketplaceFuelTypeTrigger.focus();
-  }
-}
-
-function selectMarketplaceFuelType(option: HTMLElement) {
-  const value = option.dataset.value;
-  const label = option.querySelector("span")?.textContent?.trim();
-  if (!value || !label) {
-    return;
-  }
-
-  marketplaceFuelTypeOptionElements.forEach((candidate) => {
-    candidate.setAttribute("aria-selected", String(candidate === option));
-  });
-  if (marketplaceFuelTypeValue) {
-    marketplaceFuelTypeValue.textContent = label;
-  }
-  if (marketplaceFuelTypeInput) {
-    marketplaceFuelTypeInput.value = value;
-  }
-
-  closeMarketplaceFuelTypeDropdown(true);
-}
-
-function focusMarketplaceFuelTypeOption(index: number) {
-  const optionCount = marketplaceFuelTypeOptionElements.length;
-  if (optionCount === 0) {
-    return;
-  }
-
-  const wrappedIndex = (index + optionCount) % optionCount;
-  marketplaceFuelTypeOptionElements[wrappedIndex]?.focus();
-}
-
-function positionMarketplaceFuelTypeDropdown() {
-  if (
-    !marketplaceFuelTypeSelect ||
-    !marketplaceFuelTypeTrigger ||
-    !marketplaceFuelTypeOptions ||
-    marketplaceFuelTypeOptions.hidden
-  ) {
-    return;
-  }
-
-  marketplaceFuelTypeSelect.classList.remove("condition-select--open-upward");
-  marketplaceFuelTypeOptions.style.maxHeight = "";
-
-  const viewportPadding = remToPixels(1.2);
-  const triggerRect = marketplaceFuelTypeTrigger.getBoundingClientRect();
-  const spaceAbove = Math.max(triggerRect.top - viewportPadding, 0);
-  const spaceBelow = Math.max(
-    window.innerHeight - triggerRect.bottom - viewportPadding,
-    0,
-  );
-  const preferredHeight = Math.min(
-    marketplaceFuelTypeOptions.scrollHeight,
-    window.innerHeight * 0.65,
-    remToPixels(36),
-  );
-  const openUpward = spaceBelow < preferredHeight && spaceAbove > spaceBelow;
-  const availableSpace = openUpward ? spaceAbove : spaceBelow;
-
-  marketplaceFuelTypeSelect.classList.toggle(
-    "condition-select--open-upward",
-    openUpward,
-  );
-  marketplaceFuelTypeOptions.style.maxHeight = pixelsToRem(Math.max(
-    Math.min(preferredHeight, availableSpace - remToPixels(0.7)),
-    remToPixels(12),
-  ));
-}
-
-marketplaceFuelTypeTrigger?.addEventListener("click", () => {
-  if (marketplaceFuelTypeOptions?.hidden) {
-    const selectedIndex = marketplaceFuelTypeOptionElements.findIndex(
-      (option) => option.getAttribute("aria-selected") === "true",
-    );
-    openMarketplaceFuelTypeDropdown(selectedIndex >= 0 ? selectedIndex : 0);
-  } else {
-    closeMarketplaceFuelTypeDropdown();
-  }
-});
-
-marketplaceFuelTypeTrigger?.addEventListener("keydown", (event) => {
-  if (!["ArrowDown", "ArrowUp", "Home", "End"].includes(event.key)) {
-    return;
-  }
-
-  event.preventDefault();
-  const lastIndex = marketplaceFuelTypeOptionElements.length - 1;
-  openMarketplaceFuelTypeDropdown(
-    event.key === "ArrowUp" || event.key === "End" ? lastIndex : 0,
-  );
-});
-
-marketplaceFuelTypeOptionElements.forEach((option, index) => {
-  option.addEventListener("click", () => selectMarketplaceFuelType(option));
-  option.addEventListener("keydown", (event) => {
-    if (event.key === "ArrowDown") {
-      event.preventDefault();
-      focusMarketplaceFuelTypeOption(index + 1);
-    } else if (event.key === "ArrowUp") {
-      event.preventDefault();
-      focusMarketplaceFuelTypeOption(index - 1);
-    } else if (event.key === "Home") {
-      event.preventDefault();
-      focusMarketplaceFuelTypeOption(0);
-    } else if (event.key === "End") {
-      event.preventDefault();
-      focusMarketplaceFuelTypeOption(
-        marketplaceFuelTypeOptionElements.length - 1,
-      );
-    } else if (event.key === "Enter" || event.key === " ") {
-      event.preventDefault();
-      selectMarketplaceFuelType(option);
-    } else if (event.key === "Escape") {
-      event.preventDefault();
-      closeMarketplaceFuelTypeDropdown(true);
-    } else if (event.key === "Tab") {
-      closeMarketplaceFuelTypeDropdown();
-    }
-  });
-});
-
-function openMarketplaceTransmissionDropdown(focusIndex?: number) {
-  if (
-    !marketplaceTransmissionSelect ||
-    !marketplaceTransmissionTrigger ||
-    !marketplaceTransmissionOptions
-  ) {
-    return;
-  }
-
-  closeListingTypeDropdown();
-  closeMarketplaceCategoryDropdown();
-  closeMarketplaceConditionDropdown();
-  closeMarketplaceVehicleTypeDropdown();
-  closeMarketplaceYearDropdown();
-  closeMarketplaceBodyStyleDropdown();
-  closeMarketplaceVehicleConditionDropdown();
-  closeMarketplaceFuelTypeDropdown();
-  closeMarketplaceColorDropdowns();
-  marketplaceTransmissionOptions.hidden = false;
-  marketplaceTransmissionSelect.classList.add("condition-select--open");
-  marketplaceTransmissionTrigger.setAttribute("aria-expanded", "true");
-  positionMarketplaceTransmissionDropdown();
-
-  if (focusIndex !== undefined) {
-    marketplaceTransmissionOptionElements[focusIndex]?.focus();
-  }
-}
-
-function closeMarketplaceTransmissionDropdown(returnFocus = false) {
-  if (
-    !marketplaceTransmissionSelect ||
-    !marketplaceTransmissionTrigger ||
-    !marketplaceTransmissionOptions
-  ) {
-    return;
-  }
-
-  marketplaceTransmissionOptions.hidden = true;
-  marketplaceTransmissionOptions.style.maxHeight = "";
-  marketplaceTransmissionSelect.classList.remove(
-    "condition-select--open",
-    "condition-select--open-upward",
-  );
-  marketplaceTransmissionTrigger.setAttribute("aria-expanded", "false");
-
-  if (returnFocus) {
-    marketplaceTransmissionTrigger.focus();
-  }
-}
-
-function selectMarketplaceTransmission(option: HTMLElement) {
-  const value = option.dataset.value;
-  const label = option.querySelector("span")?.textContent?.trim();
-  if (!value || !label) {
-    return;
-  }
-
-  marketplaceTransmissionOptionElements.forEach((candidate) => {
-    candidate.setAttribute("aria-selected", String(candidate === option));
-  });
-  if (marketplaceTransmissionValue) {
-    marketplaceTransmissionValue.textContent = label;
-  }
-  if (marketplaceTransmissionInput) {
-    marketplaceTransmissionInput.value = value;
-  }
-
-  closeMarketplaceTransmissionDropdown(true);
-}
-
-function focusMarketplaceTransmissionOption(index: number) {
-  const optionCount = marketplaceTransmissionOptionElements.length;
-  if (optionCount === 0) {
-    return;
-  }
-
-  const wrappedIndex = (index + optionCount) % optionCount;
-  marketplaceTransmissionOptionElements[wrappedIndex]?.focus();
-}
-
-function positionMarketplaceTransmissionDropdown() {
-  if (
-    !marketplaceTransmissionSelect ||
-    !marketplaceTransmissionTrigger ||
-    !marketplaceTransmissionOptions ||
-    marketplaceTransmissionOptions.hidden
-  ) {
-    return;
-  }
-
-  marketplaceTransmissionSelect.classList.remove(
-    "condition-select--open-upward",
-  );
-  marketplaceTransmissionOptions.style.maxHeight = "";
-
-  const viewportPadding = remToPixels(1.2);
-  const triggerRect = marketplaceTransmissionTrigger.getBoundingClientRect();
-  const spaceAbove = Math.max(triggerRect.top - viewportPadding, 0);
-  const spaceBelow = Math.max(
-    window.innerHeight - triggerRect.bottom - viewportPadding,
-    0,
-  );
-  const preferredHeight = Math.min(
-    marketplaceTransmissionOptions.scrollHeight,
-    window.innerHeight * 0.4,
-    remToPixels(18),
-  );
-  const openUpward = spaceBelow < preferredHeight && spaceAbove > spaceBelow;
-  const availableSpace = openUpward ? spaceAbove : spaceBelow;
-
-  marketplaceTransmissionSelect.classList.toggle(
-    "condition-select--open-upward",
-    openUpward,
-  );
-  marketplaceTransmissionOptions.style.maxHeight = pixelsToRem(Math.max(
-    Math.min(preferredHeight, availableSpace - remToPixels(0.7)),
-    remToPixels(10),
-  ));
-}
-
-marketplaceTransmissionTrigger?.addEventListener("click", () => {
-  if (marketplaceTransmissionOptions?.hidden) {
-    const selectedIndex = marketplaceTransmissionOptionElements.findIndex(
-      (option) => option.getAttribute("aria-selected") === "true",
-    );
-    openMarketplaceTransmissionDropdown(selectedIndex >= 0 ? selectedIndex : 0);
-  } else {
-    closeMarketplaceTransmissionDropdown();
-  }
-});
-
-marketplaceTransmissionTrigger?.addEventListener("keydown", (event) => {
-  if (!["ArrowDown", "ArrowUp", "Home", "End"].includes(event.key)) {
-    return;
-  }
-
-  event.preventDefault();
-  const lastIndex = marketplaceTransmissionOptionElements.length - 1;
-  openMarketplaceTransmissionDropdown(
-    event.key === "ArrowUp" || event.key === "End" ? lastIndex : 0,
-  );
-});
-
-marketplaceTransmissionOptionElements.forEach((option, index) => {
-  option.addEventListener("click", () => selectMarketplaceTransmission(option));
-  option.addEventListener("keydown", (event) => {
-    if (event.key === "ArrowDown") {
-      event.preventDefault();
-      focusMarketplaceTransmissionOption(index + 1);
-    } else if (event.key === "ArrowUp") {
-      event.preventDefault();
-      focusMarketplaceTransmissionOption(index - 1);
-    } else if (event.key === "Home") {
-      event.preventDefault();
-      focusMarketplaceTransmissionOption(0);
-    } else if (event.key === "End") {
-      event.preventDefault();
-      focusMarketplaceTransmissionOption(
-        marketplaceTransmissionOptionElements.length - 1,
-      );
-    } else if (event.key === "Enter" || event.key === " ") {
-      event.preventDefault();
-      selectMarketplaceTransmission(option);
-    } else if (event.key === "Escape") {
-      event.preventDefault();
-      closeMarketplaceTransmissionDropdown(true);
-    } else if (event.key === "Tab") {
-      closeMarketplaceTransmissionDropdown();
-    }
-  });
-});
-
-function initializeMarketplaceColorSelects() {
-  (["exterior", "interior"] as MarketplaceVehicleColorKind[]).forEach(
-    (kind) => {
-      const dropdown = marketplaceColorDropdowns[kind];
-      if (!dropdown.options || !dropdown.trigger) {
-        return;
-      }
-
-      dropdown.optionElements = MARKETPLACE_VEHICLE_COLORS.map((color) => {
-        const option = document.createElement("div");
-        option.className = "condition-select__option color-select__option";
-        option.setAttribute("role", "option");
-        option.setAttribute("aria-selected", "false");
-        option.tabIndex = -1;
-        option.dataset.value = color.toLowerCase().replace(/\s+/g, "_");
-
-        const label = document.createElement("span");
-        label.textContent = color;
-        option.append(label);
-        return option;
-      });
-      dropdown.options.replaceChildren(...dropdown.optionElements);
-
-      dropdown.trigger.addEventListener("click", () => {
-        if (dropdown.options?.hidden) {
-          const selectedIndex = dropdown.optionElements.findIndex(
-            (option) => option.getAttribute("aria-selected") === "true",
-          );
-          openMarketplaceColorDropdown(
-            kind,
-            selectedIndex >= 0 ? selectedIndex : 0,
-          );
-        } else {
-          closeMarketplaceColorDropdown(kind);
-        }
-      });
-
-      dropdown.trigger.addEventListener("keydown", (event) => {
-        if (!["ArrowDown", "ArrowUp", "Home", "End"].includes(event.key)) {
-          return;
-        }
-
-        event.preventDefault();
-        const lastIndex = dropdown.optionElements.length - 1;
-        openMarketplaceColorDropdown(
-          kind,
-          event.key === "ArrowUp" || event.key === "End" ? lastIndex : 0,
-        );
-      });
-
-      dropdown.optionElements.forEach((option, index) => {
-        option.addEventListener("click", () =>
-          selectMarketplaceColor(kind, option),
-        );
-        option.addEventListener("keydown", (event) => {
-          if (event.key === "ArrowDown") {
-            event.preventDefault();
-            focusMarketplaceColorOption(kind, index + 1);
-          } else if (event.key === "ArrowUp") {
-            event.preventDefault();
-            focusMarketplaceColorOption(kind, index - 1);
-          } else if (event.key === "Home") {
-            event.preventDefault();
-            focusMarketplaceColorOption(kind, 0);
-          } else if (event.key === "End") {
-            event.preventDefault();
-            focusMarketplaceColorOption(
-              kind,
-              dropdown.optionElements.length - 1,
-            );
-          } else if (event.key === "Enter" || event.key === " ") {
-            event.preventDefault();
-            selectMarketplaceColor(kind, option);
-          } else if (event.key === "Escape") {
-            event.preventDefault();
-            closeMarketplaceColorDropdown(kind, true);
-          } else if (event.key === "Tab") {
-            closeMarketplaceColorDropdown(kind);
-          }
-        });
-      });
-    },
-  );
-}
-
-function openMarketplaceColorDropdown(
-  kind: MarketplaceVehicleColorKind,
-  focusIndex?: number,
-) {
-  const dropdown = marketplaceColorDropdowns[kind];
-  if (!dropdown.select || !dropdown.trigger || !dropdown.options) {
-    return;
-  }
-
-  closeListingTypeDropdown();
-  closeMarketplaceCategoryDropdown();
-  closeMarketplaceConditionDropdown();
-  closeMarketplaceVehicleTypeDropdown();
-  closeMarketplaceYearDropdown();
-  closeMarketplaceBodyStyleDropdown();
-  closeMarketplaceVehicleConditionDropdown();
-  closeMarketplaceFuelTypeDropdown();
-  closeMarketplaceTransmissionDropdown();
-  closeMarketplaceColorDropdowns(kind);
-
-  dropdown.options.hidden = false;
-  dropdown.select.classList.add("condition-select--open");
-  dropdown.trigger.setAttribute("aria-expanded", "true");
-  positionMarketplaceColorDropdown(kind);
-  if (focusIndex !== undefined) {
-    dropdown.optionElements[focusIndex]?.focus();
-  }
-}
-
-function closeMarketplaceColorDropdown(
-  kind: MarketplaceVehicleColorKind,
-  returnFocus = false,
-) {
-  const dropdown = marketplaceColorDropdowns[kind];
-  if (!dropdown.select || !dropdown.trigger || !dropdown.options) {
-    return;
-  }
-
-  dropdown.options.hidden = true;
-  dropdown.options.style.maxHeight = "";
-  dropdown.select.classList.remove(
-    "condition-select--open",
-    "condition-select--open-upward",
-  );
-  dropdown.trigger.setAttribute("aria-expanded", "false");
-  if (returnFocus) {
-    dropdown.trigger.focus();
-  }
-}
-
-function closeMarketplaceColorDropdowns(except?: MarketplaceVehicleColorKind) {
-  (["exterior", "interior"] as MarketplaceVehicleColorKind[]).forEach(
-    (kind) => {
-      if (kind !== except) {
-        closeMarketplaceColorDropdown(kind);
-      }
-    },
-  );
-}
-
-function selectMarketplaceColor(
-  kind: MarketplaceVehicleColorKind,
-  option: HTMLElement,
-) {
-  const dropdown = marketplaceColorDropdowns[kind];
-  const value = option.dataset.value;
-  const label = option.textContent?.trim();
-  if (!value || !label) {
-    return;
-  }
-
-  dropdown.optionElements.forEach((candidate) => {
-    candidate.setAttribute("aria-selected", String(candidate === option));
-  });
-  if (dropdown.value) {
-    dropdown.value.textContent = label;
-  }
-  if (dropdown.input) {
-    dropdown.input.value = value;
-  }
-  closeMarketplaceColorDropdown(kind, true);
-}
-
-function focusMarketplaceColorOption(
-  kind: MarketplaceVehicleColorKind,
-  index: number,
-) {
-  const options = marketplaceColorDropdowns[kind].optionElements;
-  if (options.length === 0) {
-    return;
-  }
-  options[(index + options.length) % options.length]?.focus();
-}
-
-function positionMarketplaceColorDropdown(kind: MarketplaceVehicleColorKind) {
-  const dropdown = marketplaceColorDropdowns[kind];
-  if (
-    !dropdown.select ||
-    !dropdown.trigger ||
-    !dropdown.options ||
-    dropdown.options.hidden
-  ) {
-    return;
-  }
-
-  dropdown.select.classList.remove("condition-select--open-upward");
-  dropdown.options.style.maxHeight = "";
-  const viewportPadding = remToPixels(1.2);
-  const triggerRect = dropdown.trigger.getBoundingClientRect();
-  const spaceAbove = Math.max(triggerRect.top - viewportPadding, 0);
-  const spaceBelow = Math.max(
-    window.innerHeight - triggerRect.bottom - viewportPadding,
-    0,
-  );
-  const preferredHeight = Math.min(
-    dropdown.options.scrollHeight,
-    window.innerHeight * 0.65,
-    remToPixels(42),
-  );
-  const openUpward = spaceBelow < preferredHeight && spaceAbove > spaceBelow;
-  const availableSpace = openUpward ? spaceAbove : spaceBelow;
-
-  dropdown.select.classList.toggle("condition-select--open-upward", openUpward);
-  dropdown.options.style.maxHeight = pixelsToRem(Math.max(
-    Math.min(preferredHeight, availableSpace - remToPixels(0.7)),
-    remToPixels(12),
-  ));
-}
-
-function openMarketplaceRentalTypeDropdown(focusIndex?: number) {
-  if (
-    !marketplaceRentalTypeSelect ||
-    !marketplaceRentalTypeTrigger ||
-    !marketplaceRentalTypeOptions
-  ) {
-    return;
-  }
-
-  closeListingTypeDropdown();
-  closeMarketplaceCategoryDropdown();
-  closeMarketplaceConditionDropdown();
-  closeMarketplaceVehicleTypeDropdown();
-  closeMarketplaceYearDropdown();
-  closeMarketplaceBodyStyleDropdown();
-  closeMarketplaceVehicleConditionDropdown();
-  closeMarketplaceFuelTypeDropdown();
-  closeMarketplaceTransmissionDropdown();
-  closeMarketplaceColorDropdowns();
-  marketplaceRentalTypeOptions.hidden = false;
-  marketplaceRentalTypeSelect.classList.add("condition-select--open");
-  marketplaceRentalTypeTrigger.setAttribute("aria-expanded", "true");
-  positionMarketplaceRentalTypeDropdown();
-
-  if (focusIndex !== undefined) {
-    marketplaceRentalTypeOptionElements[focusIndex]?.focus();
-  }
-}
-
-function closeMarketplaceRentalTypeDropdown(returnFocus = false) {
-  if (
-    !marketplaceRentalTypeSelect ||
-    !marketplaceRentalTypeTrigger ||
-    !marketplaceRentalTypeOptions
-  ) {
-    return;
-  }
-
-  marketplaceRentalTypeOptions.hidden = true;
-  marketplaceRentalTypeOptions.style.maxHeight = "";
-  marketplaceRentalTypeSelect.classList.remove(
-    "condition-select--open",
-    "condition-select--open-upward",
-  );
-  marketplaceRentalTypeTrigger.setAttribute("aria-expanded", "false");
-
-  if (returnFocus) {
-    marketplaceRentalTypeTrigger.focus();
-  }
-}
-
-function selectMarketplaceRentalType(option: HTMLElement) {
-  const value = option.dataset.value;
-  const label = option.textContent?.trim();
-  if (!value || !label) {
-    return;
-  }
-
-  marketplaceRentalTypeOptionElements.forEach((candidate) => {
-    candidate.setAttribute("aria-selected", String(candidate === option));
-  });
-  if (marketplaceRentalTypeValue) {
-    marketplaceRentalTypeValue.textContent = label;
-  }
-  if (marketplaceRentalTypeInput) {
-    marketplaceRentalTypeInput.value = value;
-  }
-  closeMarketplaceRentalTypeDropdown(true);
-}
-
-function focusMarketplaceRentalTypeOption(index: number) {
-  const optionCount = marketplaceRentalTypeOptionElements.length;
-  if (optionCount === 0) {
-    return;
-  }
-  marketplaceRentalTypeOptionElements[
-    (index + optionCount) % optionCount
-  ]?.focus();
-}
-
-function positionMarketplaceRentalTypeDropdown() {
-  if (
-    !marketplaceRentalTypeSelect ||
-    !marketplaceRentalTypeTrigger ||
-    !marketplaceRentalTypeOptions ||
-    marketplaceRentalTypeOptions.hidden
-  ) {
-    return;
-  }
-
-  marketplaceRentalTypeSelect.classList.remove("condition-select--open-upward");
-  marketplaceRentalTypeOptions.style.maxHeight = "";
-  const viewportPadding = remToPixels(1.2);
-  const triggerRect = marketplaceRentalTypeTrigger.getBoundingClientRect();
-  const spaceAbove = Math.max(triggerRect.top - viewportPadding, 0);
-  const spaceBelow = Math.max(
-    window.innerHeight - triggerRect.bottom - viewportPadding,
-    0,
-  );
-  const preferredHeight = Math.min(
-    marketplaceRentalTypeOptions.scrollHeight,
-    window.innerHeight * 0.55,
-    remToPixels(26),
-  );
-  const openUpward = spaceBelow < preferredHeight && spaceAbove > spaceBelow;
-  const availableSpace = openUpward ? spaceAbove : spaceBelow;
-
-  marketplaceRentalTypeSelect.classList.toggle(
-    "condition-select--open-upward",
-    openUpward,
-  );
-  marketplaceRentalTypeOptions.style.maxHeight = pixelsToRem(Math.max(
-    Math.min(preferredHeight, availableSpace - remToPixels(0.7)),
-    remToPixels(12),
-  ));
-}
-
-marketplaceRentalTypeTrigger?.addEventListener("click", () => {
-  if (marketplaceRentalTypeOptions?.hidden) {
-    const selectedIndex = marketplaceRentalTypeOptionElements.findIndex(
-      (option) => option.getAttribute("aria-selected") === "true",
-    );
-    openMarketplaceRentalTypeDropdown(selectedIndex >= 0 ? selectedIndex : 0);
-  } else {
-    closeMarketplaceRentalTypeDropdown();
-  }
-});
-
-marketplaceRentalTypeTrigger?.addEventListener("keydown", (event) => {
-  if (!["ArrowDown", "ArrowUp", "Home", "End"].includes(event.key)) {
-    return;
-  }
-  event.preventDefault();
-  const lastIndex = marketplaceRentalTypeOptionElements.length - 1;
-  openMarketplaceRentalTypeDropdown(
-    event.key === "ArrowUp" || event.key === "End" ? lastIndex : 0,
-  );
-});
-
-marketplaceRentalTypeOptionElements.forEach((option, index) => {
-  option.addEventListener("click", () => selectMarketplaceRentalType(option));
-  option.addEventListener("keydown", (event) => {
-    if (event.key === "ArrowDown") {
-      event.preventDefault();
-      focusMarketplaceRentalTypeOption(index + 1);
-    } else if (event.key === "ArrowUp") {
-      event.preventDefault();
-      focusMarketplaceRentalTypeOption(index - 1);
-    } else if (event.key === "Home") {
-      event.preventDefault();
-      focusMarketplaceRentalTypeOption(0);
-    } else if (event.key === "End") {
-      event.preventDefault();
-      focusMarketplaceRentalTypeOption(
-        marketplaceRentalTypeOptionElements.length - 1,
-      );
-    } else if (event.key === "Enter" || event.key === " ") {
-      event.preventDefault();
-      selectMarketplaceRentalType(option);
-    } else if (event.key === "Escape") {
-      event.preventDefault();
-      closeMarketplaceRentalTypeDropdown(true);
-    } else if (event.key === "Tab") {
-      closeMarketplaceRentalTypeDropdown();
-    }
-  });
-});
-
-window.addEventListener("resize", positionMarketplaceCategoryDropdown);
-window.addEventListener("resize", positionMarketplaceConditionDropdown);
-window.addEventListener("resize", positionMarketplaceVehicleTypeDropdown);
-window.addEventListener("resize", positionMarketplaceYearDropdown);
-window.addEventListener("resize", positionMarketplaceBodyStyleDropdown);
-window.addEventListener("resize", positionMarketplaceVehicleConditionDropdown);
-window.addEventListener("resize", positionMarketplaceFuelTypeDropdown);
-window.addEventListener("resize", positionMarketplaceTransmissionDropdown);
-window.addEventListener("resize", () => {
-  positionMarketplaceColorDropdown("exterior");
-  positionMarketplaceColorDropdown("interior");
-});
-window.addEventListener("resize", positionMarketplaceRentalTypeDropdown);
-
-document.addEventListener("click", (event) => {
-  const eventTarget = event.target;
-  if (eventTarget instanceof Node) {
-    if (!listingTypeSelect?.contains(eventTarget)) {
-      closeListingTypeDropdown();
-    }
-    if (!marketplaceCategorySelect?.contains(eventTarget)) {
-      closeMarketplaceCategoryDropdown();
-    }
-    if (!marketplaceConditionSelect?.contains(eventTarget)) {
-      closeMarketplaceConditionDropdown();
-    }
-    if (!marketplaceVehicleTypeSelect?.contains(eventTarget)) {
-      closeMarketplaceVehicleTypeDropdown();
-    }
-    if (!marketplaceYearSelect?.contains(eventTarget)) {
-      closeMarketplaceYearDropdown();
-    }
-    if (!marketplaceBodyStyleSelect?.contains(eventTarget)) {
-      closeMarketplaceBodyStyleDropdown();
-    }
-    if (!marketplaceVehicleConditionSelect?.contains(eventTarget)) {
-      closeMarketplaceVehicleConditionDropdown();
-    }
-    if (!marketplaceFuelTypeSelect?.contains(eventTarget)) {
-      closeMarketplaceFuelTypeDropdown();
-    }
-    if (!marketplaceTransmissionSelect?.contains(eventTarget)) {
-      closeMarketplaceTransmissionDropdown();
-    }
-    (["exterior", "interior"] as MarketplaceVehicleColorKind[]).forEach(
-      (kind) => {
-        if (!marketplaceColorDropdowns[kind].select?.contains(eventTarget)) {
-          closeMarketplaceColorDropdown(kind);
-        }
-      },
-    );
-    if (!marketplaceRentalTypeSelect?.contains(eventTarget)) {
-      closeMarketplaceRentalTypeDropdown();
-    }
-  }
-  queueMicrotask(updateMarketplaceSaveListingButtonState);
-});
-
-marketplaceImagesInput?.addEventListener("change", () => {
-  queueMarketplacePhotos(Array.from(marketplaceImagesInput.files ?? []));
-});
-
-saveMarketplaceListingButton?.addEventListener("click", () => {
-  void saveMarketplaceListing();
-});
-
-cancelMarketplaceListingEditButton?.addEventListener("click", () => {
-  clearMarketplaceListingEditor();
-});
-
-marketplaceListingFields?.addEventListener("input", () => {
-  hideMarketplaceSaveListingStatus();
-  queueMicrotask(updateMarketplaceSaveListingButtonState);
-});
-
-marketplaceListingFields?.addEventListener("change", () => {
-  queueMicrotask(updateMarketplaceSaveListingButtonState);
-});
-
-marketplaceTitleInput?.addEventListener("input", () => {
-  if (marketplaceTitleCount) {
-    marketplaceTitleCount.textContent = `${marketplaceTitleInput.value.length} / 200`;
-  }
-});
-
-marketplacePriceInput?.addEventListener("input", () => {
-  const digitsOnly = marketplacePriceInput.value.replace(/[^0-9]/g, "");
-  if (marketplacePriceInput.value !== digitsOnly) {
-    marketplacePriceInput.value = digitsOnly;
-  }
-});
-
-marketplaceVehicleMileageInput?.addEventListener("input", () => {
-  const digitsOnly = marketplaceVehicleMileageInput.value.replace(
-    /[^0-9]/g,
-    "",
-  );
-  if (marketplaceVehicleMileageInput.value !== digitsOnly) {
-    marketplaceVehicleMileageInput.value = digitsOnly;
-  }
-});
-
-[marketplaceBedroomsInput, marketplaceBathroomsInput].forEach((input) => {
-  input?.addEventListener("input", () => {
-    const digitsOnly = input.value.replace(/[^0-9]/g, "");
-    if (input.value !== digitsOnly) {
-      input.value = digitsOnly;
-    }
-  });
-});
-
-marketplacePhotoDropzone?.addEventListener("keydown", (event) => {
-  if (event.key !== "Enter" && event.key !== " ") {
-    return;
-  }
-
-  event.preventDefault();
-  if (marketplaceImagesInput?.disabled) {
-    showMarketplacePhotoStatus(
-      "Select a listing type before adding photos.",
-      true,
-    );
-    return;
-  }
-  marketplaceImagesInput?.click();
-});
-
-marketplacePhotoDropzone?.addEventListener("dragenter", (event) => {
-  event.preventDefault();
-  if (!marketplaceImagesInput?.disabled) {
-    marketplacePhotoDropzone.classList.add(
-      "marketplace-photo-dropzone--dragging",
-    );
-  }
-});
-
-marketplacePhotoDropzone?.addEventListener("dragover", (event) => {
-  event.preventDefault();
-  if (event.dataTransfer) {
-    event.dataTransfer.dropEffect = marketplaceImagesInput?.disabled
-      ? "none"
-      : "copy";
-  }
-});
-
-marketplacePhotoDropzone?.addEventListener("dragleave", () => {
-  marketplacePhotoDropzone.classList.remove(
-    "marketplace-photo-dropzone--dragging",
-  );
-});
-
-marketplacePhotoDropzone?.addEventListener("drop", (event) => {
-  event.preventDefault();
-  marketplacePhotoDropzone.classList.remove(
-    "marketplace-photo-dropzone--dragging",
-  );
-
-  if (marketplaceImagesInput?.disabled) {
-    showMarketplacePhotoStatus(
-      "Select a listing type before adding photos.",
-      true,
-    );
-    return;
-  }
-
-  queueMarketplacePhotos(Array.from(event.dataTransfer?.files ?? []));
-});
-
-marketplacePhotoLightboxClose?.addEventListener("click", () => {
-  closeMarketplacePhotoLightbox();
-});
-
-marketplacePhotoLightboxBackdrop?.addEventListener("click", () => {
-  closeMarketplacePhotoLightbox();
-});
-
-marketplacePhotoLightboxPrevious?.addEventListener("click", () => {
-  moveMarketplacePhotoLightbox(-1);
-});
-
-marketplacePhotoLightboxNext?.addEventListener("click", () => {
-  moveMarketplacePhotoLightbox(1);
+photoLightboxNext?.addEventListener("click", () => {
+  movePhotoLightbox(1);
 });
 
 document.addEventListener("keydown", (event) => {
-  if (marketplacePhotoLightbox?.hidden !== false) {
+  if (photoLightbox?.hidden !== false) {
     return;
   }
 
   if (event.key === "Escape") {
     event.preventDefault();
-    closeMarketplacePhotoLightbox();
+    closePhotoLightbox();
   } else if (event.key === "ArrowLeft") {
     event.preventDefault();
-    moveMarketplacePhotoLightbox(-1);
+    movePhotoLightbox(-1);
   } else if (event.key === "ArrowRight") {
     event.preventDefault();
-    moveMarketplacePhotoLightbox(1);
+    movePhotoLightbox(1);
   }
 });
 
@@ -4450,7 +717,9 @@ function renderGroups(groups: FacebookGroup[]) {
     return;
   }
 
+  hasRenderedGroups = true;
   loadedGroups = groups;
+  updateLoadGroupsButtonLabel();
   selectedGroupIds = new Set(
     Array.from(selectedGroupIds).filter((groupId) =>
       groups.some((group) => group.id === groupId),
@@ -4476,7 +745,7 @@ function renderGroups(groups: FacebookGroup[]) {
     }
     groupsSearchQuery = "";
     groupsList.className = "empty-state";
-    groupsList.textContent = "No groups found.";
+    groupsList.textContent = msg("noGroupsFound");
     updatePostingReadiness();
     return;
   }
@@ -4502,12 +771,15 @@ function renderGroups(groups: FacebookGroup[]) {
 
   if (visibleGroups.length === 0) {
     groupsList.className = "empty-state";
-    groupsList.textContent = `No groups match "${groupsSearchQuery.trim()}".`;
+    groupsList.textContent = msg("noGroupsMatch", groupsSearchQuery.trim());
     updatePostingReadiness();
     return;
   }
 
-  const selectedGroups = groupsInSelectionOrder(visibleGroups, selectedGroupIds);
+  const selectedGroups = groupsInSelectionOrder(
+    visibleGroups,
+    selectedGroupIds,
+  );
   const remainingGroups = visibleGroups.filter(
     (group) => !selectedGroupIds.has(group.id),
   );
@@ -4590,59 +862,227 @@ function renderGroups(groups: FacebookGroup[]) {
   groupsList.className = "groups-list-sections";
   groupsList.replaceChildren(
     createSection(
-      "Selected Groups",
+      msg("selectedGroupsSection"),
       selectedGroups,
       normalizedQuery.length
-        ? "No selected groups match this search."
-        : "No groups selected yet.",
+        ? msg("noSelectedGroupsMatch")
+        : msg("noSelectedGroupsYet"),
     ),
     createSection(
-      "Other Groups",
+      msg("otherGroups"),
       remainingGroups,
       normalizedQuery.length
-        ? "No remaining groups match this search."
-        : "No other groups available.",
+        ? msg("noRemainingGroupsMatch")
+        : msg("noOtherGroups"),
     ),
   );
   updatePostingReadiness();
 }
 
+function updateLoadGroupsButtonLabel() {
+  if (!loadGroupsButton || loadGroupsButton.disabled) return;
+  loadGroupsButton.textContent = msg(
+    loadedGroups.length > 0 ? "refreshGroups" : "findMyGroups",
+  );
+}
+
 function updateGroupsStatus(message: string, loadedCount: number) {
+  latestGroupsStatusMessage = message;
+  latestGroupsStatusCount = loadedCount;
   if (groupsStatusMessage) {
-    groupsStatusMessage.textContent = message;
+    groupsStatusMessage.textContent = localizeAppText(message);
   }
 
   if (groupsStatusCount) {
-    groupsStatusCount.textContent = `${loadedCount} loaded`;
+    groupsStatusCount.textContent = msg("loadedCount", loadedCount);
   }
 }
 
-function updateGeminiStatus() {
-  const hasKey = (geminiApiKeyInput?.value.trim().length ?? 0) > 0;
-  const rewriteEnabled = Boolean(geminiRewriteToggle?.checked);
+function localizeAppText(text: string): string {
+  const exactMessages: Record<string, string> = {
+    "Finding the groups you have joined...": msg("findingJoinedGroups"),
+    "Getting ready to post...": msg("gettingReadyToPost"),
+    "Could not find your groups. Check that you are signed into Facebook and try again.":
+      msg("couldNotFindGroups"),
+    "Starting group extraction...": msg("groupExtractionStarting"),
+    "Preparing current tab...": msg("preparingCurrentTab"),
+    "Open Facebook first. This extension only works on facebook.com.":
+      msg("openFacebookFirst"),
+    "Opening Facebook joined groups page...": msg("openingJoinedGroupsPage"),
+    "Facebook joined groups page loaded.": msg("joinedGroupsPageLoaded"),
+    "Changing joined groups sort to trigger Facebook groups request...":
+      msg("changingGroupSort"),
+    "Waiting for fresh Facebook groups request...": msg(
+      "waitingForGroupsRequest",
+    ),
+    "Captured groups request. Preparing extraction...": msg(
+      "capturedGroupsRequest",
+    ),
+    "Unable to fetch groups.": msg("unableToFetchGroups"),
+    "Unable to open joined groups in the current tab.": msg(
+      "unableToOpenJoinedGroups",
+    ),
+    "Unable to trigger joined groups sort.": msg("unableToTriggerGroupsSort"),
+    "The joined groups sort control changed. Please load groups again.":
+      msg("groupsSortChanged"),
+    "Unable to read groups from joined groups tab.": msg("unableToReadGroups"),
+    "Facebook did not return group data.": msg("noGroupDataReturned"),
+    "Select at least one group before posting.": msg("selectAtLeastOneGroup"),
+    "Select at least one post before posting.": msg("selectPostBeforePosting"),
+    "Choose a future date and time for your post.": msg("futureDateRequired"),
+    "Your queue is scheduled.": msg("queueScheduled"),
+    "Scheduled posting cancelled.": msg("scheduledPostingCancelled"),
+    "The scheduled queue could not be started. Please schedule it again.": msg(
+      "scheduledQueueStartFailure",
+    ),
+    "Could not schedule this queue. Check that Chrome storage is available and try again.":
+      msg("couldNotScheduleQueue"),
+    "Unable to find the active tab for posting.": msg("noActiveTabForPosting"),
+    "None of the selected Groups has a visible post composer. Select another standard Group and try again.":
+      msg("noVisibleGroupComposer"),
+    "Could not set up photo uploads from your first post. Please start posting again.":
+      msg("photoUploadSetupFailed"),
+    "Facebook did not provide the request values needed to continue. Try again.":
+      msg("postingRequestValuesMissing"),
+    "Facebook did not confirm whether the first post was submitted. Check Facebook before trying again.":
+      msg("unconfirmedFirstPost"),
+    "Posting is already in progress.": msg("postingInProgress"),
+    "Wait for the current posts to finish, or stop posting before starting again.":
+      msg("waitForQueue"),
+    "Preparing the first post...": msg("preparingFirstPost"),
+    "Continuing to post automatically...": msg("continuingAutomatically"),
+    "Your post is pending": msg("pendingPost"),
+    "Automatic posting stopped.": msg("automaticPostingStopped"),
+    "Posting stopped by user.": msg("manualStop"),
+    "Facebook temporarily blocked posting on this account. Queue stopped. Try again later.":
+      msg("accountTemporarilyBlocked"),
+    "Posting paused.": msg("postingPaused"),
+    "Internet connection lost. Posting paused until the connection returns.":
+      msg("postingPausedOffline"),
+    "Posting resumed.": msg("postingResumed"),
+    "Internet connection restored. Resuming posting.": msg(
+      "postingResumedOnline",
+    ),
+    "Internet connection restored. Posting remains paused until you resume.":
+      msg("postingStillPausedOnline"),
+    "Your post is awaiting admin approval. If the admin team approves it, it'll become visible in the group.":
+      msg("pendingApprovalDetail"),
+    "Only image files can be added.": msg("imageFilesOnly"),
+    "Unable to add images.": msg("unableToAddImages"),
+    "Unable to resume posting.": msg("unableToResume"),
+    "Unable to pause posting.": msg("unableToPause"),
+    "Unable to stop posting.": msg("unableToStop"),
+    "Please select at least one group.": msg("selectAtLeastOneGroup"),
+    "Write your post and add at least one image before posting.":
+      msg("addPostAndImage"),
+    "Your selected groups are no longer available. Click Find my groups, select them again, and try posting.":
+      msg("groupsNoLongerAvailable"),
+    "Could not start posting. Please try again.": msg("couldNotStartPosting"),
+    "Facebook groups request failed.": msg("unableToFetchGroups"),
+  };
+  if (exactMessages[text]) return exactMessages[text];
 
-  if (geminiStatusMessage) {
-    geminiStatusMessage.textContent = rewriteEnabled
-      ? hasKey
-        ? "AI rewriting is on."
-        : "Add your Gemini access key to use AI rewriting."
-      : "AI rewriting is off.";
+  const patterns: Array<[RegExp, (...values: string[]) => string]> = [
+    [
+      /^Finished loading (\d+) groups\.$/,
+      (count) => msg("finishedLoadingGroups", count),
+    ],
+    [
+      /^Restored (\d+) loaded groups\.$/,
+      (count) => msg("restoredGroups", count),
+    ],
+    [
+      /^Fetching groups page (\d+)\.\.\.$/,
+      (page) => msg("fetchingGroupsPage", page),
+    ],
+    [
+      /^Loaded (\d+) groups so far\.$/,
+      (count) => msg("loadedGroupsSoFar", count),
+    ],
+    [
+      /^Fetching next page\. (\d+) groups loaded\.$/,
+      (count) => msg("fetchingNextGroupsPage", count),
+    ],
+    [
+      /^Facebook groups request failed with (\d+)\.$/,
+      (status) => msg("groupsRequestFailed", status),
+    ],
+    [
+      /^(\d+) duplicate image was skipped\.$/,
+      (count) => msg("duplicateImageSkipped", count),
+    ],
+    [
+      /^(\d+) duplicate images were skipped\.$/,
+      (count) => msg("duplicateImagesSkipped", count),
+    ],
+    [/^Unable to read (.+)\.$/, (file) => msg("unableToReadFile", file)],
+    [
+      /^Posting paused before (.+)\.$/,
+      (group) => msg("postingPausedBefore", group),
+    ],
+    [/^Next post in (.+)$/, (time) => msg("nextPostIn", time)],
+    [/^Posted to (.+)\.$/, (group) => msg("postedToGroup", group)],
+    [
+      /^Posted successfully to (.+)\.$/,
+      (group) => msg("postedSuccessfullyToGroup", group),
+    ],
+    [
+      /^Preparing post (\d+)\/(\d+) for (.+)\.\.\.$/,
+      (current, total, group) =>
+        msg("preparingPostForGroup", current, total, group),
+    ],
+    [
+      /^Uploading images from post (\d+)\/(\d+) for (.+)\.\.\.$/,
+      (current, total, group) =>
+        msg("uploadingPostImages", current, total, group),
+    ],
+    [
+      /^Preparing text-only post (\d+)\/(\d+) for (.+)\.\.\.$/,
+      (current, total, group) =>
+        msg("preparingTextPost", current, total, group),
+    ],
+    [
+      /^Posting post (\d+)\/(\d+) to (.+)\.\.\.$/,
+      (current, total, group) => msg("postingToGroup", current, total, group),
+    ],
+    [
+      /^Failed to post to (.+)\.$/,
+      (group) => msg("failedToPostToGroup", group),
+    ],
+    [
+      /^Posting finished: (\d+) posts were submitted\.$/,
+      (count) => msg("postingFinished", count),
+    ],
+    [
+      /^Posting finished: (\d+) posts were submitted and (\d+) groups failed\.$/,
+      (posted, failed) => msg("postingFinishedWithFailures", posted, failed),
+    ],
+    [
+      /^Facebook rejected the post to (.+) because this Group cannot accept more pending content from your account\.$/,
+      (group) => msg("facebookPendingLimit", group),
+    ],
+    [
+      /^(.+) does not allow Postika to start posting\. Trying (.+) instead\.\.\.$/,
+      (starter, next) => msg("incompatibleGroupStarter", starter, next),
+    ],
+    [
+      /^Fresh (.+) request values captured from (.+)\.$/,
+      (kind, group) => msg("freshPostRequestCaptured", kind, group),
+    ],
+    [/^Paused (.+)$/, (duration) => msg("pausedDuration", duration)],
+    [/^paused (.+)$/, (duration) => msg("pausedDurationShort", duration)],
+    [/^Active time (.+)$/, (duration) => `${msg("activeTime")} ${duration}`],
+    [/^Item time (.+)$/, (duration) => `${msg("itemTime")} ${duration}`],
+  ];
+  for (const [pattern, translate] of patterns) {
+    const match = pattern.exec(text);
+    if (match) return translate(...match.slice(1));
   }
-
-  if (geminiStatusCount) {
-    geminiStatusCount.hidden = hasKey;
-    geminiStatusCount.textContent = hasKey ? "" : "No key";
-  }
+  return text;
 }
 
 function getSelectedGroupsCount() {
   return selectedGroupIds.size;
-}
-
-function getGroupCheckboxes() {
-  return Array.from(
-    document.querySelectorAll<HTMLInputElement>(".group-item__checkbox"),
-  );
 }
 
 function updateGroupsSelectAllState() {
@@ -4665,51 +1105,47 @@ function updateGroupsSelectionSummary() {
   }
 
   const selectedGroupsCount = getSelectedGroupsCount();
-  const selectedLabel = `${selectedGroupsCount} ${
-    selectedGroupsCount === 1 ? "group" : "groups"
-  } selected`;
+  const selectedLabel = `${msg(
+    selectedGroupsCount === 1 ? "groupCountSingular" : "groupCountPlural",
+    selectedGroupsCount,
+  )} ${msg("selected")}`;
 
-  const label = loadedGroups.length > 0
-    ? `${selectedLabel} from ${loadedGroups.length} loaded`
-    : selectedLabel;
+  const label =
+    loadedGroups.length > 0
+      ? `${selectedLabel} ${msg("fromLoaded", loadedGroups.length)}`
+      : selectedLabel;
   groupsSelectionCount.className = "selection-count";
   groupsSelectionCount.textContent = label;
-  const cardSummary = document.querySelector<HTMLElement>("#groups-card-summary");
+  const cardSummary = document.querySelector<HTMLElement>(
+    "#groups-card-summary",
+  );
   if (cardSummary) {
-    cardSummary.textContent = loadedGroups.length > 0
-      ? label : "Find and select the groups you want to post to";
+    cardSummary.textContent =
+      loadedGroups.length > 0 ? label : msg("findAndSelectGroups");
   }
 }
 
 function updatePostingReadiness() {
-  const isAuthenticated = hasActiveExtensionAccess();
   const selectedGroupsCount = getSelectedGroupsCount();
-  const hasSelectedPreparedPosts = preparedPosts.some((post) => post.selected);
+  const hasPostContent =
+    Boolean(postEditor.getContent().body.trim()) &&
+    selectedImageFiles.length > 0;
   const minimumDelaySeconds = Number(postIntervalMinInput?.value ?? 0);
   const maximumDelaySeconds = Number(postIntervalMaxInput?.value ?? 0);
   const hasValidSleepTime = isValidPostingInterval(
     minimumDelaySeconds,
     maximumDelaySeconds,
   );
-  const maxPosts = Number(maxPostsInput?.value ?? 0);
-  const hasValidMaxPosts =
-    Number.isInteger(maxPosts) && maxPosts >= MIN_MAX_POSTS;
 
   updateGroupsSelectionSummary();
 
   updateGroupsSelectAllState();
 
   updatePostingButtonState(
-    isAuthenticated,
-    hasSelectedPreparedPosts,
+    hasPostContent,
     selectedGroupsCount,
     hasValidSleepTime,
-    hasValidMaxPosts,
   );
-
-  if (loadGroupsButton) {
-    loadGroupsButton.disabled = !isAuthenticated;
-  }
 }
 
 function isValidPostingInterval(
@@ -4747,8 +1183,8 @@ function normalizePostingInterval() {
 }
 
 function updatePostingButtonState(
-  isAuthenticated = hasActiveExtensionAccess(),
-  hasSelectedPreparedPosts = preparedPosts.some((post) => post.selected),
+  hasPostContent = Boolean(postEditor.getContent().body.trim()) &&
+    selectedImageFiles.length > 0,
   selectedGroupsCount = getSelectedGroupsCount(),
   hasValidSleepTime = (() => {
     return isValidPostingInterval(
@@ -4756,44 +1192,85 @@ function updatePostingButtonState(
       Number(postIntervalMaxInput?.value ?? 0),
     );
   })(),
-  hasValidMaxPosts = (() => {
-    const maxPosts = Number(maxPostsInput?.value ?? 0);
-    return Number.isInteger(maxPosts) && maxPosts >= MIN_MAX_POSTS;
-  })(),
 ) {
+  postingWizard.refresh();
   if (!startPostingButton) {
     return;
   }
 
+  const canPost =
+    postingWizard.step === 3 &&
+    hasPostContent &&
+    selectedGroupsCount > 0 &&
+    hasValidSleepTime;
+
   if (isPostingActive) {
     startPostingButton.disabled = true;
-    startPostingButton.title = "Group posting is already in progress.";
-    setButtonContent(startPostingButton, "Posting…");
+    startPostingButton.title = msg("postingAlreadyInProgress");
+    setButtonContent(
+      startPostingButton,
+      isPostingScheduling
+        ? msg("schedulingQueue")
+        : isPostingScheduled
+          ? msg("scheduled")
+          : msg("posting"),
+    );
+    updateScheduleControls(false);
     updatePausePostingButtonState();
     return;
   }
 
   startPostingButton.classList.remove("start-posting-btn--stop");
-  const hasPostingAllowance =
-    currentExtensionAccess?.access.remaining.group_posts_today !== 0;
-  startPostingButton.title = hasPostingAllowance
-    ? ""
-    : `Your Free account has used all ${currentExtensionAccess?.access.limits.group_posts_today ?? FREE_MAX_GROUP_POSTS} Group posts for today`;
-  startPostingButton.disabled = !(
-    isAuthenticated &&
-    hasPostingAllowance &&
-    hasSelectedPreparedPosts &&
-    selectedGroupsCount > 0 &&
-    hasValidSleepTime &&
-    hasValidMaxPosts
-  );
-  setButtonContent(startPostingButton, "Start Posting");
+  startPostingButton.title = "";
+  startPostingButton.disabled = !canPost;
+  setButtonContent(startPostingButton, msg("postNow"));
+  updateScheduleControls(canPost);
   updatePausePostingButtonState();
+}
+
+function updateScheduleControls(canPost?: boolean) {
+  const ready =
+    canPost ??
+    (postingWizard.step === 3 &&
+      Boolean(postEditor.getContent().body.trim()) &&
+      selectedImageFiles.length > 0 &&
+      getSelectedGroupsCount() > 0 &&
+      isValidPostingInterval(
+        Number(postIntervalMinInput?.value ?? 0),
+        Number(postIntervalMaxInput?.value ?? 0),
+      ));
+
+  if (schedulePanel) {
+    schedulePanel.hidden = !isScheduleOpen || isPostingActive;
+  }
+  if (startPostingButton) {
+    startPostingButton.hidden = isScheduleOpen || isPostingActive;
+  }
+  if (openScheduleButton) {
+    openScheduleButton.hidden = isScheduleOpen || isPostingActive;
+    openScheduleButton.disabled = !ready;
+    openScheduleButton.textContent = msg("schedule");
+  }
+  if (cancelScheduleButton) {
+    cancelScheduleButton.hidden = !isScheduleOpen || isPostingActive;
+    cancelScheduleButton.textContent = msg("cancel");
+  }
+  if (confirmScheduleButton) {
+    confirmScheduleButton.hidden = !isScheduleOpen || isPostingActive;
+    confirmScheduleButton.disabled = !ready || !isScheduleTimeValid;
+    confirmScheduleButton.textContent = msg("confirmSchedule");
+  }
+  if (scheduleTimezoneNote) {
+    const timeZone =
+      Intl.DateTimeFormat().resolvedOptions().timeZone || "local time";
+    scheduleTimezoneNote.textContent = msg("scheduleTimezoneNotice", timeZone);
+  }
 }
 
 function updatePausePostingButtonState() {
   if (pausePostingButton) {
-    pausePostingButton.hidden = !isPostingActive;
+    pausePostingButton.hidden =
+      !isPostingActive || isPostingScheduling || isPostingScheduled;
     pausePostingButton.disabled =
       isStopRequestPending || isPauseResumeRequestPending;
     pausePostingButton.classList.toggle(
@@ -4803,20 +1280,24 @@ function updatePausePostingButtonState() {
 
     const label = isPauseResumeRequestPending
       ? isPostingPaused
-        ? "Resuming…"
-        : "Pausing…"
+        ? msg("resuming")
+        : msg("pausing")
       : isPostingPaused
-        ? "Resume"
-        : "Pause";
+        ? msg("resume")
+        : msg("pause");
     setButtonContent(pausePostingButton, label, isPauseResumeRequestPending);
   }
 
   if (stopPostingButton) {
-    stopPostingButton.hidden = !isPostingActive;
-    stopPostingButton.disabled = isStopRequestPending;
+    stopPostingButton.hidden = !isPostingActive || isPostingScheduling;
+    stopPostingButton.disabled = isStopRequestPending || isPostingScheduling;
     setButtonContent(
       stopPostingButton,
-      isStopRequestPending ? "Stopping…" : "Stop",
+      isStopRequestPending
+        ? msg("stopping")
+        : isPostingScheduled
+          ? msg("cancelScheduledQueue")
+          : msg("stop"),
       isStopRequestPending,
     );
   }
@@ -4861,14 +1342,6 @@ const groupsPostingTimingElements: PostingTimingElements = {
   itemValue: postingItemTime,
 };
 
-const marketplacePostingTimingElements: PostingTimingElements = {
-  container: marketplacePostingTiming,
-  elapsedLabel: marketplacePostingTimingLabel,
-  elapsedValue: marketplacePostingElapsedTime,
-  itemLabel: marketplacePostingItemTimingLabel,
-  itemValue: marketplacePostingItemTime,
-};
-
 function livePostingDuration(
   timing: PostingTiming,
   value: "elapsedMs" | "itemElapsedMs",
@@ -4895,15 +1368,15 @@ function formatPostingDurationClock(durationMs: number): string {
 function formatPostingDurationSummary(durationMs: number): string {
   const totalSeconds = Math.max(0, Math.round(durationMs / 1_000));
   if (totalSeconds < 1) {
-    return "under 1s";
+    return msg("underOneSecond");
   }
   const hours = Math.floor(totalSeconds / 3_600);
   const minutes = Math.floor((totalSeconds % 3_600) / 60);
   const seconds = totalSeconds % 60;
   return [
-    hours > 0 ? `${hours}h` : "",
-    minutes > 0 ? `${minutes}m` : "",
-    `${seconds}s`,
+    hours > 0 ? msg("hoursShort", hours) : "",
+    minutes > 0 ? msg("minutesShort", minutes) : "",
+    msg("secondsShort", seconds),
   ]
     .filter(Boolean)
     .join(" ");
@@ -4926,15 +1399,15 @@ function renderPostingTiming(
   }
   if (elements.elapsedLabel) {
     elements.elapsedLabel.textContent = timing.isComplete
-      ? "Active time"
+      ? msg("activeTime")
       : timing.isPaused
-        ? "Paused at"
-        : "Elapsed";
+        ? msg("pausedAt")
+        : msg("elapsed");
   }
   if (elements.itemLabel) {
     elements.itemLabel.textContent = timing.isComplete
-      ? "Last item"
-      : "Current item";
+      ? msg("lastItem")
+      : msg("currentItem");
   }
   elements.container?.classList.toggle(
     "posting-timing--paused",
@@ -4947,9 +1420,9 @@ function renderPostingTiming(
 }
 
 function resetPostingTiming(elements: PostingTimingElements) {
-  if (elements.elapsedLabel) elements.elapsedLabel.textContent = "Elapsed";
+  if (elements.elapsedLabel) elements.elapsedLabel.textContent = msg("elapsed");
   if (elements.elapsedValue) elements.elapsedValue.textContent = "00:00";
-  if (elements.itemLabel) elements.itemLabel.textContent = "Current item";
+  if (elements.itemLabel) elements.itemLabel.textContent = msg("currentItem");
   if (elements.itemValue) elements.itemValue.textContent = "00:00";
   elements.container?.classList.remove(
     "posting-timing--paused",
@@ -4983,90 +1456,13 @@ function finishPendingPostingTiming(timing: PostingTiming): PostingTiming {
 
 function renderAllPostingTimers() {
   renderPostingTiming(latestGroupsPostingTiming, groupsPostingTimingElements);
-  renderPostingTiming(
-    latestMarketplacePostingTiming,
-    marketplacePostingTimingElements,
-  );
 }
 
 window.setInterval(renderAllPostingTimers, 1_000);
-
-const geminiDialogs = new Map<string, HTMLDialogElement>();
-
-function syncGeminiPrompts(prompts: GeminiErrorPrompt[]) {
-  for (const [id, dialog] of geminiDialogs) {
-    if (!prompts.some((prompt) => prompt.id === id)) {
-      dialog.close();
-      dialog.remove();
-      geminiDialogs.delete(id);
-    }
-  }
-  prompts.forEach(showGeminiPrompt);
-}
-
-function showGeminiPrompt(prompt: GeminiErrorPrompt) {
-  if (geminiDialogs.has(prompt.id)) return;
-  const dialog = document.createElement("dialog");
-  dialog.className = "gemini-error-dialog";
-  dialog.setAttribute("aria-labelledby", `gemini-title-${prompt.id}`);
-  const title = document.createElement("h2");
-  title.id = `gemini-title-${prompt.id}`;
-  title.textContent = `Gemini error — ${prompt.queue === "groups" ? "Groups" : "Marketplace"}`;
-  const detail = document.createElement("p");
-  detail.textContent = prompt.error;
-  const explanation = document.createElement("p");
-  explanation.textContent =
-    "Posting is paused because AI rewriting failed. Use your original text for the remaining posts, or stop and check your Gemini settings.";
-  const actions = document.createElement("div");
-  const feedback = document.createElement("p");
-  feedback.setAttribute("role", "status");
-  for (const action of ["continue", "stop"] as const) {
-    const button = document.createElement("button");
-    button.type = "button";
-    button.className = action === "stop" ? "button-89 button-89--danger" : "button-89";
-    button.textContent =
-      action === "continue" ? "Use original text" : "Stop";
-    button.addEventListener("click", async () => {
-      const buttons = actions.querySelectorAll("button");
-      buttons.forEach((item) => {
-        item.disabled = true;
-      });
-      try {
-        const response = await chrome.runtime.sendMessage({
-          type: "RESOLVE_GEMINI_ERROR",
-          id: prompt.id,
-          action,
-        });
-        if (!response?.ok) {
-          await restorePostingQueueStatus();
-          throw new Error("This prompt is no longer active.");
-        }
-        dialog.close();
-        dialog.remove();
-        geminiDialogs.delete(prompt.id);
-      } catch {
-        feedback.textContent = "Unable to apply your choice. Please try again.";
-        buttons.forEach((item) => {
-          item.disabled = false;
-        });
-      }
-    });
-    actions.append(button);
-  }
-  dialog.addEventListener("cancel", (event) => event.preventDefault());
-  dialog.append(title, detail, explanation, actions, feedback);
-  document.body.append(dialog);
-  geminiDialogs.set(prompt.id, dialog);
-  dialog.showModal();
-}
-
-// Restore outstanding choices and keep the worker available while awaiting input.
+// Keep the worker reachable while a queue is paused or waiting between groups.
 window.setInterval(() => {
   void chrome.runtime
     .sendMessage({ type: "GET_POSTING_QUEUE_STATUS" })
-    .then((response: PostingQueueStatusResponse) =>
-      syncGeminiPrompts(response?.geminiPrompts ?? []),
-    )
     .catch(() => {});
 }, 10_000);
 
@@ -5076,12 +1472,8 @@ async function restorePostingQueueStatus() {
       GetPostingQueueStatusRequest,
       PostingQueueStatusResponse
     >({ type: "GET_POSTING_QUEUE_STATUS" });
-    syncGeminiPrompts(response?.geminiPrompts ?? []);
     if (response?.groups) {
       updateUiPostingStatus(response.groups);
-    }
-    if (response?.marketplace) {
-      updateMarketplaceItemPostingStatus(response.marketplace);
     }
   } catch {
     // The background service may still be starting; live events will catch up.
@@ -5112,16 +1504,7 @@ function postingPausedTimeMeta(timing: PostingTiming | undefined): string {
 }
 
 chrome.runtime.onMessage.addListener(
-  (
-    message:
-      | GeminiErrorPrompt
-      | GroupExtractionStatusMessage
-      | UiPostingStatusMessage
-      | MarketplaceItemPostingStatusMessage
-      | MarketplaceCleanupStatusMessage
-      | AccessEntitlementsUpdatedMessage,
-  ) => {
-    if (message.type === "GEMINI_ERROR_PROMPT") showGeminiPrompt(message);
+  (message: GroupExtractionStatusMessage | UiPostingStatusMessage) => {
     if (message.type === "GROUP_EXTRACTION_STATUS") {
       updateGroupsStatus(message.message, message.loadedCount);
     }
@@ -5129,117 +1512,8 @@ chrome.runtime.onMessage.addListener(
     if (message.type === "UI_POSTING_STATUS") {
       updateUiPostingStatus(message);
     }
-
-    if (message.type === "MARKETPLACE_ITEM_POSTING_STATUS") {
-      updateMarketplaceItemPostingStatus(message);
-    }
-
-    if (message.type === "MARKETPLACE_CLEANUP_STATUS") {
-      updateMarketplaceCleanupStatus(message);
-    }
-
-    if (
-      message.type === "ACCESS_ENTITLEMENTS_UPDATED" &&
-      currentExtensionAccess
-    ) {
-      currentExtensionAccess.access = message.access;
-      updateExtensionAccessUi();
-    }
   },
 );
-
-function updateMarketplaceCleanupStatus(
-  message: MarketplaceCleanupStatusMessage,
-) {
-  if (marketplaceCleanupProgress) {
-    marketplaceCleanupProgress.hidden = false;
-  }
-  const percent =
-    message.total > 0
-      ? Math.min(Math.round((message.processed / message.total) * 100), 100)
-      : 0;
-  if (marketplaceCleanupCount) {
-    marketplaceCleanupCount.textContent =
-      message.status === "warning"
-        ? "Unable to verify listings"
-        : message.total > 0
-          ? `${message.processed}/${message.total} processed`
-          : `${message.processed} listings scanned`;
-  }
-  if (marketplaceCleanupPercent) {
-    marketplaceCleanupPercent.textContent =
-      message.status === "warning" ? "—" : `${percent}%`;
-  }
-  if (marketplaceCleanupProgressBar) {
-    marketplaceCleanupProgressBar.style.width = `${percent}%`;
-  }
-  if (marketplaceCleanupDeleted) {
-    marketplaceCleanupDeleted.textContent = String(message.deletedCount);
-  }
-  if (marketplaceCleanupFailed) {
-    marketplaceCleanupFailed.textContent = String(message.failedCount);
-  }
-  if (marketplaceCleanupRemaining) {
-    marketplaceCleanupRemaining.textContent =
-      message.status === "warning"
-        ? "—"
-        : String(Math.max(message.total - message.processed, 0));
-  }
-  if (marketplaceCleanupMessage) {
-    marketplaceCleanupMessage.textContent = message.error
-      ? `${message.message} ${message.error}`
-      : message.message;
-  }
-  appendMarketplaceCleanupLog(message);
-
-  isMarketplaceCleanupActive = !(
-    message.status === "done" ||
-    message.status === "warning" ||
-    (message.status === "failed" && message.total === 0)
-  );
-  updateMarketplaceCleanupControls();
-  renderMarketplaceListings();
-}
-
-function appendMarketplaceCleanupLog(message: MarketplaceCleanupStatusMessage) {
-  if (!marketplaceCleanupLog) return;
-  const updatable =
-    message.status === "scanning" || message.status === "deleting"
-      ? marketplaceCleanupLog.querySelector<HTMLLIElement>(
-          `li[data-status="${message.status}"]`,
-        )
-      : undefined;
-  const item = updatable ?? document.createElement("li");
-  item.dataset.status = message.status;
-  const badge = document.createElement("span");
-  badge.className = "posting-progress__log-badge";
-  badge.textContent =
-    message.status === "deleted"
-      ? "Done"
-      : message.status === "warning"
-        ? "Warning"
-        : message.status === "failed"
-          ? "Fail"
-          : message.status === "deleting"
-            ? "Delete"
-            : message.status === "scanning"
-              ? "Scan"
-              : "Info";
-  const body = document.createElement("span");
-  body.className = "posting-progress__log-body";
-  const text = document.createElement("span");
-  text.className = "posting-progress__log-text";
-  text.textContent = message.message;
-  body.append(text);
-  if (message.error) {
-    const meta = document.createElement("span");
-    meta.className = "posting-progress__log-meta";
-    meta.textContent = message.error;
-    body.append(meta);
-  }
-  item.replaceChildren(badge, body);
-  if (!updatable) marketplaceCleanupLog.prepend(item);
-}
 
 function createFacebookResponseCopyButton(
   responseBody: string,
@@ -5247,8 +1521,8 @@ function createFacebookResponseCopyButton(
   const button = document.createElement("button");
   button.type = "button";
   button.className = "posting-progress__copy-response";
-  button.title = "Copy Facebook failure response";
-  button.setAttribute("aria-label", "Copy Facebook failure response");
+  button.title = msg("copyFacebookResponse");
+  button.setAttribute("aria-label", msg("copyFacebookResponse"));
 
   const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
   svg.setAttribute("width", "32");
@@ -5265,9 +1539,9 @@ function createFacebookResponseCopyButton(
   button.append(svg);
   button.addEventListener("click", async () => {
     if (await copyTextToClipboard(responseBody)) {
-      showToast("Facebook failure response copied.", "success");
+      showToast(msg("responseCopied"), "success");
     } else {
-      showToast("Unable to copy the Facebook response.", "error");
+      showToast(msg("unableToCopyResponse"), "error");
     }
   });
   return button;
@@ -5291,183 +1565,6 @@ async function copyTextToClipboard(value: string): Promise<boolean> {
   }
 }
 
-function updateMarketplaceCleanupControls() {
-  const rawDays = marketplaceCleanupDaysInput?.value.trim() ?? "";
-  const days = Number(rawDays);
-  const validDays =
-    /^\d+$/.test(rawDays) && Number.isSafeInteger(days) && days >= 0;
-  if (marketplaceCleanupDaysInput) {
-    marketplaceCleanupDaysInput.disabled = isMarketplaceCleanupActive;
-  }
-  if (deleteOldMarketplaceListingsButton) {
-    deleteOldMarketplaceListingsButton.disabled =
-      isMarketplaceCleanupActive || !validDays || isMarketplacePostingActive;
-    setButtonContent(
-      deleteOldMarketplaceListingsButton,
-      isMarketplaceCleanupActive ? "Cleaning up…" : "Delete old listings",
-      isMarketplaceCleanupActive,
-    );
-  }
-}
-
-function updateMarketplaceItemPostingStatus(
-  message: MarketplaceItemPostingStatusMessage,
-) {
-  if (message.timing) {
-    latestMarketplacePostingTiming = message.timing;
-    renderPostingTiming(message.timing, marketplacePostingTimingElements);
-  }
-  if (marketplacePostingProgressCard) {
-    marketplacePostingProgressCard.hidden = false;
-  }
-  if (marketplacePostingStatusMessage) {
-    marketplacePostingStatusMessage.textContent = message.error
-      ? `${message.message} ${message.error}`
-      : message.message;
-  }
-  if (marketplacePostingStatusCount) {
-    marketplacePostingStatusCount.textContent = `${message.successCount}/${message.total} successful posts`;
-  }
-  const processedCount = message.successCount + message.failedCount;
-  const remainingCount = Math.max(message.total - processedCount, 0);
-  const percent =
-    message.total > 0
-      ? Math.min(Math.round((processedCount / message.total) * 100), 100)
-      : 0;
-  if (marketplacePostingProgressPercent) {
-    marketplacePostingProgressPercent.textContent = `${percent}%`;
-  }
-  if (marketplacePostingProgressBar) {
-    marketplacePostingProgressBar.style.width = `${percent}%`;
-  }
-  if (marketplacePostingProgressSuccess) {
-    marketplacePostingProgressSuccess.textContent = String(
-      message.successCount,
-    );
-  }
-  if (marketplacePostingProgressFailed) {
-    marketplacePostingProgressFailed.textContent = String(message.failedCount);
-  }
-  if (marketplacePostingProgressRemaining) {
-    marketplacePostingProgressRemaining.textContent = String(remainingCount);
-  }
-  appendMarketplacePostingLog(message);
-  if (message.status === "paused") {
-    isMarketplacePostingPaused = true;
-    isMarketplacePauseRequestPending = false;
-  } else if (message.status === "posting") {
-    isMarketplacePostingPaused = false;
-    isMarketplacePauseRequestPending = false;
-  }
-  if (message.status === "done" || message.status === "stopped") {
-    isMarketplacePostingPaused = false;
-    isMarketplaceStopRequestPending = false;
-    isMarketplacePauseRequestPending = false;
-    setMarketplacePostingActive(false);
-    if (message.status === "done" && !message.error) {
-      selectedMarketplaceListingIds.clear();
-      renderMarketplaceListings();
-    }
-  } else {
-    setMarketplacePostingActive(true);
-  }
-}
-
-function appendMarketplacePostingLog(
-  message: MarketplaceItemPostingStatusMessage,
-) {
-  if (!marketplacePostingLog) {
-    return;
-  }
-  marketplacePostingLog.hidden = false;
-  if (message.status !== "waiting" && message.status !== "paused") {
-    marketplacePostingLog
-      .querySelectorAll<HTMLLIElement>('li[data-status="waiting"]')
-      .forEach((item) => item.remove());
-  }
-  const existingWaitingItem =
-    message.status === "waiting" || message.status === "paused"
-      ? marketplacePostingLog.querySelector<HTMLLIElement>(
-          `li[data-status="${message.status}"][data-listing-id="${CSS.escape(
-            message.listingId ?? "queue",
-          )}"]`,
-        )
-      : undefined;
-  const item = existingWaitingItem ?? document.createElement("li");
-  item.dataset.status = message.status;
-  item.dataset.listingId = message.listingId ?? "queue";
-
-  const badge = document.createElement("span");
-  badge.className = "posting-progress__log-badge";
-  badge.textContent = getMarketplacePostingStatusLabel(message.status);
-
-  const body = document.createElement("span");
-  body.className = "posting-progress__log-body";
-  const text = document.createElement("span");
-  text.className = "posting-progress__log-text";
-  text.textContent = message.message;
-  const hasMarketplaceCompletionSummary =
-    message.status === "done" && !message.error && Boolean(message.timing);
-  if (hasMarketplaceCompletionSummary && message.timing) {
-    text.textContent = `Completed ${message.successCount} Marketplace ${message.successCount === 1 ? "listing" : "listings"} in ${formatPostingDurationSummary(message.timing.elapsedMs)}${message.failedCount > 0 ? ` · ${message.failedCount} failed` : ""}.`;
-  }
-  body.append(text);
-
-  const count =
-    message.current > 0 && message.total > 0
-      ? `${message.current}/${message.total}`
-      : "";
-  const timingMeta =
-    message.status === "done" || message.status === "stopped"
-      ? hasMarketplaceCompletionSummary
-        ? postingPausedTimeMeta(message.timing)
-        : postingTimingLogMeta(message.timing, "queue")
-      : message.status === "posted" || message.status === "failed"
-        ? postingTimingLogMeta(message.timing, "item")
-        : "";
-  if (count || message.error || timingMeta) {
-    const meta = document.createElement("span");
-    meta.className = "posting-progress__log-meta";
-    meta.textContent = [count, timingMeta, message.error]
-      .filter(Boolean)
-      .join(" · ");
-    body.append(meta);
-  }
-
-  item.replaceChildren(badge, body);
-  if (!existingWaitingItem) {
-    marketplacePostingLog.prepend(item);
-  }
-  applyPostingLogFilter(
-    marketplacePostingLog,
-    marketplacePostingLogFilter,
-    marketplaceProgressPostedFilterButton,
-    marketplaceProgressFailedFilterButton,
-  );
-}
-
-function getMarketplacePostingStatusLabel(
-  status: MarketplaceItemPostingStatusMessage["status"],
-) {
-  switch (status) {
-    case "posted":
-    case "done":
-      return "Done";
-    case "failed":
-      return "Fail";
-    case "waiting":
-      return "Next";
-    case "paused":
-      return "Pause";
-    case "stopped":
-      return "Stop";
-    case "posting":
-      return "Post";
-    default:
-      return "Info";
-  }
-}
-
 function applyPostingLogFilter(
   log: HTMLOListElement | null,
   filter: PostingLogFilter,
@@ -5479,16 +1576,24 @@ function applyPostingLogFilter(
   failedButton?.setAttribute("aria-pressed", String(filter === "failed"));
   pendingButton?.setAttribute("aria-pressed", String(filter === "pending"));
   log?.querySelectorAll<HTMLLIElement>("li[data-status]").forEach((item) => {
-    const status = item.dataset.status;
-    item.hidden =
-      filter === "posted"
-        ? status !== "posted"
-        : filter === "pending"
-          ? status !== "pending"
-          : filter === "failed"
-            ? status !== "failed" && status !== "rate_limited"
-            : false;
+    item.hidden = !shouldShowPostingLogEntry(item.dataset.status, filter);
   });
+}
+
+function shouldShowPostingLogEntry(
+  status: string | undefined,
+  filter: PostingLogFilter,
+) {
+  switch (filter) {
+    case "posted":
+      return status === "posted";
+    case "pending":
+      return status === "pending";
+    case "failed":
+      return status === "failed" || status === "rate_limited";
+    default:
+      return true;
+  }
 }
 
 function toggleGroupsPostingLogFilter(
@@ -5504,25 +1609,13 @@ function toggleGroupsPostingLogFilter(
   );
 }
 
-function toggleMarketplacePostingLogFilter(
-  filter: Exclude<PostingLogFilter, "all">,
-) {
-  marketplacePostingLogFilter =
-    marketplacePostingLogFilter === filter ? "all" : filter;
-  applyPostingLogFilter(
-    marketplacePostingLog,
-    marketplacePostingLogFilter,
-    marketplaceProgressPostedFilterButton,
-    marketplaceProgressFailedFilterButton,
-  );
-}
-
 function updateUiPostingStatus(message: UiPostingStatusMessage) {
   if (message.timing) {
     latestGroupsPostingTiming = message.timing;
     renderPostingTiming(message.timing, groupsPostingTimingElements);
   }
   if (
+    message.status === "scheduled" ||
     message.status === "posting" ||
     message.status === "waiting" ||
     message.status === "paused" ||
@@ -5531,6 +1624,8 @@ function updateUiPostingStatus(message: UiPostingStatusMessage) {
     message.status === "failed"
   ) {
     isPostingActive = true;
+    isPostingScheduling = false;
+    isPostingScheduled = message.status === "scheduled";
     isPostingPaused = message.status === "paused";
     if (message.status === "paused") {
       isPauseResumeRequestPending = false;
@@ -5545,22 +1640,22 @@ function updateUiPostingStatus(message: UiPostingStatusMessage) {
     message.status === "rate_limited"
   ) {
     isPostingActive = false;
+    isPostingScheduling = false;
+    isPostingScheduled = false;
     isPostingPaused = false;
     isStopRequestPending = false;
     isPauseResumeRequestPending = false;
-    if (message.status === "done" && !message.error) {
-      preparedPosts.forEach((post) => {
-        post.selected = false;
-      });
-      renderPreparedPosts();
-    }
     updatePostingReadiness();
   } else {
     updatePostingButtonState();
   }
 }
 
-function updatePostingProgress(message: UiPostingStatusMessage) {
+function updatePostingProgress(
+  message: UiPostingStatusMessage,
+  appendLog = true,
+) {
+  latestUiPostingStatusMessage = message;
   if (postingProgress) {
     postingProgress.hidden = false;
   }
@@ -5574,20 +1669,28 @@ function updatePostingProgress(message: UiPostingStatusMessage) {
     Math.min(message.total, successCount + failedCount);
   const hasSuccessTarget = message.successTarget !== undefined;
   const remainingCount = hasSuccessTarget
-    ? Math.max(message.successTarget! - successCount, 0)
+    ? Math.max(message.successTarget! - successCount - failedCount, 0)
     : Math.max(message.total - processedCount, 0);
   const percent = hasSuccessTarget
     ? message.successTarget! > 0
-      ? Math.min(Math.round((successCount / message.successTarget!) * 100), 100)
+      ? Math.min(
+          Math.round(
+            ((successCount + failedCount) / message.successTarget!) * 100,
+          ),
+          100,
+        )
       : 0
     : message.total > 0
       ? Math.round((processedCount / message.total) * 100)
       : 0;
 
   if (postingProgressTitle) {
-    postingProgressTitle.textContent = hasSuccessTarget
-      ? `${successCount}/${message.successTarget} posts submitted`
-      : `${processedCount}/${message.total} groups processed`;
+    postingProgressTitle.textContent =
+      message.status === "scheduled"
+        ? msg("scheduled")
+        : hasSuccessTarget
+          ? msg("postsSubmitted", successCount, message.successTarget ?? 0)
+          : msg("groupsProcessed", processedCount, message.total);
   }
 
   if (postingProgressPercent) {
@@ -5597,6 +1700,7 @@ function updatePostingProgress(message: UiPostingStatusMessage) {
   if (postingProgressBar) {
     postingProgressBar.style.width = `${percent}%`;
   }
+  postingProgressTrack?.setAttribute("aria-valuenow", String(percent));
 
   if (postingProgressSuccess) {
     postingProgressSuccess.textContent = String(postedCount);
@@ -5617,25 +1721,73 @@ function updatePostingProgress(message: UiPostingStatusMessage) {
   if (postingProgressCurrent) {
     const prefix =
       message.current > 0 && message.total > 0
-        ? `Group ${message.current}/${message.total}`
-        : "Queue";
+        ? msg("groupNumber", message.current, message.total)
+        : msg("queue");
     postingProgressCurrent.textContent = message.groupName
       ? `${prefix}: ${message.groupName}`
-      : message.message;
+      : displayPostingMessage(message);
   }
 
-  appendPostingProgressLog(message);
+  if (postingTiming) {
+    postingTiming.hidden = message.status === "scheduled";
+  }
+
+  if (appendLog) appendPostingProgressLog(message);
 }
 
-function appendPostingProgressLog(message: UiPostingStatusMessage) {
+function displayPostingMessage(message: UiPostingStatusMessage): string {
+  if (message.status === "scheduled" && message.scheduledAt) {
+    const date = new Intl.DateTimeFormat(getLocale(), {
+      dateStyle: "medium",
+      timeStyle: "short",
+    }).format(new Date(message.scheduledAt));
+    return msg("scheduledFor", date);
+  }
+  return localizePostingText(message.message);
+}
+
+function localizePostingText(text: string): string {
+  return localizeAppText(text);
+}
+
+function appendPostingProgressLog(
+  message: UiPostingStatusMessage,
+  trackMessage = true,
+) {
   if (!postingProgressLog) {
     return;
   }
 
+  if (trackMessage) {
+    const groupId = message.groupId ?? "queue";
+    if (message.status !== "waiting" && message.status !== "paused") {
+      postingLogMessages = postingLogMessages.filter(
+        (entry) => entry.status !== "waiting",
+      );
+    }
+    const messageIndex =
+      message.status === "waiting" || message.status === "paused"
+        ? postingLogMessages.findIndex(
+            (entry) =>
+              entry.status === message.status &&
+              (entry.groupId ?? "queue") === groupId,
+          )
+        : -1;
+    if (messageIndex >= 0) {
+      postingLogMessages[messageIndex] = message;
+    } else {
+      postingLogMessages.unshift(message);
+    }
+  }
+
   if (message.status !== "waiting" && message.status !== "paused") {
+    const waitingIndex = postingLogMessages.findIndex(
+      (entry) => entry.status === "waiting",
+    );
+    if (waitingIndex >= 0) postingLogMessages.splice(waitingIndex, 1);
     postingProgressLog
-      .querySelectorAll<HTMLLIElement>('li[data-status="waiting"]')
-      .forEach((item) => item.remove());
+      .querySelector<HTMLLIElement>('li[data-status="waiting"]')
+      ?.remove();
   }
 
   const existingUpdatableItem =
@@ -5664,13 +1816,18 @@ function appendPostingProgressLog(message: UiPostingStatusMessage) {
 
   const text = document.createElement("span");
   text.className = "posting-progress__log-text";
-  text.textContent = message.message;
+  text.textContent = displayPostingMessage(message);
   const hasGroupsCompletionSummary =
     message.status === "done" && !message.error && Boolean(message.timing);
   if (hasGroupsCompletionSummary && message.timing) {
     const completedCount = message.successCount ?? 0;
     const failedCount = message.failedCount ?? 0;
-    text.textContent = `Completed ${completedCount} Group ${completedCount === 1 ? "post" : "posts"} in ${formatPostingDurationSummary(message.timing.elapsedMs)}${failedCount > 0 ? ` · ${failedCount} failed` : ""}.`;
+    text.textContent = msg(
+      "completedPosts",
+      completedCount,
+      formatPostingDurationSummary(message.timing.elapsedMs),
+      failedCount > 0 ? msg("failedCount", failedCount) : "",
+    );
   }
 
   body.append(text);
@@ -5678,7 +1835,7 @@ function appendPostingProgressLog(message: UiPostingStatusMessage) {
   if (message.detail) {
     const detail = document.createElement("span");
     detail.className = "posting-progress__log-detail";
-    detail.textContent = message.detail;
+    detail.textContent = localizePostingText(message.detail);
     body.append(detail);
   }
 
@@ -5697,7 +1854,11 @@ function appendPostingProgressLog(message: UiPostingStatusMessage) {
   if (count || message.error || timingMeta) {
     const meta = document.createElement("span");
     meta.className = "posting-progress__log-meta";
-    meta.textContent = [count, timingMeta, message.error]
+    meta.textContent = [
+      count,
+      localizeAppText(timingMeta),
+      message.error ? localizeAppText(message.error) : "",
+    ]
       .filter(Boolean)
       .join(" · ");
     body.append(meta);
@@ -5715,87 +1876,53 @@ function appendPostingProgressLog(message: UiPostingStatusMessage) {
   if (!existingUpdatableItem) {
     postingProgressLog.prepend(item);
   }
-  applyPostingLogFilter(
-    postingProgressLog,
+  item.hidden = !shouldShowPostingLogEntry(
+    message.status,
     groupsPostingLogFilter,
-    postingProgressPostedFilterButton,
-    postingProgressFailedFilterButton,
-    postingProgressPendingFilterButton,
   );
 }
 
 function getPostingStatusLabel(status: UiPostingStatusMessage["status"]) {
   switch (status) {
+    case "scheduled":
+      return msg("scheduled");
     case "posted":
-      return "Done";
+      return msg("done");
     case "pending":
-      return "Pending";
+      return msg("pending");
     case "failed":
-      return "Fail";
+      return msg("fail");
     case "rate_limited":
-      return "Limit";
+      return msg("limit");
     case "waiting":
-      return "Next";
+      return msg("next");
     case "paused":
-      return "Pause";
+      return msg("pause");
     case "stopped":
-      return "Stop";
+      return msg("stop");
     case "done":
-      return "Done";
+      return msg("done");
     case "posting":
-      return "Post";
+      return msg("post");
     default:
-      return "Info";
+      return msg("info");
   }
 }
 
 loadGroupsButton?.addEventListener("click", async () => {
-  if (!hasActiveExtensionAccess()) {
-    showToast("Sign in with Google to continue posting.", "warning");
-    return;
-  }
-
   if (!groupsList || !loadGroupsButton) {
     return;
   }
 
+  const isRefresh = loadedGroups.length > 0;
   loadGroupsButton.disabled = true;
-  loadGroupsButton.textContent = "Loading...";
-  updateGroupsStatus("Finding the groups you have joined...", 0);
-  selectedGroupIds.clear();
-  if (groupsSelectAll) {
-    groupsSelectAll.hidden = true;
-  }
-  if (groupsSelectAllCheckbox) {
-    groupsSelectAllCheckbox.checked = false;
-    groupsSelectAllCheckbox.indeterminate = false;
-  }
-  if (groupsSearchInput) {
-    groupsSearchInput.disabled = true;
-  }
-  groupsList.className = "empty-state";
-  groupsList.textContent = "Opening Facebook to find the groups you have joined...";
-
-  try {
-    const response = await chrome.runtime.sendMessage<
-      { type: "LOAD_GROUPS" },
-      LoadGroupsResponse
-    >({ type: "LOAD_GROUPS" });
-
-    if (!response?.ok) {
-      throw new Error(response?.error ?? "Unable to load groups.");
-    }
-
-    const groups = response.groups ?? [];
-    revealCardFor(groupsList);
-    renderGroups(groups);
-    scheduleSaveSidePanelSession();
-    updateGroupsStatus(
-      `Finished loading ${groups.length} groups.`,
-      groups.length,
-    );
-  } catch (error) {
-    updateGroupsStatus("Could not find your groups. Check that you are signed into Facebook and try again.", 0);
+  loadGroupsButton.textContent = msg("loading");
+  updateGroupsStatus(
+    "Finding the groups you have joined...",
+    isRefresh ? loadedGroups.length : 0,
+  );
+  if (!isRefresh) {
+    selectedGroupIds.clear();
     if (groupsSelectAll) {
       groupsSelectAll.hidden = true;
     }
@@ -5805,18 +1932,58 @@ loadGroupsButton?.addEventListener("click", async () => {
     }
     if (groupsSearchInput) {
       groupsSearchInput.disabled = true;
-      const groupsSearchField =
-        groupsSearchInput.closest<HTMLElement>(".field");
-      if (groupsSearchField) {
-        groupsSearchField.hidden = false;
-      }
     }
     groupsList.className = "empty-state";
-    groupsList.textContent =
-      error instanceof Error ? error.message : "Unable to load groups.";
+    groupsList.textContent = msg("openingFacebookGroups");
+  }
+
+  try {
+    const response = await chrome.runtime.sendMessage<
+      { type: "LOAD_GROUPS" },
+      LoadGroupsResponse
+    >({ type: "LOAD_GROUPS" });
+
+    if (!response?.ok) {
+      throw new Error(response?.error ?? msg("unableToLoadGroups"));
+    }
+
+    const groups = response.groups ?? [];
+
+    renderGroups(groups);
+    scheduleSaveSidePanelSession();
+    updateGroupsStatus(
+      `Finished loading ${groups.length} groups.`,
+      groups.length,
+    );
+  } catch (error) {
+    updateGroupsStatus(
+      "Could not find your groups. Check that you are signed into Facebook and try again.",
+      isRefresh ? loadedGroups.length : 0,
+    );
+    if (!isRefresh) {
+      if (groupsSelectAll) {
+        groupsSelectAll.hidden = true;
+      }
+      if (groupsSelectAllCheckbox) {
+        groupsSelectAllCheckbox.checked = false;
+        groupsSelectAllCheckbox.indeterminate = false;
+      }
+      if (groupsSearchInput) {
+        groupsSearchInput.disabled = true;
+        const groupsSearchField =
+          groupsSearchInput.closest<HTMLElement>(".field");
+        if (groupsSearchField) {
+          groupsSearchField.hidden = false;
+        }
+      }
+      groupsList.className = "empty-state";
+      groupsList.textContent = localizeAppText(
+        error instanceof Error ? error.message : "Unable to load groups.",
+      );
+    }
   } finally {
     loadGroupsButton.disabled = false;
-    loadGroupsButton.textContent = "Find my groups";
+    updateLoadGroupsButtonLabel();
   }
 });
 
@@ -5844,19 +2011,20 @@ function syncPostImagesInput() {
 
 function showGroupsPhotoStatus(message: string, isError = false) {
   if (!groupsPhotoStatus) return;
+  latestGroupsPhotoStatus = message;
+  latestGroupsPhotoStatusIsError = isError;
   groupsPhotoStatus.hidden = false;
-  groupsPhotoStatus.textContent = message;
-  groupsPhotoStatus.classList.toggle(
-    "marketplace-photo-status--error",
-    isError,
-  );
+  groupsPhotoStatus.textContent = localizeAppText(message);
+  groupsPhotoStatus.classList.toggle("photo-status--error", isError);
 }
 
 function hideGroupsPhotoStatus() {
   if (!groupsPhotoStatus) return;
+  latestGroupsPhotoStatus = "";
+  latestGroupsPhotoStatusIsError = false;
   groupsPhotoStatus.hidden = true;
   groupsPhotoStatus.textContent = "";
-  groupsPhotoStatus.classList.remove("marketplace-photo-status--error");
+  groupsPhotoStatus.classList.remove("photo-status--error");
 }
 
 function queueGroupPhotos(files: File[]) {
@@ -5879,22 +2047,259 @@ async function addGroupPhotos(files: File[]) {
   selectedImageFiles.push(...uniqueImages);
   syncPostImagesInput();
   renderImagePreviews();
-  updatePreparedPostSaveButtonState();
-  scheduleSaveSidePanelSession();
+  updatePostingReadiness();
+  scheduleSaveSidePanelSession(true);
 
   const rejectedForType = files.length - imageFiles.length;
   if (rejectedForType > 0) {
     showGroupsPhotoStatus("Only image files can be added.", true);
   } else if (duplicateCount > 0) {
     showGroupsPhotoStatus(
-      `${duplicateCount} duplicate ${duplicateCount === 1 ? "image was" : "images were"} skipped.`,
+      duplicateCount === 1
+        ? `${duplicateCount} duplicate image was skipped.`
+        : `${duplicateCount} duplicate images were skipped.`,
     );
   } else {
     hideGroupsPhotoStatus();
   }
 }
 
+function clearSelectedImageDropTarget() {
+  selectedImageDropTarget?.classList.remove(
+    "photo-preview--drop-before",
+    "photo-preview--drop-after",
+  );
+  selectedImageDropTarget = undefined;
+  selectedImageDropTargetIndex = undefined;
+}
+
+function updateSelectedImageDropTarget() {
+  const pointer = selectedImageDragPointer;
+  if (!pointer || draggedGroupPhotoIndex === undefined || !imagePreviewList) {
+    return;
+  }
+
+  clearSelectedImageDropTarget();
+  const rail = imagePreviewList.querySelector<HTMLElement>(
+    ".image-preview-rail",
+  );
+  if (!rail) return;
+
+  const railBounds = rail.getBoundingClientRect();
+  const step = imagePreviewList.closest<HTMLElement>(".posting-step");
+  const stepBounds = step?.getBoundingClientRect();
+  const clip: DragBounds = {
+    left: Math.max(0, railBounds.left, stepBounds?.left ?? 0),
+    top: Math.max(0, railBounds.top, stepBounds?.top ?? 0),
+    right: Math.min(
+      window.innerWidth,
+      railBounds.right,
+      stepBounds?.right ?? window.innerWidth,
+    ),
+    bottom: Math.min(
+      window.innerHeight,
+      railBounds.bottom,
+      stepBounds?.bottom ?? window.innerHeight,
+    ),
+  };
+  if (clip.right <= clip.left || clip.bottom <= clip.top) return;
+
+  const left = pointer.x - pointer.offsetX;
+  const top = pointer.y - pointer.offsetY;
+  const draggedBounds: DragBounds = {
+    left,
+    top,
+    right: left + pointer.width,
+    bottom: top + pointer.height,
+  };
+  const targets = Array.from(
+    rail.querySelectorAll<HTMLElement>(
+      ".groups-photo-preview, .groups-photo-end-target",
+    ),
+  )
+    .filter(
+      (target) => Number(target.dataset.photoIndex) !== draggedGroupPhotoIndex,
+    )
+    .map((tile) => ({
+      tile,
+      index: Number(tile.dataset.photoIndex),
+      bounds: tile.getBoundingClientRect(),
+    }));
+  const target = overlappingTarget(draggedBounds, targets, clip);
+  if (!target || !Number.isInteger(target.index)) return;
+
+  selectedImageDropTarget = target.tile;
+  selectedImageDropTargetIndex = target.index;
+  selectedImageDropSide =
+    target.tile.dataset.photoEnd !== undefined ||
+    draggedGroupPhotoIndex < target.index
+      ? "after"
+      : "before";
+  target.tile.classList.add(
+    selectedImageDropSide === "before"
+      ? "photo-preview--drop-before"
+      : "photo-preview--drop-after",
+  );
+}
+
+function renderSelectedImageDrag() {
+  selectedImageDragFrame = 0;
+  const pointer = selectedImageDragPointer;
+  if (!pointer || draggedGroupPhotoIndex === undefined) return;
+
+  if (selectedImageDragPreview) {
+    selectedImageDragPreview.style.transform = `translate3d(${pointer.x - pointer.offsetX}px, ${pointer.y - pointer.offsetY}px, 0)`;
+  }
+
+  const step = pointer.element.closest<HTMLElement>(".posting-step");
+  if (step) {
+    const bounds = step.getBoundingClientRect();
+    const edge = 64;
+    const inside =
+      pointer.x >= bounds.left &&
+      pointer.x <= bounds.right &&
+      pointer.y >= bounds.top &&
+      pointer.y <= bounds.bottom;
+    const scroll = !inside
+      ? 0
+      : pointer.y < bounds.top + edge
+        ? -10
+        : pointer.y > bounds.bottom - edge
+          ? 10
+          : 0;
+    if (scroll) step.scrollBy({ top: scroll, behavior: "instant" });
+  }
+
+  updateSelectedImageDropTarget();
+  selectedImageDragFrame = requestAnimationFrame(renderSelectedImageDrag);
+}
+
+function startSelectedImageDrag(event: PointerEvent, index: number) {
+  if (
+    !event.isPrimary ||
+    event.button !== 0 ||
+    selectedImageFiles.length < 2 ||
+    (event.target instanceof Element && event.target.closest("button"))
+  ) {
+    return;
+  }
+
+  resetSelectedImageDrag();
+  const element = event.currentTarget as HTMLElement;
+  const bounds = element.getBoundingClientRect();
+  selectedImageDragPointer = {
+    pointerId: event.pointerId,
+    index,
+    element,
+    startX: event.clientX,
+    startY: event.clientY,
+    x: event.clientX,
+    y: event.clientY,
+    offsetX: event.clientX - bounds.left,
+    offsetY: event.clientY - bounds.top,
+    width: bounds.width,
+    height: bounds.height,
+  };
+  element.setPointerCapture(event.pointerId);
+}
+
+function moveSelectedImagePointer(event: PointerEvent) {
+  const pointer = selectedImageDragPointer;
+  if (!pointer || pointer.pointerId !== event.pointerId) return;
+
+  pointer.x = event.clientX;
+  pointer.y = event.clientY;
+  if (
+    draggedGroupPhotoIndex === undefined &&
+    Math.hypot(pointer.x - pointer.startX, pointer.y - pointer.startY) >= 5
+  ) {
+    const image = pointer.element.querySelector<HTMLImageElement>("img");
+    if (!image) {
+      resetSelectedImageDrag();
+      return;
+    }
+
+    draggedGroupPhotoIndex = pointer.index;
+    pointer.element.classList.add("photo-preview--dragging");
+    const preview = document.createElement("div");
+    preview.className = "photo-drag-preview";
+    preview.setAttribute("aria-hidden", "true");
+    preview.style.width = `${pointer.width}px`;
+    preview.style.height = `${pointer.height}px`;
+    const previewImage = image.cloneNode() as HTMLImageElement;
+    previewImage.alt = "";
+    previewImage.draggable = false;
+    preview.append(previewImage);
+    document.body.append(preview);
+    selectedImageDragPreview = preview;
+    selectedImageDragFrame = requestAnimationFrame(renderSelectedImageDrag);
+  }
+
+  if (draggedGroupPhotoIndex !== undefined) event.preventDefault();
+}
+
+function resetSelectedImageDrag() {
+  const pointer = selectedImageDragPointer;
+  selectedImageDragPointer = null;
+  if (selectedImageDragFrame) {
+    cancelAnimationFrame(selectedImageDragFrame);
+    selectedImageDragFrame = 0;
+  }
+  selectedImageDragPreview?.remove();
+  selectedImageDragPreview = null;
+  clearSelectedImageDropTarget();
+  imagePreviewList
+    ?.querySelectorAll<HTMLElement>(".groups-photo-preview")
+    .forEach((preview) => preview.classList.remove("photo-preview--dragging"));
+  draggedGroupPhotoIndex = undefined;
+  if (pointer?.element.hasPointerCapture(pointer.pointerId)) {
+    pointer.element.releasePointerCapture(pointer.pointerId);
+  }
+}
+
+function getImageMoveDestination(
+  fromIndex: number,
+  targetIndex: number,
+  side: "before" | "after",
+) {
+  let destination = targetIndex + (side === "after" ? 1 : 0);
+  if (fromIndex < destination) destination -= 1;
+  return destination;
+}
+
+function endSelectedImagePointer(event: PointerEvent) {
+  const pointer = selectedImageDragPointer;
+  if (!pointer || pointer.pointerId !== event.pointerId) return;
+
+  pointer.x = event.clientX;
+  pointer.y = event.clientY;
+  if (draggedGroupPhotoIndex !== undefined) {
+    updateSelectedImageDropTarget();
+  }
+  const fromIndex = draggedGroupPhotoIndex;
+  const targetIndex = selectedImageDropTargetIndex;
+  const side = selectedImageDropSide;
+  resetSelectedImageDrag();
+
+  if (fromIndex === undefined) return;
+  suppressNextImagePreviewClick = true;
+  window.setTimeout(() => {
+    suppressNextImagePreviewClick = false;
+  }, 0);
+
+  if (targetIndex === undefined) return;
+  const destination = getImageMoveDestination(fromIndex, targetIndex, side);
+  if (destination === fromIndex) return;
+  moveSelectedImage(fromIndex, destination);
+  imagePreviewList
+    ?.querySelector<HTMLElement>(
+      `.groups-photo-preview[data-photo-index="${destination}"]`,
+    )
+    ?.focus({ preventScroll: true });
+}
+
 function removeSelectedImage(indexToRemove: number) {
+  resetSelectedImageDrag();
   selectedImageFiles = selectedImageFiles.filter(
     (_file, index) => index !== indexToRemove,
   );
@@ -5903,8 +2308,8 @@ function removeSelectedImage(indexToRemove: number) {
   }
   syncPostImagesInput();
   renderImagePreviews();
-  updatePreparedPostSaveButtonState();
-  scheduleSaveSidePanelSession();
+  updatePostingReadiness();
+  scheduleSaveSidePanelSession(true);
 }
 
 function renderImagePreviews() {
@@ -5912,32 +2317,87 @@ function renderImagePreviews() {
     return;
   }
 
+  resetSelectedImageDrag();
   clearImagePreviewUrls();
-  imagePreviewList.classList.toggle(
-    "image-preview-list--grid",
-    selectedImageFiles.length > 0,
-  );
+  const hasImages = selectedImageFiles.length > 0;
+  imagePreviewList.hidden = !hasImages;
+  imagePreviewList.setAttribute("aria-label", msg("imagesSectionTitle"));
+  imagePreviewList.classList.remove("image-preview-list--dragging");
+  imagePreviewList.classList.toggle("image-preview-list--selected", hasImages);
+  groupsPhotoDropzone?.toggleAttribute("hidden", hasImages);
+  imagePreviewsVisible = hasImages;
 
-  if (selectedImageFiles.length === 0) {
-    const emptyState = document.createElement("div");
-    emptyState.className = "empty-state";
-    emptyState.textContent = "No images selected.";
-    imagePreviewList.replaceChildren(emptyState);
+  if (!hasImages) {
+    imagePreviewList.replaceChildren();
     return;
   }
+
+  const heading = document.createElement("div");
+  heading.className = "image-preview-heading";
+
+  const title = document.createElement("strong");
+  title.textContent = msg("imagesSectionTitle");
+
+  const required = document.createElement("span");
+  required.className = "image-preview-required";
+  required.textContent = msg("imagesRequired");
+  heading.append(title, required);
+
+  const imageMeta = document.createElement("div");
+  imageMeta.className = "image-preview-meta";
+
+  const selectedCount = document.createElement("span");
+  selectedCount.className = "image-preview-count";
+  selectedCount.textContent = msg(
+    "selectedImagesCount",
+    selectedImageFiles.length,
+  );
+
+  const addMoreButton = document.createElement("button");
+  addMoreButton.type = "button";
+  addMoreButton.className = "image-preview-add";
+  addMoreButton.setAttribute("aria-label", msg("addMorePhotos"));
+
+  const addMoreIcon = document.createElementNS(
+    "http://www.w3.org/2000/svg",
+    "svg",
+  );
+  addMoreIcon.setAttribute("viewBox", "0 0 24 24");
+  addMoreIcon.setAttribute("fill", "none");
+  addMoreIcon.setAttribute("stroke", "currentColor");
+  addMoreIcon.setAttribute("stroke-width", "2");
+  addMoreIcon.setAttribute("stroke-linecap", "round");
+  addMoreIcon.setAttribute("aria-hidden", "true");
+
+  const addMoreIconPath = document.createElementNS(
+    "http://www.w3.org/2000/svg",
+    "path",
+  );
+  addMoreIconPath.setAttribute("d", "M12 5v14M5 12h14");
+  addMoreIcon.append(addMoreIconPath);
+
+  const addMoreLabel = document.createElement("span");
+  addMoreLabel.textContent = msg("addMorePhotos");
+  addMoreButton.append(addMoreIcon, addMoreLabel);
+  addMoreButton.addEventListener("click", () => postImagesInput?.click());
+
+  imageMeta.append(selectedCount, addMoreButton);
+
+  const previewRail = document.createElement("div");
+  previewRail.className = "photo-previews image-preview-rail";
 
   const previews = selectedImageFiles.map((file, index) => {
     const previewUrl = URL.createObjectURL(file);
     selectedImagePreviewUrls.push(previewUrl);
 
     const preview = document.createElement("figure");
-    preview.className = "marketplace-photo-preview groups-photo-preview";
-    preview.draggable = true;
+    preview.className = "photo-preview groups-photo-preview";
+    preview.draggable = false;
     preview.tabIndex = 0;
     preview.dataset.photoIndex = String(index);
     preview.setAttribute(
       "aria-label",
-      `Image ${index + 1} of ${selectedImageFiles.length}. Click to preview or drag to reorder.`,
+      msg("imagePreviewReorder", index + 1, selectedImageFiles.length),
     );
 
     const image = document.createElement("img");
@@ -5945,13 +2405,14 @@ function renderImagePreviews() {
     image.alt = file.name;
     image.draggable = false;
     image.addEventListener("click", () => {
+      if (suppressNextImagePreviewClick) return;
       openGroupsPhotoLightbox(index, preview);
     });
 
     const removeButton = document.createElement("button");
     removeButton.type = "button";
-    removeButton.className = "marketplace-photo-preview__remove";
-    removeButton.setAttribute("aria-label", `Remove ${file.name}`);
+    removeButton.className = "photo-preview__remove";
+    removeButton.setAttribute("aria-label", msg("removeImage", file.name));
 
     const removeIcon = document.createElementNS(
       "http://www.w3.org/2000/svg",
@@ -5977,58 +2438,41 @@ function renderImagePreviews() {
       removeSelectedImage(index);
     });
 
-    preview.addEventListener("dragstart", (event) => {
-      if (event.target instanceof Element && event.target.closest("button")) {
-        event.preventDefault();
-        return;
-      }
-      draggedGroupPhotoIndex = index;
-      preview.classList.add("marketplace-photo-preview--dragging");
-      if (event.dataTransfer) {
-        event.dataTransfer.effectAllowed = "move";
-        event.dataTransfer.setData("text/plain", String(index));
+    preview.addEventListener("pointerdown", (event) =>
+      startSelectedImageDrag(event, index),
+    );
+    preview.addEventListener("lostpointercapture", () => {
+      if (selectedImageDragPointer?.element === preview) {
+        resetSelectedImageDrag();
       }
     });
-
-    preview.addEventListener("dragover", (event) => {
-      if (
-        draggedGroupPhotoIndex === undefined ||
-        draggedGroupPhotoIndex === index
-      ) {
-        return;
-      }
-      event.preventDefault();
-      preview.classList.add("marketplace-photo-preview--drop-target");
-      if (event.dataTransfer) {
-        event.dataTransfer.dropEffect = "move";
-      }
-    });
-
-    preview.addEventListener("dragleave", () => {
-      preview.classList.remove("marketplace-photo-preview--drop-target");
-    });
-
-    preview.addEventListener("drop", (event) => {
-      event.preventDefault();
-      preview.classList.remove("marketplace-photo-preview--drop-target");
-      if (draggedGroupPhotoIndex !== undefined) {
-        moveSelectedImage(draggedGroupPhotoIndex, index);
-      }
-    });
-
-    preview.addEventListener("dragend", () => {
-      draggedGroupPhotoIndex = undefined;
-      imagePreviewList
-        .querySelectorAll<HTMLElement>(".groups-photo-preview")
-        .forEach((candidate) => {
-          candidate.classList.remove(
-            "marketplace-photo-preview--dragging",
-            "marketplace-photo-preview--drop-target",
-          );
-        });
-    });
+    preview.addEventListener("dragstart", (event) => event.preventDefault());
 
     preview.addEventListener("keydown", (event) => {
+      if (
+        event.target === preview &&
+        event.altKey &&
+        (event.key === "ArrowLeft" || event.key === "ArrowRight")
+      ) {
+        event.preventDefault();
+        const destination = Math.max(
+          0,
+          Math.min(
+            selectedImageFiles.length - 1,
+            index + (event.key === "ArrowLeft" ? -1 : 1),
+          ),
+        );
+        if (destination !== index) {
+          moveSelectedImage(index, destination);
+          imagePreviewList
+            .querySelector<HTMLElement>(
+              `.groups-photo-preview[data-photo-index="${destination}"]`,
+            )
+            ?.focus();
+        }
+        return;
+      }
+
       if (
         event.target === preview &&
         (event.key === "Enter" || event.key === " ")
@@ -6042,8 +2486,25 @@ function renderImagePreviews() {
     return preview;
   });
 
-  imagePreviewList.replaceChildren(...previews);
+  previewRail.replaceChildren(...previews);
+  if (selectedImageFiles.length > 1 && selectedImageFiles.length < 4) {
+    const endTarget = document.createElement("div");
+    endTarget.className = "groups-photo-end-target";
+    endTarget.dataset.photoIndex = String(selectedImageFiles.length - 1);
+    endTarget.dataset.photoEnd = "";
+    endTarget.setAttribute("aria-hidden", "true");
+    previewRail.append(endTarget);
+  }
+  imagePreviewList.replaceChildren(heading, imageMeta, previewRail);
 }
+
+window.addEventListener("pointermove", moveSelectedImagePointer);
+window.addEventListener("pointerup", endSelectedImagePointer);
+window.addEventListener("pointercancel", resetSelectedImageDrag);
+window.addEventListener("blur", resetSelectedImageDrag);
+window.addEventListener("keydown", (event) => {
+  if (event.key === "Escape") resetSelectedImageDrag();
+});
 
 function moveSelectedImage(fromIndex: number, toIndex: number) {
   if (
@@ -6064,335 +2525,11 @@ function moveSelectedImage(fromIndex: number, toIndex: number) {
   draggedGroupPhotoIndex = undefined;
   syncPostImagesInput();
   renderImagePreviews();
-  scheduleSaveSidePanelSession();
-}
-
-function renderPreparedPosts() {
-  if (!preparedPostsList) {
-    return;
-  }
-
-  const selectedCount = preparedPosts.filter((post) => post.selected).length;
-
-  if (preparedPostsCount) {
-    preparedPostsCount.textContent = `${selectedCount} of ${preparedPosts.length} reusable posts selected`;
-  }
-
-  if (preparedPostsSelectAll) {
-    preparedPostsSelectAll.hidden = preparedPosts.length === 0;
-  }
-
-  if (preparedPostsSelectAllCheckbox) {
-    preparedPostsSelectAllCheckbox.checked =
-      preparedPosts.length > 0 && selectedCount === preparedPosts.length;
-    preparedPostsSelectAllCheckbox.indeterminate =
-      selectedCount > 0 && selectedCount < preparedPosts.length;
-  }
-
-  if (preparedPosts.length === 0) {
-    preparedPostsList.className = "empty-state";
-    preparedPostsList.textContent = "Add your first reusable post above.";
-    updatePostingReadiness();
-    updatePreparedPostSaveButtonState();
-    return;
-  }
-
-  const cards = preparedPosts.map((post) => {
-    const card = document.createElement("article");
-    card.className = "prepared-post-card";
-    card.classList.toggle("prepared-post-card--selected", post.selected);
-
-    const selection = document.createElement("label");
-    selection.className = "prepared-post-card__selection";
-
-    const checkbox = document.createElement("input");
-    checkbox.type = "checkbox";
-    checkbox.checked = post.selected;
-    checkbox.addEventListener("change", () => {
-      post.selected = checkbox.checked;
-      renderPreparedPosts();
-      scheduleSaveSidePanelSession();
-    });
-
-    const thumbnail = document.createElement("div");
-    thumbnail.className = "prepared-post-card__thumbnail";
-    const firstImage = post.images[0];
-    if (firstImage) {
-      const thumbnailImage = document.createElement("img");
-      thumbnailImage.src = firstImage.dataUrl;
-      thumbnailImage.alt = "";
-      thumbnailImage.loading = "lazy";
-      thumbnail.append(thumbnailImage);
-    } else {
-      thumbnail.classList.add("prepared-post-card__thumbnail--empty");
-      thumbnail.textContent = "Aa";
-      thumbnail.setAttribute("aria-label", "Text-only post");
-    }
-
-    const title = document.createElement("strong");
-    const titleExcerpt = Array.from(post.body.trim().replace(/\s+/g, " "))
-      .slice(0, 50).join("").trimEnd();
-    title.textContent = `${titleExcerpt}…`;
-
-    const mediaCount = document.createElement("span");
-    mediaCount.textContent = `${post.images.length} ${
-      post.images.length === 1 ? "image" : "images"
-    }`;
-
-    selection.append(checkbox, thumbnail, title, mediaCount);
-
-    const excerpt = document.createElement("p");
-    excerpt.className = "prepared-post-card__excerpt";
-    excerpt.textContent = post.body;
-
-    const actions = document.createElement("div");
-    actions.className = "prepared-post-card__actions";
-
-    const editButton = document.createElement("button");
-    editButton.type = "button";
-    editButton.className = "button-89";
-    editButton.textContent = "Edit";
-    editButton.disabled = isMarketplacePostingActive;
-    editButton.disabled = isMarketplacePostingActive;
-    editButton.addEventListener("click", () => editPreparedPost(post.id));
-
-    const deleteButton = document.createElement("button");
-    deleteButton.type = "button";
-    deleteButton.className = "prepared-post-card__delete button-89 button-89--danger";
-    deleteButton.textContent = "Delete";
-    deleteButton.addEventListener("click", () => {
-      void deletePreparedPost(post.id, deleteButton, card);
-    });
-
-    actions.append(editButton, deleteButton);
-    card.append(selection, excerpt, actions);
-    return card;
-  });
-
-  preparedPostsList.className = "prepared-posts-list";
-  preparedPostsList.replaceChildren(...cards);
-  updatePostingReadiness();
-  updatePreparedPostSaveButtonState();
-}
-
-function editPreparedPost(postId: string) {
-  const post = preparedPosts.find((candidate) => candidate.id === postId);
-  if (!post || !postBodyInput) {
-    return;
-  }
-
-  editingPreparedPostId = post.id;
-  postBodyInput.value = post.body;
-  selectedImageFiles = post.images.map((image) =>
-    dataUrlToFile(image.dataUrl, image.name, image.type),
-  );
-  imagePreviewsVisible = false;
-  syncPostImagesInput();
-  renderImagePreviews();
-
-  if (savePreparedPostButton) {
-    savePreparedPostButton.textContent = "Save";
-  }
-  updatePreparedPostSaveButtonState();
-  if (cancelPostEditButton) {
-    cancelPostEditButton.hidden = false;
-  }
-
-  revealCardFor(postBodyInput);
-  postBodyInput.focus();
-  postBodyInput.scrollIntoView({ behavior: "smooth", block: "center" });
-}
-
-async function deletePreparedPost(
-  postId: string,
-  button: HTMLButtonElement,
-  card: HTMLElement,
-) {
-  const confirmed = await requestDeleteConfirmation(
-    "Delete reusable post?",
-    "This permanently removes the reusable post and all of its photos.",
-  );
-  if (!confirmed) {
-    return;
-  }
-  button.disabled = true;
-  button.textContent = "Deleting…";
-  card.classList.add("prepared-post-card--deleting");
-  card.setAttribute("aria-busy", "true");
-  try {
-    const response = await fetch(
-      `${AUTH_API_BASE_URL}/api/group-posts/${encodeURIComponent(postId)}`,
-      { method: "DELETE", headers: authenticatedRequestHeaders() },
-    );
-    if (!response.ok) {
-      throw new Error(await readApiError(response, "Unable to delete post."));
-    }
-    preparedPosts = preparedPosts.filter((post) => post.id !== postId);
-    if (editingPreparedPostId === postId) {
-      clearPreparedPostEditor();
-    }
-    card.remove();
-    renderPreparedPosts();
-    await refreshAccessEntitlements();
-    showToast("Reusable post deleted.", "success");
-  } catch (error) {
-    button.disabled = false;
-    button.textContent = "Delete";
-    card.classList.remove("prepared-post-card--deleting");
-    card.removeAttribute("aria-busy");
-    showToast(
-      error instanceof Error ? error.message : "Unable to delete post.",
-      "error",
-    );
-  }
-}
-
-function clearPreparedPostEditor() {
-  editingPreparedPostId = undefined;
-  if (postBodyInput) {
-    postBodyInput.value = "";
-  }
-  selectedImageFiles = [];
-  imagePreviewsVisible = false;
-  syncPostImagesInput();
-  renderImagePreviews();
-  hideGroupsPhotoStatus();
-
-  if (savePreparedPostButton) {
-    savePreparedPostButton.textContent = "Save";
-  }
-  updatePreparedPostSaveButtonState();
-  if (cancelPostEditButton) {
-    cancelPostEditButton.hidden = true;
-  }
-}
-
-async function savePreparedPost() {
-  const body = postBodyInput?.value.trim() ?? "";
-  if (!body || selectedImageFiles.length === 0) {
-    showToast(
-      "Add a post body and at least one image before saving the reusable post.",
-      "warning",
-    );
-    return;
-  }
-
-  if (savePreparedPostButton) {
-    savePreparedPostButton.disabled = true;
-    savePreparedPostButton.textContent = "Saving...";
-  }
-
-  try {
-    const form = new FormData();
-    form.set("body", body);
-    selectedImageFiles.forEach((file) =>
-      form.append("images", file, file.name),
-    );
-    const editingId = editingPreparedPostId;
-    const response = await fetch(
-      editingId
-        ? `${AUTH_API_BASE_URL}/api/group-posts/${encodeURIComponent(editingId)}`
-        : `${AUTH_API_BASE_URL}/api/group-posts`,
-      {
-        method: editingId ? "PUT" : "POST",
-        headers: authenticatedRequestHeaders(),
-        body: form,
-      },
-    );
-    if (!response.ok) {
-      throw new Error(
-        await readApiError(response, "Unable to save the reusable post."),
-      );
-    }
-
-    clearPreparedPostEditor();
-    await Promise.all([loadCloudPreparedPosts(), refreshAccessEntitlements()]);
-    showToast(
-      editingId ? "Reusable post updated." : "Reusable post added.",
-      "success",
-    );
-  } catch (error) {
-    showToast(
-      error instanceof Error
-        ? error.message
-        : "Unable to save the reusable post.",
-      "error",
-    );
-    if (savePreparedPostButton) {
-      savePreparedPostButton.textContent = "Save";
-      updatePreparedPostSaveButtonState();
-    }
-  }
-}
-
-type CloudGroupPost = {
-  id: string;
-  body: string;
-  images: { url: string; position: number }[];
-};
-
-async function loadCloudPreparedPosts() {
-  try {
-    const response = await fetch(`${AUTH_API_BASE_URL}/api/group-posts`, {
-      headers: authenticatedRequestHeaders(),
-    });
-    if (!response.ok) {
-      throw new Error(
-        await readApiError(response, "Unable to load reusable posts."),
-      );
-    }
-    const payload = (await response.json()) as { posts?: CloudGroupPost[] };
-    const posts = Array.isArray(payload.posts) ? payload.posts : [];
-    preparedPosts = await Promise.all(
-      posts.map(async (post) => ({
-        id: post.id,
-        body: post.body,
-        images: await Promise.all(
-          [...post.images]
-            .sort((left, right) => left.position - right.position)
-            .map(cloudImageToUiPostImage),
-        ),
-        selected: true,
-      })),
-    );
-    renderPreparedPosts();
-  } catch (error) {
-    console.error("Unable to load reusable posts", error);
-    showToast(
-      error instanceof Error ? error.message : "Unable to load reusable posts.",
-      "error",
-    );
-  }
-}
-
-async function cloudImageToUiPostImage(image: {
-  url: string;
-}): Promise<UiPostImage> {
-  const response = await fetch(image.url);
-  if (!response.ok) {
-    throw new Error("Unable to download a reusable post image.");
-  }
-  const blob = await response.blob();
-  const pathname = new URL(image.url).pathname;
-  const name =
-    decodeURIComponent(pathname.slice(pathname.lastIndexOf("/") + 1)) ||
-    "prepared-post-image";
-  return fileToUiPostImage(new File([blob], name, { type: blob.type }));
-}
-
-async function readApiError(response: Response, fallback: string) {
-  const payload = (await response.json().catch(() => ({}))) as {
-    error?: string;
-  };
-  return payload.error ?? fallback;
+  scheduleSaveSidePanelSession(true);
 }
 
 postImagesInput?.addEventListener("change", () => {
   queueGroupPhotos(Array.from(postImagesInput.files ?? []));
-});
-
-postBodyInput?.addEventListener("input", () => {
-  updatePreparedPostSaveButtonState();
 });
 
 groupsPhotoDropzone?.addEventListener("keydown", (event) => {
@@ -6430,22 +2567,40 @@ groupsPhotoDropzone?.addEventListener("drop", (event) => {
   queueGroupPhotos(Array.from(event.dataTransfer?.files ?? []));
 });
 
-savePreparedPostButton?.addEventListener("click", () => {
-  void savePreparedPost();
+imagePreviewList?.addEventListener("dragenter", (event) => {
+  if (!Array.from(event.dataTransfer?.types ?? []).includes("Files")) {
+    return;
+  }
+  event.preventDefault();
+  imagePreviewList.classList.add("image-preview-list--dragging");
 });
 
-cancelPostEditButton?.addEventListener("click", () => {
-  clearPreparedPostEditor();
-  scheduleSaveSidePanelSession();
+imagePreviewList?.addEventListener("dragover", (event) => {
+  if (!Array.from(event.dataTransfer?.types ?? []).includes("Files")) {
+    return;
+  }
+  event.preventDefault();
+  if (event.dataTransfer) {
+    event.dataTransfer.dropEffect = "copy";
+  }
 });
 
-preparedPostsSelectAllCheckbox?.addEventListener("change", () => {
-  const selected = preparedPostsSelectAllCheckbox.checked;
-  preparedPosts.forEach((post) => {
-    post.selected = selected;
-  });
-  renderPreparedPosts();
-  scheduleSaveSidePanelSession();
+imagePreviewList?.addEventListener("dragleave", (event) => {
+  if (
+    event.relatedTarget instanceof Node &&
+    imagePreviewList.contains(event.relatedTarget)
+  ) {
+    return;
+  }
+  imagePreviewList.classList.remove("image-preview-list--dragging");
+});
+
+imagePreviewList?.addEventListener("drop", (event) => {
+  const files = Array.from(event.dataTransfer?.files ?? []);
+  if (files.length === 0) return;
+  event.preventDefault();
+  imagePreviewList.classList.remove("image-preview-list--dragging");
+  queueGroupPhotos(files);
 });
 
 groupsSelectAllCheckbox?.addEventListener("change", () => {
@@ -6467,86 +2622,6 @@ groupsSearchInput?.addEventListener("input", () => {
   scheduleSaveSidePanelSession();
 });
 
-marketplaceListingsSelectAllCheckbox?.addEventListener("change", () => {
-  const itemIds = savedMarketplaceListings
-    .filter(isSupportedMarketplacePostingListing)
-    .map((listing) => listing.id);
-  if (marketplaceListingsSelectAllCheckbox.checked) {
-    selectedMarketplaceListingIds = new Set(itemIds);
-  } else {
-    selectedMarketplaceListingIds.clear();
-  }
-  renderMarketplaceListings();
-});
-
-marketplaceCleanupDaysInput?.addEventListener("input", () => {
-  const digitsOnly = marketplaceCleanupDaysInput.value.replace(/[^0-9]/g, "");
-  if (marketplaceCleanupDaysInput.value !== digitsOnly) {
-    marketplaceCleanupDaysInput.value = digitsOnly;
-  }
-  updateMarketplaceCleanupControls();
-});
-
-deleteOldMarketplaceListingsButton?.addEventListener("click", async () => {
-  const rawDays = marketplaceCleanupDaysInput?.value.trim() ?? "";
-  const daysOld = Number(rawDays);
-  if (!/^\d+$/.test(rawDays) || !Number.isSafeInteger(daysOld) || daysOld < 0) {
-    updateMarketplaceCleanupControls();
-    return;
-  }
-  const confirmed = await requestDeleteConfirmation(
-    "Delete old Marketplace listings?",
-    daysOld === 0
-      ? "This permanently deletes every active listing currently found in your Facebook Marketplace account, including listings created today. This cannot be undone."
-      : `This permanently deletes every active listing in your Facebook Marketplace account that is older than ${daysOld} ${daysOld === 1 ? "day" : "days"}. This cannot be undone.`,
-  );
-  if (!confirmed) return;
-
-  isMarketplaceCleanupActive = true;
-  if (marketplaceCleanupProgress) marketplaceCleanupProgress.hidden = false;
-  marketplaceCleanupLog?.replaceChildren();
-  if (marketplaceCleanupCount)
-    marketplaceCleanupCount.textContent = "0 listings scanned";
-  if (marketplaceCleanupPercent) marketplaceCleanupPercent.textContent = "0%";
-  if (marketplaceCleanupProgressBar)
-    marketplaceCleanupProgressBar.style.width = "0%";
-  if (marketplaceCleanupDeleted) marketplaceCleanupDeleted.textContent = "0";
-  if (marketplaceCleanupFailed) marketplaceCleanupFailed.textContent = "0";
-  if (marketplaceCleanupRemaining)
-    marketplaceCleanupRemaining.textContent = "0";
-  if (marketplaceCleanupMessage) {
-    marketplaceCleanupMessage.textContent = "Preparing Marketplace cleanup…";
-  }
-  updateMarketplaceCleanupControls();
-  renderMarketplaceListings();
-  scrollProgressPanelToBottom(marketplaceCleanupProgress);
-
-  try {
-    const response = await chrome.runtime.sendMessage<
-      DeleteOldMarketplaceListingsRequest,
-      UiPostingResponse
-    >({
-      type: "DELETE_OLD_MARKETPLACE_LISTINGS",
-      daysOld,
-    });
-    if (!response?.ok) {
-      throw new Error(
-        response?.error ?? "Unable to start Marketplace cleanup.",
-      );
-    }
-  } catch (error) {
-    isMarketplaceCleanupActive = false;
-    if (marketplaceCleanupMessage) {
-      marketplaceCleanupMessage.textContent =
-        error instanceof Error
-          ? error.message
-          : "Unable to start Marketplace cleanup.";
-    }
-    updateMarketplaceCleanupControls();
-    renderMarketplaceListings();
-  }
-});
-
 postingProgressPostedFilterButton?.addEventListener("click", () => {
   toggleGroupsPostingLogFilter("posted");
 });
@@ -6556,377 +2631,9 @@ postingProgressPendingFilterButton?.addEventListener("click", () => {
 postingProgressFailedFilterButton?.addEventListener("click", () => {
   toggleGroupsPostingLogFilter("failed");
 });
-marketplaceProgressPostedFilterButton?.addEventListener("click", () => {
-  toggleMarketplacePostingLogFilter("posted");
-});
-marketplaceProgressFailedFilterButton?.addEventListener("click", () => {
-  toggleMarketplacePostingLogFilter("failed");
-});
-
-marketplaceIntervalMinInput?.addEventListener("change", () => {
-  normalizeMarketplacePostingInterval();
-  void saveMarketplacePostingSettings();
-});
-marketplaceIntervalMaxInput?.addEventListener("change", () => {
-  normalizeMarketplacePostingInterval();
-  void saveMarketplacePostingSettings();
-});
-marketplaceGeminiApiKeyInput?.addEventListener("input", () => {
-  if (geminiApiKeyInput) {
-    geminiApiKeyInput.value = marketplaceGeminiApiKeyInput.value;
-  }
-});
-marketplaceGeminiApiKeyInput?.addEventListener("change", () => {
-  void saveMarketplacePostingSettings();
-});
-marketplaceGeminiApiKeyInput?.addEventListener("blur", () => {
-  void saveMarketplacePostingSettings();
-});
-marketplaceGeminiPromptInput?.addEventListener("change", () => {
-  void saveMarketplacePostingSettings();
-});
-marketplaceGeminiPromptInput?.addEventListener("blur", () => {
-  void saveMarketplacePostingSettings();
-});
-marketplaceGeminiRewriteToggle?.addEventListener("change", () => {
-  void saveMarketplacePostingSettings();
-});
-marketplaceShuffleItemsToggle?.addEventListener("change", () => {
-  void saveMarketplacePostingSettings();
-});
-postSelectedMarketplaceItemsButton?.addEventListener("click", () => {
-  const selectedListings = savedMarketplaceListings.filter(
-    (listing) =>
-      isSupportedMarketplacePostingListing(listing) &&
-      selectedMarketplaceListingIds.has(listing.id),
-  );
-  void startMarketplaceItemQueue(selectedListings).catch((error: unknown) => {
-    showMarketplaceSaveListingStatus(
-      error instanceof Error
-        ? error.message
-        : "Could not start Marketplace posting. Please try again.",
-      true,
-    );
-    if (marketplacePostingStatusMessage) {
-      marketplacePostingStatusMessage.textContent =
-        error instanceof Error
-          ? error.message
-          : "Could not start Marketplace posting. Please try again.";
-    }
-  });
-});
-
-pauseMarketplacePostingButton?.addEventListener("click", async () => {
-  if (
-    !isMarketplacePostingActive ||
-    isMarketplacePauseRequestPending ||
-    isMarketplaceStopRequestPending
-  ) {
-    return;
-  }
-  const shouldResume = isMarketplacePostingPaused;
-  isMarketplacePauseRequestPending = true;
-  setMarketplacePostingActive(true);
-  try {
-    const request:
-      | PauseMarketplacePostingRequest
-      | ResumeMarketplacePostingRequest = {
-      type: shouldResume
-        ? "RESUME_MARKETPLACE_POSTING"
-        : "PAUSE_MARKETPLACE_POSTING",
-    };
-    const response = await chrome.runtime.sendMessage<
-      PauseMarketplacePostingRequest | ResumeMarketplacePostingRequest,
-      UiPostingResponse
-    >(request);
-    if (!response?.ok) {
-      throw new Error(response?.error ?? "Could not pause or resume Marketplace posting. Please try again.");
-    }
-    isMarketplacePostingPaused = !shouldResume;
-  } catch (error) {
-    if (marketplacePostingStatusMessage) {
-      marketplacePostingStatusMessage.textContent =
-        error instanceof Error
-          ? error.message
-          : "Could not pause or resume Marketplace posting. Please try again.";
-    }
-  } finally {
-    isMarketplacePauseRequestPending = false;
-    setMarketplacePostingActive(isMarketplacePostingActive);
-  }
-});
-
-stopMarketplacePostingButton?.addEventListener("click", async () => {
-  if (!isMarketplacePostingActive || isMarketplaceStopRequestPending) {
-    return;
-  }
-  isMarketplaceStopRequestPending = true;
-  setMarketplacePostingActive(true);
-  try {
-    const response = await chrome.runtime.sendMessage<
-      StopMarketplacePostingRequest,
-      UiPostingResponse
-    >({ type: "STOP_MARKETPLACE_POSTING" });
-    if (!response?.ok) {
-      throw new Error(response?.error ?? "Could not stop Marketplace posting. Please try again.");
-    }
-  } catch (error) {
-    isMarketplaceStopRequestPending = false;
-    if (marketplacePostingStatusMessage) {
-      marketplacePostingStatusMessage.textContent =
-        error instanceof Error
-          ? error.message
-          : "Could not stop Marketplace posting. Please try again.";
-    }
-    setMarketplacePostingActive(true);
-  }
-});
-
-geminiApiKeyInput?.addEventListener("input", () => {
-  updateGeminiStatus();
-});
-
-geminiApiKeyInput?.addEventListener("change", () => {
-  void saveGeminiApiKey();
-});
-
-geminiApiKeyInput?.addEventListener("blur", () => {
-  void saveGeminiApiKey();
-});
-
-geminiCustomPromptInput?.addEventListener("change", () => {
-  void saveGeminiCustomPrompt();
-});
-
-geminiCustomPromptInput?.addEventListener("blur", () => {
-  void saveGeminiCustomPrompt();
-});
-
-geminiRewriteToggle?.addEventListener("change", () => {
-  void saveGeminiRewriteEnabled();
-  updateGeminiStatus();
-});
-
 
 postIntervalMinInput?.addEventListener("change", normalizePostingInterval);
 postIntervalMaxInput?.addEventListener("change", normalizePostingInterval);
-
-maxPostsInput?.addEventListener("change", () => {
-  const value = Number(maxPostsInput.value);
-
-  if (!Number.isInteger(value) || value < MIN_MAX_POSTS) {
-    maxPostsInput.value = String(DEFAULT_MAX_POSTS);
-    proMaxPostsPreference = DEFAULT_MAX_POSTS;
-  } else if (currentExtensionAccess?.access.tier !== "free") {
-    proMaxPostsPreference = value;
-  }
-
-  updatePostingReadiness();
-  scheduleSaveSidePanelSession();
-});
-
-function setGroupCommentSyncStatus(message: string, retry = false) {
-  if (groupCommentSyncStatus) groupCommentSyncStatus.textContent = message;
-  if (groupCommentRetryButton) groupCommentRetryButton.hidden = !retry;
-}
-
-function parseGroupCommentSettings(value: unknown): GroupCommentSettings | undefined {
-  if (!value || typeof value !== "object") return undefined;
-  const settings = value as Partial<GroupCommentSettings>;
-  if (typeof settings.enabled !== "boolean" || !Array.isArray(settings.options) ||
-      !settings.options.every((option) => typeof option === "string")) return undefined;
-  return { enabled: settings.enabled, options: settings.options };
-}
-
-async function loadCloudGroupCommentSettings() {
-  const access = currentExtensionAccess;
-  if (!access?.active) return;
-  const generation = ++groupCommentSettingsGeneration;
-  groupCommentSettingsLoaded = false;
-  groupCommentOptions = [...DEFAULT_GROUP_COMMENT_OPTIONS];
-  if (groupCommentEnabledToggle) groupCommentEnabledToggle.checked = false;
-  renderGroupCommentOptions();
-  setGroupCommentSyncStatus("Loading your saved comments…");
-  try {
-    await groupCommentSaveQueue;
-    if (generation !== groupCommentSettingsGeneration) return;
-    const headers = { Authorization: `Bearer ${access.sessionToken}` };
-    const response = await fetch(`${AUTH_API_BASE_URL}/api/group-comment-settings`, { headers });
-    const payload = await response.json();
-    if (!response.ok) throw new Error(payload.error ?? "Unable to load comment settings.");
-    let settings = parseGroupCommentSettings(payload.settings);
-    if (payload.settings === null) {
-      if (generation !== groupCommentSettingsGeneration) return;
-      // Browser-local comments without a recorded owner must not be imported
-      // into whichever Google account happens to sign in next.
-      const initial: GroupCommentSettings = legacyGroupCommentSettings?.ownerUserId === access.user.id
-        ? { enabled: legacyGroupCommentSettings.enabled, options: [...legacyGroupCommentSettings.options] }
-        : { enabled: false, options: [...DEFAULT_GROUP_COMMENT_OPTIONS] };
-      const created = await fetch(`${AUTH_API_BASE_URL}/api/group-comment-settings`, {
-        method: "POST", headers: { ...headers, "Content-Type": "application/json" },
-        body: JSON.stringify(initial),
-      });
-      const result = await created.json();
-      if (!created.ok) throw new Error(result.error ?? "Unable to save comment settings.");
-      settings = parseGroupCommentSettings(result.settings);
-    }
-    if (!settings) throw new Error("Invalid comment settings response.");
-    if (generation !== groupCommentSettingsGeneration || currentExtensionAccess?.user.id !== access.user.id) return;
-    groupCommentOptions = settings.options.length ? settings.options : [""];
-    if (groupCommentEnabledToggle) groupCommentEnabledToggle.checked = settings.enabled;
-    groupCommentSettingsLoaded = true;
-    groupCommentSavedVersion = groupCommentEditVersion;
-    if (legacyGroupCommentSettings?.ownerUserId === access.user.id) legacyGroupCommentSettings = undefined;
-    renderGroupCommentOptions();
-    setGroupCommentSyncStatus("Saved to your Google account.");
-    await saveSidePanelSession();
-  } catch (error) {
-    if (generation !== groupCommentSettingsGeneration) return;
-    setGroupCommentSyncStatus(error instanceof Error ? error.message : "Unable to load comments.", true);
-  }
-}
-
-function scheduleSaveGroupCommentSettings() {
-  groupCommentEditVersion++;
-  setGroupCommentSyncStatus("Unsaved changes…");
-  if (groupCommentSaveTimer !== undefined) window.clearTimeout(groupCommentSaveTimer);
-  groupCommentSaveTimer = window.setTimeout(() => {
-    groupCommentSaveTimer = undefined;
-    void flushGroupCommentSettingsSave();
-  }, 500);
-}
-
-function flushGroupCommentSettingsSave(): Promise<void> {
-  if (groupCommentSaveTimer !== undefined) {
-    window.clearTimeout(groupCommentSaveTimer);
-    groupCommentSaveTimer = undefined;
-  }
-  const access = currentExtensionAccess;
-  if (!groupCommentSettingsLoaded || !access?.active) return groupCommentSaveQueue;
-  if (groupCommentEditVersion === groupCommentSavedVersion) return groupCommentSaveQueue;
-  const generation = groupCommentSettingsGeneration;
-  const version = groupCommentEditVersion;
-  const settings: GroupCommentSettings = {
-    enabled: Boolean(groupCommentEnabledToggle?.checked), options: [...groupCommentOptions],
-  };
-  const body = JSON.stringify(settings);
-  groupCommentSaveQueue = groupCommentSaveQueue.then(async () => {
-    if (generation !== groupCommentSettingsGeneration || version <= groupCommentSavedVersion) return;
-    setGroupCommentSyncStatus("Saving to your account…");
-    try {
-      const response = await fetch(`${AUTH_API_BASE_URL}/api/group-comment-settings`, {
-        method: "PUT",
-        headers: { Authorization: `Bearer ${access.sessionToken}`, "Content-Type": "application/json" },
-        body,
-        keepalive: new TextEncoder().encode(body).byteLength <= 60_000,
-      });
-      if (!response.ok) {
-        const payload = await response.json().catch(() => ({}));
-        throw new Error(payload.error ?? "Unable to save comments.");
-      }
-      if (generation === groupCommentSettingsGeneration) groupCommentSavedVersion = version;
-      if (generation === groupCommentSettingsGeneration && version === groupCommentEditVersion) {
-        setGroupCommentSyncStatus("Saved to your Google account.");
-      }
-    } catch (error) {
-      if (generation === groupCommentSettingsGeneration && version === groupCommentEditVersion) {
-        setGroupCommentSyncStatus(error instanceof Error ? `${error.message} Changes aren't saved yet.` : "Changes aren't saved yet.", true);
-      }
-    }
-  });
-  return groupCommentSaveQueue;
-}
-
-groupCommentRetryButton?.addEventListener("click", () => {
-  if (groupCommentSettingsLoaded) void flushGroupCommentSettingsSave();
-  else void loadCloudGroupCommentSettings();
-});
-
-function updateGroupCommentSettings() {
-  if (groupCommentEnabledToggle) {
-    groupCommentEnabledToggle.disabled = !groupCommentSettingsLoaded;
-  }
-  const enabled = groupCommentSettingsLoaded && Boolean(groupCommentEnabledToggle?.checked);
-  groupCommentOptionsContainer
-    ?.querySelectorAll<HTMLTextAreaElement | HTMLButtonElement>("textarea, button")
-    .forEach((control) => {
-      control.disabled = !enabled;
-    });
-  if (groupCommentAddButton) {
-    groupCommentAddButton.disabled = !enabled;
-  }
-}
-
-function renderGroupCommentOptions() {
-  if (!groupCommentOptionsContainer) return;
-  groupCommentOptionsContainer.replaceChildren();
-  const count = document.querySelector<HTMLElement>("#group-comment-options-count");
-  if (count) {
-    count.textContent = `${groupCommentOptions.length} ${groupCommentOptions.length === 1 ? "option" : "options"}`;
-  }
-
-  groupCommentOptions.forEach((text, index) => {
-    const field = document.createElement("div");
-    field.className = "field group-comment-option";
-    const heading = document.createElement("div");
-    heading.className = "group-comment-option__heading";
-    const label = document.createElement("label");
-    label.htmlFor = `group-comment-option-${index}`;
-    const number = document.createElement("span");
-    number.className = "group-comment-option__number";
-    number.textContent = String(index + 1).padStart(2, "0");
-    label.append(number, document.createTextNode(`Comment ${index + 1}`));
-    const remove = document.createElement("button");
-    remove.type = "button";
-    remove.className = "group-comment-button group-comment-option__remove button-89";
-    remove.textContent = "Remove";
-    remove.setAttribute("aria-label", `Remove comment option ${index + 1}`);
-    remove.addEventListener("click", () => {
-      groupCommentOptions.splice(index, 1);
-      if (groupCommentOptions.length === 0) groupCommentOptions.push("");
-      renderGroupCommentOptions();
-      groupCommentOptionsContainer
-        ?.querySelector<HTMLTextAreaElement>(`#group-comment-option-${Math.min(index, groupCommentOptions.length - 1)}`)
-        ?.focus();
-      scheduleSaveGroupCommentSettings();
-    });
-    const input = document.createElement("textarea");
-    input.id = label.htmlFor;
-    input.rows = 4;
-    input.maxLength = 10000;
-    input.value = text;
-    input.placeholder = "Write the comment you want to add to your posts...";
-    input.spellcheck = true;
-    input.setAttribute("aria-describedby", "group-comment-note");
-    input.addEventListener("input", () => {
-      groupCommentOptions[index] = input.value;
-      scheduleSaveGroupCommentSettings();
-    });
-    input.addEventListener("change", () => { void flushGroupCommentSettingsSave(); });
-    heading.append(label, remove);
-    field.append(heading, input);
-    groupCommentOptionsContainer.append(field);
-  });
-  updateGroupCommentSettings();
-}
-
-groupCommentEnabledToggle?.addEventListener("change", () => {
-  updateGroupCommentSettings();
-  scheduleSaveGroupCommentSettings();
-});
-
-groupCommentAddButton?.addEventListener("click", () => {
-  if (groupCommentOptions.length >= 50) {
-    showToast("You can add up to 50 comment options.", "warning");
-    return;
-  }
-  groupCommentOptions.push("");
-  renderGroupCommentOptions();
-  groupCommentOptionsContainer
-    ?.querySelector<HTMLTextAreaElement>(`#group-comment-option-${groupCommentOptions.length - 1}`)
-    ?.focus();
-  scheduleSaveGroupCommentSettings();
-});
 
 createForm?.addEventListener("submit", (event) => {
   event.preventDefault();
@@ -6954,9 +2661,7 @@ pausePostingButton?.addEventListener("click", async () => {
     if (!response?.ok) {
       throw new Error(
         response?.error ??
-          (shouldResume
-            ? "Unable to resume posting."
-            : "Unable to pause posting."),
+          (shouldResume ? msg("unableToResume") : msg("unableToPause")),
       );
     }
 
@@ -6979,8 +2684,8 @@ pausePostingButton?.addEventListener("click", async () => {
       error instanceof Error
         ? error.message
         : shouldResume
-          ? "Unable to resume posting."
-          : "Unable to pause posting.",
+          ? msg("unableToResume")
+          : msg("unableToPause"),
       "error",
     );
   }
@@ -7003,42 +2708,66 @@ stopPostingButton?.addEventListener("click", async () => {
     });
 
     if (!response?.ok) {
-      throw new Error(response?.error ?? "Unable to stop posting.");
+      throw new Error(response?.error ?? msg("unableToStop"));
     }
   } catch (error) {
     isStopRequestPending = false;
     updatePostingButtonState();
     showToast(
-      error instanceof Error ? error.message : "Unable to stop posting.",
+      error instanceof Error ? error.message : msg("unableToStop"),
       "error",
     );
   }
 });
 
-startPostingButton?.addEventListener("click", async () => {
-  if (isPostingActive) {
+openScheduleButton?.addEventListener("click", () => {
+  if (isPostingActive || postingWizard.step !== 3) return;
+  isScheduleOpen = true;
+  updateScheduleControls();
+  schedulePicker.open();
+  updatePostingButtonState();
+});
+
+cancelScheduleButton?.addEventListener("click", () => {
+  isScheduleOpen = false;
+  updatePostingButtonState();
+  openScheduleButton?.focus();
+});
+
+confirmScheduleButton?.addEventListener("click", () => {
+  const scheduledDate = schedulePicker.getDate();
+  if (!scheduledDate || scheduledDate.getTime() <= Date.now()) {
+    showToast(msg("futureDateRequired"), "warning");
     return;
   }
+  void startPosting(scheduledDate);
+});
 
-  if (!hasActiveExtensionAccess()) {
-    showToast("Sign in with Google to continue posting.", "warning");
-    return;
-  }
+startPostingButton?.addEventListener("click", () => {
+  void startPosting();
+});
 
+async function startPosting(scheduledDate?: Date) {
+  if (postingWizard.step !== 3 || isPostingActive) return;
   if (!startPostingButton) {
+    return;
+  }
+  if (scheduledDate && scheduledDate.getTime() <= Date.now()) {
+    showToast(msg("futureDateRequired"), "warning");
     return;
   }
 
   const selectedGroupIdList = Array.from(selectedGroupIds);
 
   if (selectedGroupIdList.length === 0) {
-    showToast("Please select at least one group.", "warning");
+    showToast(msg("selectAtLeastOneGroup"), "warning");
     return;
   }
 
-  const selectedPreparedPosts = preparedPosts.filter((post) => post.selected);
-  if (selectedPreparedPosts.length === 0) {
-    showToast("Please add and select at least one reusable post.", "warning");
+  const { body, html } = postEditor.getContent();
+  const images = [...selectedImageFiles];
+  if (!body.trim() || images.length === 0) {
+    showToast(msg("addPostAndImage"), "warning");
     return;
   }
 
@@ -7049,88 +2778,53 @@ startPostingButton?.addEventListener("click", async () => {
     postIntervalMaxInput?.value ?? DEFAULT_MAX_SLEEP_SECONDS,
   );
   if (!isValidPostingInterval(minimumDelaySeconds, maximumDelaySeconds)) {
-    showToast(
-      `Enter whole numbers of at least ${MIN_SLEEP_SECONDS} seconds for both waits. The longest wait must be at least as long as the shortest wait.`,
-      "warning",
-    );
+    showToast(msg("invalidPostingInterval", MIN_SLEEP_SECONDS), "warning");
     return;
   }
 
-  let maxPosts = Number(maxPostsInput?.value ?? DEFAULT_MAX_POSTS);
-  if (!Number.isInteger(maxPosts) || maxPosts < MIN_MAX_POSTS) {
-    showToast(
-      "Enter a whole number of at least 1 for the number of posts to submit.",
-      "warning",
-    );
-    return;
-  }
-
-  try {
-    const access = await refreshAccessEntitlements();
-    const remaining = access.remaining.group_posts_today;
-    if (remaining === 0) {
-      const nextSlot = access.reset_at.group_posts_today
-        ? ` The allowance resets ${formatAccessResetTime(access.reset_at.group_posts_today)}.`
-        : "";
-      showToast(
-        `Your Free account has used all ${FREE_MAX_GROUP_POSTS} Group posts for today.${nextSlot}`,
-        "warning",
-      );
-      return;
-    }
-    if (access.tier === "free" && remaining !== null) {
-      maxPosts = Math.min(FREE_MAX_GROUP_POSTS, remaining);
-    }
-  } catch (error) {
-    showToast(
-      error instanceof Error
-        ? error.message
-        : "Could not check how many posts you have left. Please try again.",
-      "error",
-    );
-    return;
-  }
-
-  const selectedGroups = groupsInSelectionOrder(loadedGroups, selectedGroupIdList);
+  const selectedGroups = groupsInSelectionOrder(
+    loadedGroups,
+    selectedGroupIdList,
+  );
 
   if (selectedGroups.length === 0) {
-    showToast(
-      "Your selected groups are no longer available. Click Find my groups, select them again, and try posting.",
-      "warning",
-    );
-    return;
-  }
-
-  if (groupCommentEnabledToggle?.checked && !groupCommentOptions.some((option) => option.trim())) {
-    showToast("Write at least one comment, or turn off comments before starting.", "warning");
+    showToast(msg("groupsNoLongerAvailable"), "warning");
     return;
   }
   const postingStartedAt = Date.now();
   const postingGroups = selectedGroups;
-  const postingPreparedPosts = selectedPreparedPosts;
+  const scheduledAt = scheduledDate?.toISOString();
 
   isPostingActive = true;
+  isPostingScheduling = Boolean(scheduledAt);
+  isPostingScheduled = Boolean(scheduledAt);
   isPostingPaused = false;
   isStopRequestPending = false;
   isPauseResumeRequestPending = false;
+  isScheduleOpen = false;
   updatePostingButtonState();
-  updateGroupsStatus("Getting ready to post...", 0);
-  resetPostingProgress(postingGroups.length, maxPosts);
-  latestGroupsPostingTiming = createPendingPostingTiming(postingStartedAt);
-  renderPostingTiming(latestGroupsPostingTiming, groupsPostingTimingElements);
+  updateGroupsStatus(
+    scheduledAt ? msg("schedulingQueue") : "Getting ready to post...",
+    0,
+  );
+  resetPostingProgress(postingGroups.length);
+  if (scheduledAt) {
+    if (postingTiming) postingTiming.hidden = true;
+  } else {
+    latestGroupsPostingTiming = createPendingPostingTiming(postingStartedAt);
+    renderPostingTiming(latestGroupsPostingTiming, groupsPostingTimingElements);
+  }
   scrollPostingProgressIntoView();
 
   try {
-    await saveGeminiCustomPrompt();
-    const watermark = await watermarkControls.snapshot();
-    const posts = [];
-    for (const { id, body, images } of postingPreparedPosts) {
-      const watermarkedImages = [];
-      for (const image of images) {
-        watermarkedImages.push(await watermarkImage(image, watermark));
-      }
-      posts.push({ id, body, images: watermarkedImages });
-    }
+    const posts = [
+      {
+        id: crypto.randomUUID(),
+        body,
+        html,
+        images: await Promise.all(images.map(fileToUiPostImage)),
+      },
+    ];
     const request: StartUiPostingRequest = {
       type: "START_UI_POSTING",
       startedAt: postingStartedAt,
@@ -7142,19 +2836,13 @@ startPostingButton?.addEventListener("click", async () => {
       posts,
       minimumDelaySeconds,
       maximumDelaySeconds,
-      maxPosts,
-      groupCommentEnabled: groupCommentSettingsLoaded && Boolean(groupCommentEnabledToggle?.checked),
-      groupCommentOptions: [...groupCommentOptions],
+      ...(scheduledAt ? { scheduledAt } : {}),
     };
-    const response = await chrome.runtime.sendMessage<
-      StartUiPostingRequest,
-      UiPostingResponse
-    >(request);
-
-    if (!response?.ok) {
-      throw new Error(response?.error ?? "Could not start posting. Please try again.");
+    const response = await sendPostingRequest(request);
+    if (!response.ok) {
+      throw new Error(response.error ?? msg("couldNotStartPosting"));
     }
-  } catch (error) {
+  } catch (error: unknown) {
     if (latestGroupsPostingTiming) {
       latestGroupsPostingTiming = finishPendingPostingTiming(
         latestGroupsPostingTiming,
@@ -7165,616 +2853,98 @@ startPostingButton?.addEventListener("click", async () => {
       );
     }
     isPostingActive = false;
+    isPostingScheduling = false;
+    isPostingScheduled = false;
     isPostingPaused = false;
     isStopRequestPending = false;
     isPauseResumeRequestPending = false;
+    isScheduleOpen = false;
     updatePostingReadiness();
     showToast(
-      error instanceof Error
-        ? error.message
-        : "Could not start posting. Please try again.",
+      error instanceof Error ? error.message : msg("couldNotStartPosting"),
       "error",
     );
   }
+}
+
+window.addEventListener("postika:locale-changed", () => {
+  refreshToastTranslations();
+  if (hasRenderedGroups) renderGroups(loadedGroups);
+  updateLoadGroupsButtonLabel();
+  if (latestGroupsStatusMessage) {
+    updateGroupsStatus(latestGroupsStatusMessage, latestGroupsStatusCount);
+  }
+  updatePostingReadiness();
+  updatePausePostingButtonState();
+  if (latestGroupsPostingTiming) {
+    renderPostingTiming(latestGroupsPostingTiming, groupsPostingTimingElements);
+  }
+  if (latestUiPostingStatusMessage) {
+    updatePostingProgress(latestUiPostingStatusMessage, false);
+  }
+  postingProgressLog?.replaceChildren();
+  for (const message of [...postingLogMessages].reverse()) {
+    appendPostingProgressLog(message, false);
+  }
+  if (latestGroupsPhotoStatus && groupsPhotoStatus) {
+    groupsPhotoStatus.textContent = localizeAppText(latestGroupsPhotoStatus);
+    groupsPhotoStatus.classList.toggle(
+      "photo-status--error",
+      latestGroupsPhotoStatusIsError,
+    );
+  }
+  if (photoLightbox && !photoLightbox.hidden) {
+    if (photoLightboxTitle) {
+      photoLightboxTitle.textContent = msg("photoImagePreview");
+    }
+    renderPhotoLightboxThumbnails();
+  }
+  if (selectedImageFiles.length > 0) renderImagePreviews();
 });
 
+window.addEventListener("postika:locale-error", () => {
+  showToast(msg("languageCouldNotLoad"), "error");
+});
+
+initializeAppMenu();
+
+void initializeI18n()
+  .then(() => {
+    if (hasRenderedGroups) renderGroups(loadedGroups);
+    updateLoadGroupsButtonLabel();
+    if (latestGroupsStatusMessage) {
+      updateGroupsStatus(latestGroupsStatusMessage, latestGroupsStatusCount);
+    }
+    updatePostingReadiness();
+    if (latestGroupsPostingTiming) {
+      renderPostingTiming(
+        latestGroupsPostingTiming,
+        groupsPostingTimingElements,
+      );
+    }
+    if (latestUiPostingStatusMessage) {
+      updatePostingProgress(latestUiPostingStatusMessage, false);
+    }
+    if (selectedImageFiles.length > 0) renderImagePreviews();
+  })
+  .catch((error: unknown) => {
+    console.error("Could not initialize localization.", error);
+    showToast(msg("languageCouldNotLoad"), "error");
+  });
+
 updatePostingReadiness();
-updateGeminiStatus();
 
 window.addEventListener("beforeunload", () => {
   flushSidePanelSessionSave();
-  void flushGroupCommentSettingsSave();
   clearImagePreviewUrls();
 });
-
-authLoginButton?.addEventListener("click", () => {
-  void signInWithGoogle();
-});
-
-authLogoutButton?.addEventListener("click", () => {
-  void signOutGoogleUser();
-});
-
-function hasActiveExtensionAccess(): boolean {
-  return currentExtensionAccess?.active === true;
-}
-
-async function initializeExtensionAccess() {
-  setAccessBusyState("Checking your Google account...");
-
-  try {
-    const storage = await chrome.storage.local.get([
-      AUTH_SESSION_STORAGE_KEY,
-      AUTH_SIGNED_OUT_STORAGE_KEY,
-    ]);
-    const storedSession = parseStoredAuthSession(
-      storage[AUTH_SESSION_STORAGE_KEY],
-    );
-    if (storedSession && (await restoreApplicationSession(storedSession))) {
-      updateExtensionAccessUi();
-      return;
-    }
-    if (storage[AUTH_SIGNED_OUT_STORAGE_KEY] === true) {
-      showSignedOut(
-        "Save your posts and listings, choose where to share them, and let Postika post them for you.",
-      );
-      return;
-    }
-
-    await exchangeGoogleIdentityToken(false);
-  } catch (error) {
-    currentExtensionAccess = undefined;
-    showSignedOut(googleSignInErrorMessage(error, false));
-  }
-}
-
-async function signInWithGoogle() {
-  setAccessBusyState("Opening Google sign-in...");
-  try {
-    await exchangeGoogleIdentityToken(true);
-    await Promise.all([loadCloudPreparedPosts(), loadMarketplaceListings(), loadCloudGroupCommentSettings()]);
-  } catch (error) {
-    currentExtensionAccess = undefined;
-    showSignedOut(googleSignInErrorMessage(error, true));
-  }
-}
-
-async function exchangeGoogleIdentityToken(interactive: boolean) {
-  const result = (await chrome.identity.getAuthToken({ interactive })) as
-    | string
-    | { token?: string }
-    | undefined;
-  const googleToken =
-    typeof result === "string" ? result : result?.token?.trim();
-  if (!googleToken) {
-    throw new Error(
-      interactive
-        ? "We couldn't complete Google sign-in. Please try again."
-        : "Save your posts and listings, choose where to share them, and let Postika post them for you.",
-    );
-  }
-  currentGoogleAccessToken = googleToken;
-
-  const response = await fetch(`${AUTH_API_BASE_URL}/api/auth/google`, {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${googleToken}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC",
-    }),
-  });
-  const payload = (await response.json().catch(() => ({}))) as {
-    error?: string;
-    session_token?: string;
-    expires_at?: string;
-    user?: {
-      id?: string;
-      email?: string;
-      email_verified?: boolean;
-      display_name?: string;
-      avatar_url?: string;
-      timezone?: string;
-    };
-    access?: AccessEntitlements;
-  };
-  if (
-    !response.ok ||
-    !payload.session_token ||
-    !payload.expires_at ||
-    !payload.user?.id ||
-    !payload.user.email ||
-    !payload.access
-  ) {
-    throw new Error(
-      payload.error ??
-        `Google sign-in failed with HTTP ${response.status} at ${AUTH_API_BASE_URL}.`,
-    );
-  }
-
-  const user: AuthenticatedGoogleUser = {
-    id: payload.user.id,
-    email: payload.user.email,
-    emailVerified: payload.user.email_verified === true,
-    displayName: payload.user.display_name,
-    avatarUrl: payload.user.avatar_url,
-    timezone: payload.user.timezone,
-  };
-  const storedSession: StoredAuthSession = {
-    sessionToken: payload.session_token,
-    expiresAt: payload.expires_at,
-    user,
-  };
-  currentExtensionAccess = {
-    active: true,
-    ...storedSession,
-    access: payload.access,
-  };
-  await chrome.storage.local.set({
-    [AUTH_SESSION_STORAGE_KEY]: storedSession,
-  });
-  await chrome.storage.local.remove(AUTH_SIGNED_OUT_STORAGE_KEY);
-  updateExtensionAccessUi();
-}
-
-async function restoreApplicationSession(
-  session: StoredAuthSession,
-): Promise<boolean> {
-  const response = await fetch(`${AUTH_API_BASE_URL}/api/me`, {
-    headers: { Authorization: `Bearer ${session.sessionToken}` },
-  });
-  if (!response.ok) {
-    await chrome.storage.local.remove(AUTH_SESSION_STORAGE_KEY);
-    return false;
-  }
-  const payload = (await response.json()) as {
-    user?: {
-      id?: string;
-      email?: string;
-      email_verified?: boolean;
-      display_name?: string;
-      avatar_url?: string;
-      timezone?: string;
-    };
-    access?: AccessEntitlements;
-  };
-  if (!payload.user?.id || !payload.user.email || !payload.access) {
-    await chrome.storage.local.remove(AUTH_SESSION_STORAGE_KEY);
-    return false;
-  }
-  currentExtensionAccess = {
-    active: true,
-    sessionToken: session.sessionToken,
-    expiresAt: session.expiresAt,
-    user: {
-      id: payload.user.id,
-      email: payload.user.email,
-      emailVerified: payload.user.email_verified === true,
-      displayName: payload.user.display_name,
-      avatarUrl: payload.user.avatar_url,
-      timezone: payload.user.timezone,
-    },
-    access: payload.access,
-  };
-  return true;
-}
-
-function parseStoredAuthSession(value: unknown): StoredAuthSession | undefined {
-  if (!value || typeof value !== "object") {
-    return undefined;
-  }
-  const session = value as Partial<StoredAuthSession>;
-  if (
-    typeof session.sessionToken !== "string" ||
-    typeof session.expiresAt !== "string" ||
-    !session.user ||
-    typeof session.user.id !== "string" ||
-    typeof session.user.email !== "string"
-  ) {
-    return undefined;
-  }
-  return session as StoredAuthSession;
-}
-
-async function signOutGoogleUser() {
-  setAccessBusyState("Signing out...");
-  await flushGroupCommentSettingsSave();
-  groupCommentSettingsGeneration++;
-  groupCommentSettingsLoaded = false;
-  groupCommentOptions = [...DEFAULT_GROUP_COMMENT_OPTIONS];
-  if (groupCommentEnabledToggle) groupCommentEnabledToggle.checked = false;
-  renderGroupCommentOptions();
-  setGroupCommentSyncStatus("Sign in to save comments to your account.");
-  const appSessionToken = currentExtensionAccess?.sessionToken;
-  if (appSessionToken) {
-    await fetch(`${AUTH_API_BASE_URL}/api/auth/logout`, {
-      method: "POST",
-      headers: { Authorization: `Bearer ${appSessionToken}` },
-    }).catch(() => undefined);
-  }
-  await chrome.storage.local.remove(AUTH_SESSION_STORAGE_KEY);
-  await chrome.storage.local.set({ [AUTH_SIGNED_OUT_STORAGE_KEY]: true });
-
-  let googleToken = currentGoogleAccessToken;
-  if (!googleToken) {
-    const result = (await chrome.identity
-      .getAuthToken({ interactive: false })
-      .catch(() => undefined)) as string | { token?: string } | undefined;
-    googleToken = typeof result === "string" ? result : result?.token;
-  }
-  if (googleToken) {
-    await chrome.identity.removeCachedAuthToken({ token: googleToken });
-  }
-  currentGoogleAccessToken = undefined;
-  currentExtensionAccess = undefined;
-  preparedPosts = [];
-  savedMarketplaceListings = [];
-  selectedMarketplaceListingIds.clear();
-  renderPreparedPosts();
-  renderMarketplaceListings();
-  showSignedOut(
-    "You're signed out. Continue with Google whenever you're ready.",
-  );
-}
-
-function authenticatedRequestHeaders(): HeadersInit {
-  const sessionToken = currentExtensionAccess?.sessionToken;
-  if (!sessionToken) {
-    throw new Error("Sign in with Google to continue.");
-  }
-  return { Authorization: `Bearer ${sessionToken}` };
-}
-
-async function refreshAccessEntitlements(): Promise<AccessEntitlements> {
-  if (!currentExtensionAccess) {
-    throw new Error("Sign in with Google to continue.");
-  }
-  const response = await fetch(`${AUTH_API_BASE_URL}/api/me`, {
-    headers: authenticatedRequestHeaders(),
-  });
-  const payload = (await response.json().catch(() => ({}))) as {
-    error?: string;
-    access?: AccessEntitlements;
-  };
-  if (!response.ok || !payload.access) {
-    throw new Error(
-      payload.error ?? "Unable to refresh your account allowance.",
-    );
-  }
-  currentExtensionAccess.access = payload.access;
-  updateExtensionAccessUi();
-  return payload.access;
-}
-
-function formatAccessUsage(used: number, limit: number | null): string {
-  return limit === null ? "Unlimited" : `${used} of ${limit}`;
-}
-
-function renderAccessMeter(
-  elements: AccessMeterElements,
-  used: number,
-  limit: number | null,
-) {
-  const { value, meter } = elements;
-  if (value) {
-    value.textContent = formatAccessUsage(used, limit);
-  }
-  if (!meter) {
-    return;
-  }
-
-  const percentage =
-    limit === null
-      ? 100
-      : limit <= 0
-        ? used > 0
-          ? 100
-          : 0
-        : Math.min(100, Math.max(0, (used / limit) * 100));
-  meter.style.setProperty("--access-progress", `${percentage}%`);
-  meter.classList.toggle("access-meter__track--warning", percentage >= 80);
-  meter.classList.toggle("access-meter__track--full", percentage >= 100);
-  meter.setAttribute("aria-valuemin", "0");
-  meter.setAttribute("aria-valuenow", String(used));
-  meter.setAttribute("aria-valuetext", formatAccessUsage(used, limit));
-  if (limit === null) {
-    meter.removeAttribute("aria-valuemax");
-  } else {
-    meter.setAttribute("aria-valuemax", String(limit));
-  }
-}
-
-function formatAccessResetTime(value: string): string {
-  const timezone = currentExtensionAccess?.user.timezone ?? "UTC";
-  const reset = new Date(value);
-  if (Number.isNaN(reset.getTime())) {
-    return `midnight (${timezone})`;
-  }
-  try {
-    return `${new Intl.DateTimeFormat(undefined, {
-      dateStyle: "medium",
-      timeStyle: "short",
-      timeZone: timezone,
-    }).format(reset)} (${timezone})`;
-  } catch {
-    return reset.toLocaleString();
-  }
-}
-
-function renderAccessSummary(access?: AccessEntitlements) {
-  if (accessSummary) {
-    accessSummary.hidden = !access;
-  }
-  if (!access) {
-    if (accessUpgrade) {
-      accessUpgrade.hidden = true;
-    }
-    return;
-  }
-  if (accessUpgrade) {
-    accessUpgrade.hidden = access.tier !== "free";
-  }
-  if (accessTierBadge) {
-    accessTierBadge.textContent = access.tier.toUpperCase();
-  }
-  accessSummary?.classList.toggle("access-summary--pro", access.tier === "pro");
-  if (accessUsageDashboard) {
-    accessUsageDashboard.hidden = access.tier === "pro";
-  }
-  if (accessProSummary) {
-    accessProSummary.hidden = access.tier !== "pro";
-  }
-  if (access.tier !== "pro") {
-    renderAccessMeter(
-      accessMeters.savedGroupPosts,
-      access.usage.saved_group_posts,
-      access.limits.saved_group_posts,
-    );
-    renderAccessMeter(
-      accessMeters.savedMarketplaceListings,
-      access.usage.saved_marketplace_listings,
-      access.limits.saved_marketplace_listings,
-    );
-    renderAccessMeter(
-      accessMeters.groupPostsToday,
-      access.usage.group_posts_today,
-      access.limits.group_posts_today,
-    );
-    renderAccessMeter(
-      accessMeters.marketplaceListingsToday,
-      access.usage.marketplace_listings_today,
-      access.limits.marketplace_listings_today,
-    );
-  }
-
-  const nextReset = [
-    access.remaining.group_posts_today === 0
-      ? access.reset_at.group_posts_today
-      : undefined,
-    access.remaining.marketplace_listings_today === 0
-      ? access.reset_at.marketplace_listings_today
-      : undefined,
-  ]
-    .filter((value): value is string => Boolean(value))
-    .map((value) => new Date(value))
-    .filter((value) => !Number.isNaN(value.getTime()))
-    .sort((left, right) => left.getTime() - right.getTime())[0];
-  if (accessResetMessage && accessResetMessageCopy) {
-    const timezone = currentExtensionAccess?.user.timezone ?? "UTC";
-    accessResetMessage.classList.toggle(
-      "access-summary__reset--pro",
-      access.tier === "pro",
-    );
-    if (access.tier === "pro") {
-      accessResetMessage.hidden = false;
-      accessResetMessageCopy.textContent = access.pro_lifetime
-        ? "Lifetime Pro access."
-        : access.pro_expires_at
-          ? `Pro access expires ${formatAccessResetTime(access.pro_expires_at)}.`
-          : "Pro access.";
-    } else {
-      accessResetMessage.hidden = false;
-      accessResetMessageCopy.textContent = nextReset
-        ? `Daily limits reset at midnight (${timezone}). Your allowance resets ${formatAccessResetTime(nextReset.toISOString())}.`
-        : `Daily limits reset at midnight (${timezone}).`;
-    }
-  }
-}
-
-function updateExtensionAccessUi() {
-  const access = currentExtensionAccess;
-  const active = access?.active === true;
-  updateAccountCardVisibility(active);
-
-  if (createForm) {
-    createForm.hidden = !active;
-  }
-
-  if (authSessionPill) {
-    authSessionPill.hidden = !active;
-  }
-
-  if (authUserEmail) {
-    authUserEmail.textContent = access?.user.email ?? "";
-  }
-
-  if (authPanelTitle) {
-    authPanelTitle.hidden = false;
-    authPanelTitle.textContent = active
-      ? `Welcome${access.user.displayName ? `, ${access.user.displayName}` : ""}.`
-      : "Bulk posting, minus the busywork.";
-  }
-
-  if (authWelcomeArt) {
-    authWelcomeArt.hidden = active;
-  }
-  if (authBenefits) {
-    authBenefits.hidden = active;
-  }
-  if (authSigninNote) {
-    authSigninNote.hidden = active;
-  }
-
-  if (authStatusMessage) {
-    authStatusMessage.textContent = active
-      ? "Your saved Groups posts and Marketplace listings are connected to this Google account."
-      : "Save your posts and listings, choose where to share them, and let Postika post them for you.";
-  }
-
-  if (authLoginButton) {
-    authLoginButton.hidden = active;
-    authLoginButton.disabled = false;
-  }
-  if (authLogoutButton) {
-    authLogoutButton.hidden = !active;
-    authLogoutButton.disabled = false;
-    authLogoutButton.textContent = "Sign out";
-  }
-
-  renderAccessSummary(access?.access);
-
-  if (maxPostsInput && access?.access) {
-    const isFree = access.access.tier === "free";
-    const wasDisabled = maxPostsInput.disabled;
-
-    if (isFree) {
-      if (!wasDisabled) {
-        const currentValue = Number(maxPostsInput.value);
-        if (Number.isInteger(currentValue) && currentValue >= MIN_MAX_POSTS) {
-          proMaxPostsPreference = currentValue;
-        }
-      }
-      maxPostsInput.value = String(FREE_MAX_GROUP_POSTS);
-      maxPostsInput.min = String(FREE_MAX_GROUP_POSTS);
-      maxPostsInput.max = String(FREE_MAX_GROUP_POSTS);
-      maxPostsInput.disabled = true;
-      maxPostsInput.title =
-        "Free accounts can publish up to 5 successful Group posts per day.";
-      if (maxPostsNote) {
-        maxPostsNote.textContent =
-          "The Free plan allows 5 group posts per day, including posts awaiting approval. Failed attempts do not count.";
-      }
-    } else {
-      maxPostsInput.disabled = false;
-      maxPostsInput.min = String(MIN_MAX_POSTS);
-      maxPostsInput.removeAttribute("max");
-      maxPostsInput.removeAttribute("title");
-      if (wasDisabled) {
-        maxPostsInput.value = String(proMaxPostsPreference);
-      }
-      if (maxPostsNote) {
-        maxPostsNote.textContent =
-          "Posting stops after this many submissions are accepted. Posts awaiting group approval also count. Failed attempts do not count. Postika repeats your selected groups if needed.";
-      }
-    }
-  }
-
-  updatePostingReadiness();
-  updatePreparedPostSaveButtonState();
-  updateMarketplaceSaveListingButtonState();
-}
-
-function showSignedOut(message: string) {
-  updateAccountCardVisibility(false);
-  if (createForm) {
-    createForm.hidden = true;
-  }
-  if (authPanelTitle) {
-    authPanelTitle.hidden = false;
-    authPanelTitle.textContent = "Bulk posting, minus the busywork.";
-  }
-  if (authWelcomeArt) {
-    authWelcomeArt.hidden = false;
-  }
-  if (authBenefits) {
-    authBenefits.hidden = false;
-  }
-  if (authSigninNote) {
-    authSigninNote.hidden = false;
-  }
-  if (authStatusMessage) {
-    authStatusMessage.textContent = message;
-  }
-  if (authSessionPill) {
-    authSessionPill.hidden = true;
-  }
-  if (authUserEmail) {
-    authUserEmail.textContent = "";
-  }
-  renderAccessSummary();
-  if (authLoginButton) {
-    authLoginButton.hidden = false;
-    authLoginButton.disabled = false;
-  }
-  if (authLogoutButton) {
-    authLogoutButton.hidden = true;
-    authLogoutButton.disabled = false;
-    authLogoutButton.textContent = "Sign out";
-  }
-  updatePostingReadiness();
-}
-
-function setAccessBusyState(message: string) {
-  updateAccountCardVisibility(false);
-  if (createForm) {
-    createForm.hidden = true;
-  }
-  if (authPanelTitle) {
-    authPanelTitle.hidden = false;
-    authPanelTitle.textContent = "Checking your Google account...";
-  }
-  if (authWelcomeArt) {
-    authWelcomeArt.hidden = true;
-  }
-  if (authBenefits) {
-    authBenefits.hidden = true;
-  }
-  if (authSigninNote) {
-    authSigninNote.hidden = true;
-  }
-  if (authStatusMessage) {
-    authStatusMessage.textContent = message;
-  }
-  if (authSessionPill) {
-    authSessionPill.hidden = true;
-  }
-  renderAccessSummary();
-  if (authLoginButton) {
-    authLoginButton.hidden = true;
-  }
-  if (authLogoutButton) {
-    authLogoutButton.hidden = true;
-  }
-  updatePostingReadiness();
-}
-
-function googleSignInErrorMessage(
-  error: unknown,
-  interactive: boolean,
-): string {
-  const message = error instanceof Error ? error.message.trim() : "";
-  const normalizedMessage = message.toLowerCase();
-  if (
-    normalizedMessage.includes("did not approve") ||
-    normalizedMessage.includes("access denied") ||
-    normalizedMessage.includes("user rejected") ||
-    normalizedMessage.includes("cancel")
-  ) {
-    return "Sign-in was cancelled. Continue with Google whenever you're ready.";
-  }
-  if (!interactive) {
-    return "Save your posts and listings, choose where to share them, and let Postika post them for you.";
-  }
-  return "We couldn't complete Google sign-in. Please try again.";
-}
 
 function fileToUiPostImage(file: File): Promise<UiPostImage> {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
     reader.addEventListener("load", () => {
       if (typeof reader.result !== "string") {
-        reject(new Error(`Unable to read ${file.name}.`));
+        reject(new Error(msg("unableToReadFile", file.name)));
         return;
       }
 
@@ -7785,1055 +2955,70 @@ function fileToUiPostImage(file: File): Promise<UiPostImage> {
       });
     });
     reader.addEventListener("error", () => {
-      reject(reader.error ?? new Error(`Unable to read ${file.name}.`));
+      reject(reader.error ?? new Error(msg("unableToReadFile", file.name)));
     });
     reader.readAsDataURL(file);
   });
 }
 
-function collectMarketplaceListingFields(): Record<
-  string,
-  SavedMarketplaceListingFieldValue
-> {
-  const fields: Record<string, SavedMarketplaceListingFieldValue> = {};
-  if (selectedMarketplaceListingType) {
-    fields["marketplace-listing-type"] = selectedMarketplaceListingType;
-  }
-
-  marketplaceListingFields
-    ?.querySelectorAll<
-      HTMLInputElement | HTMLTextAreaElement
-    >("input[name]:not(:disabled), textarea[name]:not(:disabled)")
-    .forEach((control) => {
-      if (control instanceof HTMLInputElement && control.type === "file") {
-        return;
-      }
-      fields[control.name] =
-        control instanceof HTMLInputElement && control.type === "checkbox"
-          ? control.checked
-          : control.value;
-    });
-
-  return fields;
-}
-
-async function saveMarketplaceListing() {
-  if (!selectedMarketplaceListingType) {
-    showMarketplaceSaveListingStatus(
-      "Select a listing type before saving.",
-      true,
-    );
-    return;
-  }
-
-  if (!isMarketplaceListingFormComplete()) {
-    showMarketplaceSaveListingStatus(
-      "Complete all listing fields and add at least one photo before saving.",
-      true,
-    );
-    updateMarketplaceSaveListingButtonState();
-    return;
-  }
-
-  isMarketplaceListingSaving = true;
-  if (saveMarketplaceListingButton) {
-    saveMarketplaceListingButton.disabled = true;
-    saveMarketplaceListingButton.textContent = "Saving…";
-  }
-
-  try {
-    const form = new FormData();
-    form.set(
-      "payload",
-      JSON.stringify({
-        listing_type: selectedMarketplaceListingType,
-        fields: collectMarketplaceListingFields(),
-      }),
-    );
-    selectedMarketplaceImageFiles.forEach((file) =>
-      form.append("images", file, file.name),
-    );
-    const editingId = editingMarketplaceListingId;
-    const response = await fetch(
-      editingId
-        ? `${AUTH_API_BASE_URL}/api/marketplace-listings/${encodeURIComponent(editingId)}`
-        : `${AUTH_API_BASE_URL}/api/marketplace-listings`,
-      {
-        method: editingId ? "PUT" : "POST",
-        headers: authenticatedRequestHeaders(),
-        body: form,
-      },
-    );
-    if (!response.ok) {
-      throw new Error(
-        await readApiError(response, "Unable to save this listing."),
-      );
-    }
-    showMarketplaceSaveListingStatus(
-      `Listing ${editingId ? "updated" : "saved"} with ${selectedMarketplaceImageFiles.length} ${selectedMarketplaceImageFiles.length === 1 ? "photo" : "photos"}.`,
-    );
-    await Promise.all([loadMarketplaceListings(), refreshAccessEntitlements()]);
-    clearMarketplaceListingEditor(false);
-    showToast(
-      editingId ? "Marketplace listing updated." : "Marketplace listing saved.",
-      "success",
-    );
-  } catch (error) {
-    console.error("Unable to save Marketplace listing", error);
-    showMarketplaceSaveListingStatus(
-      error instanceof Error
-        ? error.message
-        : "Unable to save this listing. Please try again.",
-      true,
-    );
-  } finally {
-    isMarketplaceListingSaving = false;
-    if (saveMarketplaceListingButton) {
-      saveMarketplaceListingButton.textContent = editingMarketplaceListingId
-        ? "Update listing"
-        : "Save listing";
-    }
-    updateMarketplaceSaveListingButtonState();
-  }
-}
-
-async function loadMarketplaceListings() {
-  if (savedMarketplaceListingsStatus) {
-    savedMarketplaceListingsStatus.textContent = "Loading saved listings…";
-    savedMarketplaceListingsStatus.removeAttribute("data-error");
-  }
-  try {
-    const response = await fetch(
-      `${AUTH_API_BASE_URL}/api/marketplace-listings`,
-      {
-        headers: authenticatedRequestHeaders(),
-      },
-    );
-    if (!response.ok) {
-      throw new Error(
-        await readApiError(response, "Unable to load Marketplace listings."),
-      );
-    }
-    const payload = (await response.json()) as {
-      listings?: CloudMarketplaceListing[];
-    };
-    savedMarketplaceListings = Array.isArray(payload.listings)
-      ? payload.listings
-      : [];
-    const savedItemIds = new Set(
-      savedMarketplaceListings
-        .filter(isSupportedMarketplacePostingListing)
-        .map((listing) => listing.id),
-    );
-    selectedMarketplaceListingIds = new Set(
-      [...selectedMarketplaceListingIds].filter((id) => savedItemIds.has(id)),
-    );
-    renderMarketplaceListings();
-  } catch (error) {
-    if (savedMarketplaceListingsStatus) {
-      savedMarketplaceListingsStatus.textContent =
-        error instanceof Error
-          ? error.message
-          : "Unable to load Marketplace listings.";
-      savedMarketplaceListingsStatus.dataset.error = "true";
-    }
-  }
-}
-
-function renderMarketplaceListings() {
-  if (!savedMarketplaceListingsList) {
-    return;
-  }
-  if (savedMarketplaceListingsCount) {
-    savedMarketplaceListingsCount.textContent = String(
-      savedMarketplaceListings.length,
-    );
-  }
-  if (savedMarketplaceListingsStatus) {
-    savedMarketplaceListingsStatus.textContent =
-      savedMarketplaceListings.length === 0
-        ? "Saved listings will appear here."
-        : `${savedMarketplaceListings.length} saved ${savedMarketplaceListings.length === 1 ? "listing" : "listings"}.`;
-    savedMarketplaceListingsStatus.removeAttribute("data-error");
-  }
-
-  updateMarketplaceListingSelectionState();
-
-  const cards = savedMarketplaceListings.map((listing) => {
-    const card = document.createElement("article");
-    card.className = "saved-marketplace-listing";
-
-    const firstImage = [...listing.images].sort(
-      (left, right) => left.position - right.position,
-    )[0];
-    let media: HTMLElement;
-    if (firstImage) {
-      const image = document.createElement("img");
-      image.className = "saved-marketplace-listing__thumbnail";
-      image.src = firstImage.url;
-      image.alt = "";
-      media = image;
-    } else {
-      const placeholder = document.createElement("div");
-      placeholder.className =
-        "saved-marketplace-listing__thumbnail saved-marketplace-listing__placeholder";
-      placeholder.textContent = "No photo";
-      media = placeholder;
-    }
-
-    const content = document.createElement("div");
-    content.className = "saved-marketplace-listing__content";
-    if (isSupportedMarketplacePostingListing(listing)) {
-      const selector = document.createElement("label");
-      selector.className = "saved-marketplace-listing__selector";
-      const checkbox = document.createElement("input");
-      checkbox.type = "checkbox";
-      checkbox.checked = selectedMarketplaceListingIds.has(listing.id);
-      checkbox.disabled =
-        isMarketplacePostingActive || isMarketplaceCleanupActive;
-      checkbox.setAttribute(
-        "aria-label",
-        `Select ${marketplaceListingDisplayTitle(listing)} for posting`,
-      );
-      const selectorText = document.createElement("span");
-      selectorText.textContent = "Select for posting";
-      selector.append(checkbox, selectorText);
-      checkbox.addEventListener("change", () => {
-        if (checkbox.checked) {
-          selectedMarketplaceListingIds.add(listing.id);
-        } else {
-          selectedMarketplaceListingIds.delete(listing.id);
-        }
-        card.classList.toggle(
-          "saved-marketplace-listing--selected",
-          checkbox.checked,
-        );
-        updateMarketplaceListingSelectionState();
-      });
-      content.append(selector);
-      card.classList.toggle(
-        "saved-marketplace-listing--selected",
-        checkbox.checked,
-      );
-    }
-    const title = document.createElement("strong");
-    title.className = "saved-marketplace-listing__title";
-    title.textContent = marketplaceListingDisplayTitle(listing);
-    const meta = document.createElement("p");
-    meta.className = "saved-marketplace-listing__meta";
-    const price = String(listing.fields["marketplace-price"] ?? "");
-    meta.textContent = [
-      marketplaceListingTypeLabel(listing.listing_type),
-      price ? `Price: ${price}` : "No price",
-      `${listing.images.length} photos`,
-    ].join(" · ");
-
-    const actions = document.createElement("div");
-    actions.className = "saved-marketplace-listing__actions";
-    if (isSupportedMarketplacePostingListing(listing)) {
-      const postButton = document.createElement("button");
-      postButton.type = "button";
-      postButton.className = "saved-marketplace-listing__post button-89";
-      postButton.textContent = "Post to Facebook";
-      const postingLimitReached =
-        currentExtensionAccess?.access.remaining.marketplace_listings_today ===
-        0;
-      postButton.disabled =
-        isMarketplacePostingActive ||
-        isMarketplaceCleanupActive ||
-        postingLimitReached;
-      postButton.title = postingLimitReached
-        ? "Your Free account has used its Marketplace post for today"
-        : "Post this listing to Facebook Marketplace";
-      postButton.addEventListener("click", () => {
-        void postMarketplaceItem(listing, postButton);
-      });
-      actions.append(postButton);
-    }
-    const editButton = document.createElement("button");
-    editButton.type = "button";
-    editButton.className = "button-89";
-    editButton.textContent = "Edit";
-    editButton.disabled =
-      isMarketplacePostingActive || isMarketplaceCleanupActive;
-    editButton.addEventListener("click", () => {
-      void editMarketplaceListing(listing.id);
-    });
-    const deleteButton = document.createElement("button");
-    deleteButton.type = "button";
-    deleteButton.className = "saved-marketplace-listing__delete button-89 button-89--danger";
-    deleteButton.textContent = "Delete";
-    deleteButton.disabled =
-      isMarketplacePostingActive || isMarketplaceCleanupActive;
-    deleteButton.addEventListener("click", () => {
-      void deleteMarketplaceListing(listing.id, deleteButton);
-    });
-    actions.append(editButton, deleteButton);
-    content.append(title, meta, actions);
-    card.append(media, content);
-    return card;
-  });
-  savedMarketplaceListingsList.replaceChildren(...cards);
-}
-
-function updateMarketplaceListingSelectionState() {
-  const itemListings = savedMarketplaceListings.filter(
-    isSupportedMarketplacePostingListing,
-  );
-  const selectedCount = itemListings.filter((listing) =>
-    selectedMarketplaceListingIds.has(listing.id),
-  ).length;
-  if (marketplaceListingsSelectionCount) {
-    marketplaceListingsSelectionCount.textContent = `${selectedCount} ${selectedCount === 1 ? "listing" : "listings"} selected`;
-  }
-  if (marketplaceListingsSelectAllCheckbox) {
-    marketplaceListingsSelectAllCheckbox.checked =
-      itemListings.length > 0 && selectedCount === itemListings.length;
-    marketplaceListingsSelectAllCheckbox.indeterminate =
-      selectedCount > 0 && selectedCount < itemListings.length;
-    marketplaceListingsSelectAllCheckbox.disabled =
-      itemListings.length === 0 ||
-      isMarketplacePostingActive ||
-      isMarketplaceCleanupActive;
-  }
-  if (postSelectedMarketplaceItemsButton) {
-    const postingLimitReached =
-      currentExtensionAccess?.access.remaining.marketplace_listings_today === 0;
-    postSelectedMarketplaceItemsButton.disabled =
-      selectedCount === 0 ||
-      isMarketplacePostingActive ||
-      isMarketplaceCleanupActive ||
-      postingLimitReached;
-    postSelectedMarketplaceItemsButton.title = postingLimitReached
-      ? "Your Free account has used its Marketplace post for today"
-      : "Post the selected listings to Facebook Marketplace";
-  }
-}
-
-async function postMarketplaceItem(
-  listing: CloudMarketplaceListing,
-  button: HTMLButtonElement,
-) {
-  button.disabled = true;
-  button.textContent = "Preparing…";
-  try {
-    const started = await startMarketplaceItemQueue([listing]);
-    if (!started) {
-      button.disabled = false;
-      button.textContent = "Post to Facebook";
-      return;
-    }
-    button.textContent = "Waiting to post";
-  } catch (error) {
-    button.disabled = false;
-    button.textContent = "Post to Facebook";
-    showMarketplaceSaveListingStatus(
-      error instanceof Error
-        ? error.message
-        : "Unable to publish Marketplace listing.",
-      true,
-    );
-  }
-}
-
-function scrollMarketplacePostingProgressIntoView() {
-  scrollProgressPanelToBottom(marketplacePostingProgress);
-}
-
-async function startMarketplaceItemQueue(
-  selectedListings: CloudMarketplaceListing[],
-): Promise<boolean> {
-  const minimumDelaySeconds = Number(marketplaceIntervalMinInput?.value ?? 0);
-  const maximumDelaySeconds = Number(marketplaceIntervalMaxInput?.value ?? 0);
-  if (!isValidPostingInterval(minimumDelaySeconds, maximumDelaySeconds)) {
-    throw new Error(
-      "Marketplace posting intervals must be whole numbers of at least 60 seconds, and the maximum cannot be below the minimum.",
-    );
-  }
-  if (selectedListings.length === 0) {
-    throw new Error("Select at least one saved listing before posting.");
-  }
-  const shareToSuggestedGroups = await requestMarketplaceAudienceChoice();
-  if (shareToSuggestedGroups === undefined) {
-    return false;
-  }
-  const postingStartedAt = Date.now();
-  const access = await refreshAccessEntitlements();
-  const remaining = access.remaining.marketplace_listings_today;
-  if (remaining !== null && selectedListings.length > remaining) {
-    const nextSlot = access.reset_at.marketplace_listings_today
-      ? ` The allowance resets ${formatAccessResetTime(access.reset_at.marketplace_listings_today)}.`
-      : "";
-    throw new Error(
-      remaining === 0
-        ? `Your Free account has used its Marketplace post for today.${nextSlot}`
-        : `Your Free account has ${remaining} Marketplace ${remaining === 1 ? "post" : "posts"} remaining today. Select no more than ${remaining}.${nextSlot}`,
-    );
-  }
-  if (
-    marketplaceGeminiRewriteToggle?.checked &&
-    !marketplaceGeminiApiKeyInput?.value.trim()
-  ) {
-    throw new Error("Add a Gemini API key or disable description rewriting.");
-  }
-
-  const orderedListings = marketplaceShuffleItemsToggle?.checked
-    ? shuffleItems(selectedListings)
-    : selectedListings;
-  isMarketplacePostingPaused = false;
-  isMarketplaceStopRequestPending = false;
-  isMarketplacePauseRequestPending = false;
-  setMarketplacePostingActive(true);
-  latestMarketplacePostingTiming = undefined;
-  resetPostingTiming(marketplacePostingTimingElements);
-  latestMarketplacePostingTiming = createPendingPostingTiming(postingStartedAt);
-  renderPostingTiming(
-    latestMarketplacePostingTiming,
-    marketplacePostingTimingElements,
-  );
-  if (marketplacePostingProgressCard) {
-    marketplacePostingProgressCard.hidden = false;
-  }
-  scrollMarketplacePostingProgressIntoView();
-  if (marketplacePostingLog) {
-    marketplacePostingLog.replaceChildren();
-  }
-  marketplacePostingLogFilter = "all";
-  applyPostingLogFilter(
-    marketplacePostingLog,
-    marketplacePostingLogFilter,
-    marketplaceProgressPostedFilterButton,
-    marketplaceProgressFailedFilterButton,
-  );
-  if (marketplacePostingStatusMessage) {
-    marketplacePostingStatusMessage.textContent = `Preparing ${orderedListings.length} selected ${orderedListings.length === 1 ? "listing" : "listings"}…`;
-  }
-  if (marketplacePostingStatusCount) {
-    marketplacePostingStatusCount.textContent = `0/${orderedListings.length} successful posts`;
-  }
-  if (marketplacePostingProgressPercent) {
-    marketplacePostingProgressPercent.textContent = "0%";
-  }
-  if (marketplacePostingProgressBar) {
-    marketplacePostingProgressBar.style.width = "0%";
-  }
-  if (marketplacePostingProgressSuccess) {
-    marketplacePostingProgressSuccess.textContent = "0";
-  }
-  if (marketplacePostingProgressFailed) {
-    marketplacePostingProgressFailed.textContent = "0";
-  }
-  if (marketplacePostingProgressRemaining) {
-    marketplacePostingProgressRemaining.textContent = String(
-      orderedListings.length,
-    );
-  }
-
-  try {
-    await saveMarketplacePostingSettings();
-    const watermark = await watermarkControls.snapshot();
-    const listings = [];
-    for (let index = 0; index < orderedListings.length; index += 1) {
-      const listing = orderedListings[index];
-      if (marketplacePostingStatusMessage) {
-        marketplacePostingStatusMessage.textContent = `Downloading photos for listing ${index + 1}/${orderedListings.length}…`;
-      }
-      listings.push(await buildMarketplacePostingListing(listing, index, watermark));
-    }
-
-    const response = await chrome.runtime.sendMessage<
-      StartMarketplaceItemPostingRequest,
-      MarketplaceItemPostingResponse
-    >({
-      type: "START_MARKETPLACE_POSTING",
-      startedAt: postingStartedAt,
-      listings,
-      shareToSuggestedGroups,
-      minimumDelaySeconds,
-      maximumDelaySeconds,
-      rewriteDescriptions: Boolean(marketplaceGeminiRewriteToggle?.checked),
-      geminiApiKey: marketplaceGeminiApiKeyInput?.value.trim() ?? "",
-      customPrompt: marketplaceGeminiPromptInput?.value.trim() ?? "",
-
-    });
-    if (!response?.ok) {
-      throw new Error(
-        response?.error ?? "Could not start Marketplace posting. Please try again.",
-      );
-    }
-    return true;
-  } catch (error) {
-    if (latestMarketplacePostingTiming) {
-      latestMarketplacePostingTiming = finishPendingPostingTiming(
-        latestMarketplacePostingTiming,
-      );
-      renderPostingTiming(
-        latestMarketplacePostingTiming,
-        marketplacePostingTimingElements,
-      );
-    }
-    setMarketplacePostingActive(false);
-    throw error;
-  }
-}
-
-async function buildMarketplacePostingListing(
-  listing: CloudMarketplaceListing,
-  listingIndex: number,
-  watermark: WatermarkSettings,
-) {
-  const images = [];
-  for (const image of [...listing.images].sort((left, right) => left.position - right.position)) {
-    const original = await fileToUiPostImage(await cloudMarketplaceImageToFile(image));
-    images.push(await watermarkImage(original, watermark));
-  }
-  if (listing.listing_type === "vehicle") {
-    const field = (name: string) => String(listing.fields[name] ?? "").trim();
-    const vehicleType = marketplaceVehicleOptionLabel(
-      field("marketplace-vehicle-type"),
-    );
-    const year = field("marketplace-year");
-    const make = field("marketplace-vehicle-make");
-    const model = field("marketplace-vehicle-model");
-    const mileage = field("marketplace-vehicle-mileage");
-    const price = field("marketplace-price");
-    const bodyStyle = marketplaceVehicleOptionLabel(
-      field("marketplace-body-style"),
-    );
-    const condition = marketplaceVehicleOptionLabel(
-      field("marketplace-vehicle-condition"),
-    );
-    const fuelType = marketplaceVehicleOptionLabel(
-      field("marketplace-fuel-type"),
-    );
-    const transmission = marketplaceVehicleOptionLabel(
-      field("marketplace-transmission"),
-    );
-    const exteriorColor = marketplaceVehicleOptionLabel(
-      field("marketplace-exterior-color"),
-    );
-    const interiorColor = marketplaceVehicleOptionLabel(
-      field("marketplace-interior-color"),
-    );
-    const location = field("marketplace-location");
-    if (
-      !vehicleType ||
-      !year ||
-      !make ||
-      !model ||
-      !mileage ||
-      !price ||
-      !bodyStyle ||
-      !condition ||
-      !fuelType ||
-      !transmission ||
-      !exteriorColor ||
-      !interiorColor ||
-      !location ||
-      images.length === 0
-    ) {
-      throw new Error(
-        `“${marketplaceListingDisplayTitle(listing)}” is missing required vehicle details, location, or photos.`,
-      );
-    }
-    return {
-      listingType: "vehicle" as const,
-      id: listing.id,
-      vehicleType,
-      year,
-      make,
-      model,
-      mileage,
-      price,
-      bodyStyle,
-      cleanTitle: listing.fields["marketplace-clean-title"] === true,
-      condition,
-      fuelType,
-      transmission,
-      exteriorColor,
-      interiorColor,
-      description: field("marketplace-description"),
-      location,
-      images: images.slice(0, 20),
-      listingIndex,
-    };
-  }
-
-  const title = String(listing.fields["marketplace-title"] ?? "").trim();
-  const price = String(listing.fields["marketplace-price"] ?? "").trim();
-  const category = String(listing.fields["marketplace-category"] ?? "").trim();
-  const condition = marketplaceFacebookConditionLabel(
-    String(listing.fields["marketplace-condition"] ?? ""),
-  );
-  if (
-    !title ||
-    !price ||
-    !category ||
-    !condition ||
-    listing.images.length === 0
-  ) {
-    throw new Error(
-      `“${marketplaceListingDisplayTitle(listing)}” needs a title, price, category, condition, and at least one photo.`,
-    );
-  }
-
-  return {
-    listingType: "item" as const,
-    id: listing.id,
-    title,
-    price,
-    category,
-    condition,
-    description: String(listing.fields["marketplace-description"] ?? ""),
-    images,
-    listingIndex,
-  };
-}
-
-function isSupportedMarketplacePostingListing(
-  listing: CloudMarketplaceListing,
-) {
-  return listing.listing_type === "item" || listing.listing_type === "vehicle";
-}
-
-function marketplaceVehicleOptionLabel(value: string) {
-  const labels: Record<string, string> = {
-    car_truck: "Car/Truck",
-    rv_camper: "RV/Camper",
-    commercial_industrial: "Commercial/Industrial",
-    small_car: "Small Car",
-    very_good: "Very good",
-    plug_in_hybrid: "Plug-in hybrid",
-    manual_transmission: "Manual transmission",
-    automatic_transmission: "Automatic transmission",
-    off_white: "Off white",
-  };
+function isRestorablePostImage(value: unknown): value is UiPostImage {
+  if (typeof value !== "object" || value === null) return false;
+  const image = value as Record<string, unknown>;
   return (
-    labels[value] ??
-    value
-      .split("_")
-      .filter(Boolean)
-      .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
-      .join(" ")
+    typeof image.name === "string" &&
+    typeof image.type === "string" &&
+    typeof image.dataUrl === "string" &&
+    image.dataUrl.startsWith("data:image/")
   );
 }
 
-function setMarketplacePostingActive(active: boolean) {
-  isMarketplacePostingActive = active;
-  updateMarketplaceCleanupControls();
-  if (pauseMarketplacePostingButton) {
-    pauseMarketplacePostingButton.hidden = !active;
-    pauseMarketplacePostingButton.disabled =
-      isMarketplaceStopRequestPending || isMarketplacePauseRequestPending;
-    pauseMarketplacePostingButton.dataset.paused = String(
-      isMarketplacePostingPaused,
-    );
-    setButtonContent(
-      pauseMarketplacePostingButton,
-      isMarketplacePauseRequestPending
-        ? isMarketplacePostingPaused
-          ? "Resuming…"
-          : "Pausing…"
-        : isMarketplacePostingPaused
-          ? "Resume"
-          : "Pause",
-      isMarketplacePauseRequestPending,
-    );
-  }
-  if (stopMarketplacePostingButton) {
-    stopMarketplacePostingButton.hidden = !active;
-    stopMarketplacePostingButton.disabled = isMarketplaceStopRequestPending;
-    setButtonContent(
-      stopMarketplacePostingButton,
-      isMarketplaceStopRequestPending ? "Stopping…" : "Stop",
-      isMarketplaceStopRequestPending,
-    );
-  }
-  document
-    .querySelectorAll<HTMLButtonElement>(
-      ".saved-marketplace-listing__actions button",
-    )
-    .forEach((button) => {
-      button.disabled = active;
-      if (
-        !active &&
-        button.classList.contains("saved-marketplace-listing__post")
-      ) {
-        button.textContent = "Post to Facebook";
-      }
-    });
-  document
-    .querySelectorAll<HTMLInputElement>(
-      ".saved-marketplace-listing__selector input",
-    )
-    .forEach((checkbox) => {
-      checkbox.disabled = active;
-    });
-  updateMarketplaceListingSelectionState();
-}
-
-function marketplaceFacebookConditionLabel(value: string) {
-  return (
-    {
-      new: "New",
-      used_like_new: "Used - Like New",
-      used_good: "Used - Good",
-      used_fair: "Used - Fair",
-    }[value] ?? ""
-  );
-}
-
-function marketplaceListingDisplayTitle(listing: CloudMarketplaceListing) {
-  const title = String(listing.fields["marketplace-title"] ?? "").trim();
-  const make = String(listing.fields["marketplace-vehicle-make"] ?? "").trim();
-  const model = String(
-    listing.fields["marketplace-vehicle-model"] ?? "",
-  ).trim();
-  return (
-    title ||
-    [make, model].filter(Boolean).join(" ") ||
-    marketplaceListingTypeLabel(listing.listing_type)
-  );
-}
-
-function marketplaceListingTypeLabel(type: MarketplaceListingType) {
-  return type === "item"
-    ? "Item for sale"
-    : type === "vehicle"
-      ? "Vehicle for sale"
-      : "Home for sale or rent";
-}
-
-async function deleteMarketplaceListing(
-  listingId: string,
-  button: HTMLButtonElement,
-) {
-  const confirmed = await requestDeleteConfirmation(
-    "Delete Marketplace listing?",
-    "This permanently removes the saved listing and all of its photos.",
-  );
-  if (!confirmed) {
-    return;
-  }
-  button.disabled = true;
-  button.textContent = "Deleting…";
-  try {
-    const response = await fetch(
-      `${AUTH_API_BASE_URL}/api/marketplace-listings/${encodeURIComponent(listingId)}`,
-      { method: "DELETE", headers: authenticatedRequestHeaders() },
-    );
-    if (!response.ok) {
-      throw new Error(
-        await readApiError(response, "Unable to delete Marketplace listing."),
-      );
-    }
-    if (editingMarketplaceListingId === listingId) {
-      clearMarketplaceListingEditor();
-    }
-    savedMarketplaceListings = savedMarketplaceListings.filter(
-      (listing) => listing.id !== listingId,
-    );
-    selectedMarketplaceListingIds.delete(listingId);
-    renderMarketplaceListings();
-    await refreshAccessEntitlements();
-    showToast("Marketplace listing deleted.", "success");
-  } catch (error) {
-    button.disabled = false;
-    button.textContent = "Delete";
-    showMarketplaceSaveListingStatus(
-      error instanceof Error
-        ? error.message
-        : "Unable to delete Marketplace listing.",
-      true,
-    );
-  }
-}
-
-async function editMarketplaceListing(listingId: string) {
-  const listing = savedMarketplaceListings.find(
-    (candidate) => candidate.id === listingId,
-  );
-  if (!listing) {
-    return;
-  }
-  clearMarketplaceListingEditor(false);
-  const listingTypeOption = listingTypeOptionElements.find(
-    (option) => option.dataset.value === listing.listing_type,
-  );
-  if (!listingTypeOption) {
-    showMarketplaceSaveListingStatus("Unsupported listing type.", true);
-    return;
-  }
-  selectListingType(listingTypeOption, true);
-
-  marketplaceListingFields
-    ?.querySelectorAll<
-      HTMLInputElement | HTMLTextAreaElement
-    >("input[name], textarea[name]")
-    .forEach((control) => {
-      if (control.type === "file") {
-        return;
-      }
-      const value = listing.fields[control.name];
-      if (control instanceof HTMLInputElement && control.type === "checkbox") {
-        control.checked = value === true;
-      } else if (typeof value === "string") {
-        control.value = value;
-      }
-    });
-
-  applyMarketplaceSelectValues(listing.fields);
-  if (marketplaceTitleCount) {
-    marketplaceTitleCount.textContent = `${marketplaceTitleInput?.value.length ?? 0} / 200`;
-  }
-  try {
-    selectedMarketplaceImageFiles = await Promise.all(
-      [...listing.images]
-        .sort((left, right) => left.position - right.position)
-        .map(cloudMarketplaceImageToFile),
-    );
-  } catch (error) {
-    showMarketplaceSaveListingStatus(
-      error instanceof Error ? error.message : "Unable to load listing photos.",
-      true,
-    );
-    return;
-  }
-  editingMarketplaceListingId = listing.id;
-  syncMarketplaceImagesInput();
-  renderMarketplacePhotoPreviews();
-  if (saveMarketplaceListingButton) {
-    saveMarketplaceListingButton.textContent = "Update listing";
-  }
-  if (cancelMarketplaceListingEditButton) {
-    cancelMarketplaceListingEditButton.hidden = false;
-  }
-  if (listingTypeTrigger) {
-    listingTypeTrigger.disabled = true;
-  }
-  updateMarketplaceSaveListingButtonState();
-  revealCardFor(listingTypeSelect);
-  listingTypeSelect?.scrollIntoView({ behavior: "smooth", block: "start" });
-}
-
-function applyMarketplaceSelectValues(
-  fields: Record<string, string | boolean>,
-) {
-  selectSavedOption(
-    marketplaceCategoryOptionElements,
-    String(fields["marketplace-category"] ?? ""),
-    selectMarketplaceCategory,
-    (option) =>
-      option.dataset.category === fields["marketplace-category-group"],
-  );
-  selectSavedOption(
-    marketplaceConditionOptionElements,
-    String(fields["marketplace-condition"] ?? ""),
-    selectMarketplaceCondition,
-  );
-  selectSavedOption(
-    marketplaceVehicleTypeOptionElements,
-    String(fields["marketplace-vehicle-type"] ?? ""),
-    selectMarketplaceVehicleType,
-  );
-  selectSavedOption(
-    marketplaceYearOptionElements,
-    String(fields["marketplace-year"] ?? ""),
-    selectMarketplaceYear,
-  );
-  selectSavedOption(
-    marketplaceBodyStyleOptionElements,
-    String(fields["marketplace-body-style"] ?? ""),
-    selectMarketplaceBodyStyle,
-  );
-  selectSavedOption(
-    marketplaceVehicleConditionOptionElements,
-    String(fields["marketplace-vehicle-condition"] ?? ""),
-    selectMarketplaceVehicleCondition,
-  );
-  selectSavedOption(
-    marketplaceFuelTypeOptionElements,
-    String(fields["marketplace-fuel-type"] ?? ""),
-    selectMarketplaceFuelType,
-  );
-  selectSavedOption(
-    marketplaceTransmissionOptionElements,
-    String(fields["marketplace-transmission"] ?? "automatic_transmission"),
-    selectMarketplaceTransmission,
-  );
-  selectSavedOption(
-    marketplaceColorDropdowns.exterior.optionElements,
-    String(fields["marketplace-exterior-color"] ?? ""),
-    (option) => selectMarketplaceColor("exterior", option),
-  );
-  selectSavedOption(
-    marketplaceColorDropdowns.interior.optionElements,
-    String(fields["marketplace-interior-color"] ?? ""),
-    (option) => selectMarketplaceColor("interior", option),
-  );
-  selectSavedOption(
-    marketplaceRentalTypeOptionElements,
-    String(fields["marketplace-rental-type"] ?? ""),
-    selectMarketplaceRentalType,
-  );
-}
-
-function selectSavedOption(
-  options: HTMLElement[],
-  value: string,
-  select: (option: HTMLElement) => void,
-  extraMatch: (option: HTMLElement) => boolean = () => true,
-) {
-  if (!value) {
-    return;
-  }
-  const option = options.find(
-    (candidate) => candidate.dataset.value === value && extraMatch(candidate),
-  );
-  if (option) {
-    select(option);
-  }
-}
-
-async function cloudMarketplaceImageToFile(image: { url: string }) {
-  const response = await fetch(image.url);
+async function uiPostImageToFile(image: UiPostImage): Promise<File> {
+  const response = await fetch(image.dataUrl);
   if (!response.ok) {
-    throw new Error("Unable to download a Marketplace listing image.");
+    throw new Error(msg("couldNotRestoreDraftImages"));
   }
   const blob = await response.blob();
-  const pathname = new URL(image.url).pathname;
-  const name =
-    decodeURIComponent(pathname.slice(pathname.lastIndexOf("/") + 1)) ||
-    "marketplace-image";
-  return new File([blob], name, { type: blob.type });
-}
-
-function clearMarketplaceListingEditor(hideStatus = true) {
-  editingMarketplaceListingId = undefined;
-  selectedMarketplaceListingType = undefined;
-  selectedMarketplaceImageFiles = [];
-  marketplaceListingFields
-    ?.querySelectorAll<
-      HTMLInputElement | HTMLTextAreaElement
-    >("input[name], textarea[name]")
-    .forEach((control) => {
-      if (control instanceof HTMLInputElement && control.type === "checkbox") {
-        control.checked = false;
-      } else if (control.type !== "file") {
-        control.value = "";
-      }
-    });
-
-  const resetOptions = (options: HTMLElement[]) => {
-    options.forEach((option) => option.setAttribute("aria-selected", "false"));
-  };
-  [
-    listingTypeOptionElements,
-    marketplaceCategoryOptionElements,
-    marketplaceConditionOptionElements,
-    marketplaceVehicleTypeOptionElements,
-    marketplaceYearOptionElements,
-    marketplaceBodyStyleOptionElements,
-    marketplaceVehicleConditionOptionElements,
-    marketplaceFuelTypeOptionElements,
-    marketplaceTransmissionOptionElements,
-    marketplaceColorDropdowns.exterior.optionElements,
-    marketplaceColorDropdowns.interior.optionElements,
-    marketplaceRentalTypeOptionElements,
-  ].forEach(resetOptions);
-
-  if (listingTypeValue) listingTypeValue.textContent = "Select listing type";
-  if (listingTypeSelectedIcon)
-    listingTypeSelectedIcon.innerHTML = listingTypeDefaultIconMarkup;
-  if (marketplaceCategoryValue)
-    marketplaceCategoryValue.textContent = "Select category";
-  if (marketplaceCategorySelectedIcon)
-    marketplaceCategorySelectedIcon.innerHTML =
-      marketplaceCategoryDefaultIconMarkup;
-  if (marketplaceConditionValue)
-    marketplaceConditionValue.textContent = "Select condition";
-  if (marketplaceVehicleTypeValue)
-    marketplaceVehicleTypeValue.textContent = "Select vehicle type";
-  if (marketplaceYearValue) marketplaceYearValue.textContent = "Select year";
-  if (marketplaceBodyStyleValue)
-    marketplaceBodyStyleValue.textContent = "Select body style";
-  if (marketplaceVehicleConditionValue)
-    marketplaceVehicleConditionValue.textContent = "Select vehicle condition";
-  if (marketplaceFuelTypeValue)
-    marketplaceFuelTypeValue.textContent = "Select fuel type";
-  if (marketplaceTransmissionValue)
-    marketplaceTransmissionValue.textContent = "Automatic transmission";
-  if (marketplaceTransmissionInput)
-    marketplaceTransmissionInput.value = "automatic_transmission";
-  const automaticTransmission = marketplaceTransmissionOptionElements.find(
-    (option) => option.dataset.value === "automatic_transmission",
-  );
-  automaticTransmission?.setAttribute("aria-selected", "true");
-  if (marketplaceColorDropdowns.exterior.value)
-    marketplaceColorDropdowns.exterior.value.textContent =
-      "Select exterior color";
-  if (marketplaceColorDropdowns.interior.value)
-    marketplaceColorDropdowns.interior.value.textContent =
-      "Select interior color";
-  if (marketplaceRentalTypeValue)
-    marketplaceRentalTypeValue.textContent = "Select rental type";
-  if (marketplaceTitleCount) marketplaceTitleCount.textContent = "0 / 200";
-
-  marketplacePhotosField?.classList.add("marketplace-photos--disabled");
-  marketplacePhotoDropzone?.setAttribute("aria-disabled", "true");
-  if (marketplaceImagesInput) marketplaceImagesInput.disabled = true;
-  if (marketplacePhotoLimit) marketplacePhotoLimit.textContent = "—";
-  if (marketplacePhotoGuidance)
-    marketplacePhotoGuidance.textContent = "Select a listing type first.";
-  configureMarketplaceVehicleTypeField();
-  syncMarketplaceImagesInput();
-  renderMarketplacePhotoPreviews();
-  if (saveMarketplaceListingButton) {
-    saveMarketplaceListingButton.textContent = "Save listing";
-  }
-  updateMarketplaceSaveListingButtonState();
-  if (cancelMarketplaceListingEditButton) {
-    cancelMarketplaceListingEditButton.hidden = true;
-  }
-  if (listingTypeTrigger) {
-    listingTypeTrigger.disabled = false;
-  }
-  if (hideStatus) hideMarketplaceSaveListingStatus();
-}
-
-function showMarketplaceSaveListingStatus(message: string, isError = false) {
-  if (isError) revealCardFor(marketplaceSaveListingStatus);
-  if (!marketplaceSaveListingStatus) {
-    return;
-  }
-  marketplaceSaveListingStatus.textContent = message;
-  marketplaceSaveListingStatus.dataset.error = String(isError);
-  marketplaceSaveListingStatus.hidden = false;
-}
-
-function hideMarketplaceSaveListingStatus() {
-  if (!marketplaceSaveListingStatus) {
-    return;
-  }
-  marketplaceSaveListingStatus.hidden = true;
-  marketplaceSaveListingStatus.removeAttribute("data-error");
+  return new File([blob], image.name, {
+    type: image.type || blob.type,
+  });
 }
 
 async function initializeSidePanelSession() {
   isRestoringSidePanelSession = true;
 
   try {
+    await chrome.storage.local.remove([
+      "googleAuthSession",
+      "googleAuthSignedOut",
+    ]);
     const storage = await chrome.storage.local.get([
       SIDE_PANEL_SESSION_STORAGE_KEY,
+      SIDE_PANEL_DRAFT_IMAGES_STORAGE_KEY,
     ]);
     const session = storage[SIDE_PANEL_SESSION_STORAGE_KEY] as
       | Partial<SidePanelSession>
       | undefined;
 
+    const storedImages = storage[SIDE_PANEL_DRAFT_IMAGES_STORAGE_KEY];
+    if (Array.isArray(storedImages)) {
+      try {
+        selectedImageFiles = await Promise.all(
+          storedImages.filter(isRestorablePostImage).map(uiPostImageToFile),
+        );
+        syncPostImagesInput();
+      } catch (error) {
+        console.error("Could not restore saved draft images.", error);
+        showToast(msg("couldNotRestoreDraftImages"), "error");
+      }
+    }
+
     if (!session || typeof session !== "object") {
       renderImagePreviews();
-      renderPreparedPosts();
       return;
+    }
+
+    if (typeof session.postBodyHtml === "string") {
+      postEditor.setContent(session.postBodyHtml);
     }
 
     const legacyDelaySeconds =
@@ -8870,25 +3055,6 @@ async function initializeSidePanelSession() {
             ),
       );
     }
-
-    if (maxPostsInput && typeof session.maxPosts === "number") {
-      proMaxPostsPreference =
-        Number.isInteger(session.maxPosts) && session.maxPosts >= MIN_MAX_POSTS
-          ? session.maxPosts
-          : DEFAULT_MAX_POSTS;
-      maxPostsInput.value = String(proMaxPostsPreference);
-    }
-
-    if (Array.isArray(session.groupCommentOptions) || typeof session.groupCommentText === "string") {
-      const options = Array.isArray(session.groupCommentOptions)
-        ? session.groupCommentOptions.filter((option): option is string => typeof option === "string")
-        : typeof session.groupCommentText === "string" ? [session.groupCommentText] : [];
-      legacyGroupCommentSettings = {
-        enabled: session.groupCommentEnabled === true,
-        options: options.length ? options : [""],
-        ownerUserId: typeof session.groupCommentOwnerUserId === "string" ? session.groupCommentOwnerUserId : undefined,
-      };
-    }
     // Keep the visible card empty until the authenticated account is loaded.
 
     if (groupsSearchInput && typeof session.groupsSearchQuery === "string") {
@@ -8896,11 +3062,6 @@ async function initializeSidePanelSession() {
       groupsSearchQuery = session.groupsSearchQuery;
     }
 
-    if (Array.isArray(session.expandedCards)) {
-      restoreExpandedCards(session.expandedCards.filter((id): id is string => typeof id === "string"));
-    } else if (session.groupsVisible !== false && session.loadedGroups?.length) {
-      revealCardFor(groupsList);
-    }
     imagePreviewsVisible = session.imagePreviewsVisible === true;
 
     if (Array.isArray(session.selectedGroupIds)) {
@@ -8927,19 +3088,15 @@ async function initializeSidePanelSession() {
     }
 
     renderImagePreviews();
-    renderPreparedPosts();
   } catch (error) {
     console.log(
       "Unable to restore side panel session.",
       error instanceof Error ? error.message : error,
     );
     renderImagePreviews();
-    renderPreparedPosts();
   } finally {
-    renderGroupCommentOptions();
     isRestoringSidePanelSession = false;
-    // Re-save the lightweight session shape so legacy base64 images and
-    // reusable posts are removed from extension storage after an upgrade.
+    // Rewrite older session records without embedded image data.
     await saveSidePanelSession();
   }
 }
@@ -8954,31 +3111,21 @@ function isRestorableGroup(value: unknown): value is FacebookGroup {
   );
 }
 
-function dataUrlToFile(dataUrl: string, name: string, type: string): File {
-  const [metadata, base64Data = ""] = dataUrl.split(",");
-  const mimeType = metadata.match(/data:([^;]+)/)?.[1] || type;
-  const binary = atob(base64Data);
-  const bytes = new Uint8Array(binary.length);
-
-  for (let index = 0; index < binary.length; index += 1) {
-    bytes[index] = binary.charCodeAt(index);
-  }
-
-  return new File([bytes], name, { type: mimeType || type });
-}
-
-function scheduleSaveSidePanelSession() {
+function scheduleSaveSidePanelSession(saveImages = false) {
   if (isRestoringSidePanelSession) {
     return;
   }
 
+  shouldSaveDraftImages ||= saveImages;
   if (saveSidePanelSessionTimer !== undefined) {
     window.clearTimeout(saveSidePanelSessionTimer);
   }
 
   saveSidePanelSessionTimer = window.setTimeout(() => {
     saveSidePanelSessionTimer = undefined;
-    void saveSidePanelSession();
+    const shouldSaveImages = shouldSaveDraftImages;
+    shouldSaveDraftImages = false;
+    void saveSidePanelSession(shouldSaveImages);
   }, 400);
 }
 
@@ -8988,10 +3135,12 @@ function flushSidePanelSessionSave() {
     saveSidePanelSessionTimer = undefined;
   }
 
-  void saveSidePanelSession();
+  const shouldSaveImages = shouldSaveDraftImages;
+  shouldSaveDraftImages = false;
+  void saveSidePanelSession(shouldSaveImages);
 }
 
-async function saveSidePanelSession() {
+async function saveSidePanelSession(saveImages = false) {
   try {
     const session: SidePanelSession = {
       minimumDelaySeconds: Number(
@@ -9001,35 +3150,41 @@ async function saveSidePanelSession() {
         postIntervalMaxInput?.value ?? DEFAULT_MAX_SLEEP_SECONDS,
       ),
       intervalSettingsVersion: 2,
-      maxPosts:
-        currentExtensionAccess?.access.tier === "free"
-          ? proMaxPostsPreference
-          : Number(maxPostsInput?.value ?? DEFAULT_MAX_POSTS),
-      ...(legacyGroupCommentSettings ? {
-        groupCommentEnabled: legacyGroupCommentSettings.enabled,
-        groupCommentOptions: legacyGroupCommentSettings.options,
-        ...(legacyGroupCommentSettings.ownerUserId ? { groupCommentOwnerUserId: legacyGroupCommentSettings.ownerUserId } : {}),
-      } : {}),
       loadedGroups,
       selectedGroupIds: Array.from(selectedGroupIds),
       groupsSearchQuery,
-      expandedCards: expandedCardIds(),
       imagePreviewsVisible,
+      postBodyHtml: postEditor.getContent().html,
     };
 
     await chrome.storage.local.set({
       [SIDE_PANEL_SESSION_STORAGE_KEY]: session,
     });
+    if (saveImages) {
+      try {
+        await chrome.storage.local.remove(SIDE_PANEL_DRAFT_IMAGES_STORAGE_KEY);
+        if (selectedImageFiles.length > 0) {
+          const images = await Promise.all(
+            selectedImageFiles.map(fileToUiPostImage),
+          );
+          await chrome.storage.local.set({
+            [SIDE_PANEL_DRAFT_IMAGES_STORAGE_KEY]: images,
+          });
+        }
+      } catch (error) {
+        console.error("Could not save draft images.", error);
+        showToast(msg("couldNotSaveDraftImages"), "error");
+      }
+    }
   } catch (error) {
-    console.log(
-      "Unable to save side panel session.",
-      error instanceof Error ? error.message : error,
-    );
+    console.error("Unable to save side panel session.", error);
   }
 }
 
 function resetPostingProgress(total: number, successTarget?: number) {
   latestGroupsPostingTiming = undefined;
+  latestUiPostingStatusMessage = undefined;
+  postingLogMessages = [];
   resetPostingTiming(groupsPostingTimingElements);
   if (postingProgress) {
     postingProgress.hidden = false;
@@ -9037,8 +3192,8 @@ function resetPostingProgress(total: number, successTarget?: number) {
 
   if (postingProgressTitle) {
     postingProgressTitle.textContent = successTarget
-      ? `0/${successTarget} posts submitted`
-      : `0/${total} groups processed`;
+      ? msg("postsSubmitted", 0, successTarget)
+      : msg("groupsProcessed", 0, total);
   }
 
   if (postingProgressPercent) {
@@ -9048,6 +3203,7 @@ function resetPostingProgress(total: number, successTarget?: number) {
   if (postingProgressBar) {
     postingProgressBar.style.width = "0%";
   }
+  postingProgressTrack?.setAttribute("aria-valuenow", "0");
 
   if (postingProgressSuccess) {
     postingProgressSuccess.textContent = "0";
@@ -9066,7 +3222,7 @@ function resetPostingProgress(total: number, successTarget?: number) {
   }
 
   if (postingProgressCurrent) {
-    postingProgressCurrent.textContent = "Getting ready to post...";
+    postingProgressCurrent.textContent = msg("gettingReadyToPost");
   }
 
   postingProgressLog?.replaceChildren();
@@ -9086,201 +3242,7 @@ function scrollPostingProgressIntoView() {
 
 function scrollProgressPanelToBottom(panel: HTMLElement | null) {
   if (!panel) return;
-  revealCardFor(panel);
-
-  // Let the layout and accordion transition finish before aligning the
-  // panel's bottom edge with the bottom of the extension viewport.
-  requestAnimationFrame(() => {
-    requestAnimationFrame(async () => {
-      const card = panel.closest<HTMLDetailsElement>("details.card-accordion");
-      // Chrome exposes the chevron transition through the animation API; its
-      // duration matches the content expansion, including reduced-motion mode.
-      const animations = card?.querySelector(".card-accordion__icon svg")?.getAnimations() ?? [];
-      await Promise.all(animations.map((animation) => animation.finished.catch(() => {})));
-      if (card && !card.open) return;
-      panel.scrollIntoView({
-        behavior: "smooth",
-        block: "end",
-        inline: "nearest",
-      });
-    });
-  });
-}
-
-function shuffleItems<T>(items: T[]): T[] {
-  const shuffledItems = [...items];
-
-  for (let index = shuffledItems.length - 1; index > 0; index -= 1) {
-    const swapIndex = Math.floor(Math.random() * (index + 1));
-    [shuffledItems[index], shuffledItems[swapIndex]] = [
-      shuffledItems[swapIndex],
-      shuffledItems[index],
-    ];
-  }
-
-  return shuffledItems;
-}
-
-async function initializeGeminiSettings() {
-  // Remove preferences belonging to the retired hashtag feature.
-  await chrome.storage.local.remove(["geminiIncludeHashtags", "marketplaceGeminiIncludeHashtags"]);
-  const storage = await chrome.storage.local.get([
-    GEMINI_API_KEY_STORAGE_KEY,
-    GEMINI_REWRITE_ENABLED_STORAGE_KEY,
-    GEMINI_CUSTOM_PROMPT_STORAGE_KEY,
-  ]);
-
-  if (geminiApiKeyInput) {
-    geminiApiKeyInput.value =
-      typeof storage[GEMINI_API_KEY_STORAGE_KEY] === "string"
-        ? storage[GEMINI_API_KEY_STORAGE_KEY]
-        : "";
-  }
-
-  if (geminiRewriteToggle) {
-    geminiRewriteToggle.checked =
-      storage[GEMINI_REWRITE_ENABLED_STORAGE_KEY] === true;
-  }
-
-  if (geminiCustomPromptInput) {
-    geminiCustomPromptInput.value =
-      typeof storage[GEMINI_CUSTOM_PROMPT_STORAGE_KEY] === "string"
-        ? storage[GEMINI_CUSTOM_PROMPT_STORAGE_KEY]
-        : "";
-  }
-
-
-  updateGeminiStatus();
-}
-
-async function saveGeminiApiKey() {
-  const value = geminiApiKeyInput?.value.trim() ?? "";
-  if (marketplaceGeminiApiKeyInput) {
-    marketplaceGeminiApiKeyInput.value = value;
-  }
-  await chrome.storage.local.set({
-    [GEMINI_API_KEY_STORAGE_KEY]: value,
-  });
-  updateGeminiStatus();
-}
-
-async function saveGeminiRewriteEnabled() {
-  await chrome.storage.local.set({
-    [GEMINI_REWRITE_ENABLED_STORAGE_KEY]: Boolean(geminiRewriteToggle?.checked),
-  });
-}
-
-async function saveGeminiCustomPrompt() {
-  await chrome.storage.local.set({
-    [GEMINI_CUSTOM_PROMPT_STORAGE_KEY]:
-      geminiCustomPromptInput?.value.trim() ?? "",
-  });
-}
-
-
-async function initializeMarketplacePostingSettings() {
-  const storage = await chrome.storage.local.get([
-    GEMINI_API_KEY_STORAGE_KEY,
-    MARKETPLACE_GEMINI_REWRITE_ENABLED_STORAGE_KEY,
-    MARKETPLACE_GEMINI_CUSTOM_PROMPT_STORAGE_KEY,
-    MARKETPLACE_MIN_INTERVAL_STORAGE_KEY,
-    MARKETPLACE_MAX_INTERVAL_STORAGE_KEY,
-    MARKETPLACE_SHUFFLE_ITEMS_STORAGE_KEY,
-  ]);
-  if (marketplaceGeminiApiKeyInput) {
-    marketplaceGeminiApiKeyInput.value =
-      typeof storage[GEMINI_API_KEY_STORAGE_KEY] === "string"
-        ? storage[GEMINI_API_KEY_STORAGE_KEY]
-        : "";
-  }
-  if (marketplaceGeminiRewriteToggle) {
-    marketplaceGeminiRewriteToggle.checked =
-      storage[MARKETPLACE_GEMINI_REWRITE_ENABLED_STORAGE_KEY] === true;
-  }
-  if (marketplaceGeminiPromptInput) {
-    marketplaceGeminiPromptInput.value =
-      typeof storage[MARKETPLACE_GEMINI_CUSTOM_PROMPT_STORAGE_KEY] === "string"
-        ? storage[MARKETPLACE_GEMINI_CUSTOM_PROMPT_STORAGE_KEY]
-        : "";
-  }
-  if (marketplaceIntervalMinInput) {
-    marketplaceIntervalMinInput.value = String(
-      Number.isInteger(storage[MARKETPLACE_MIN_INTERVAL_STORAGE_KEY])
-        ? storage[MARKETPLACE_MIN_INTERVAL_STORAGE_KEY]
-        : MIN_SLEEP_SECONDS,
-    );
-  }
-  if (marketplaceIntervalMaxInput) {
-    marketplaceIntervalMaxInput.value = String(
-      Number.isInteger(storage[MARKETPLACE_MAX_INTERVAL_STORAGE_KEY])
-        ? storage[MARKETPLACE_MAX_INTERVAL_STORAGE_KEY]
-        : DEFAULT_MAX_SLEEP_SECONDS,
-    );
-  }
-  if (marketplaceShuffleItemsToggle) {
-    marketplaceShuffleItemsToggle.checked =
-      storage[MARKETPLACE_SHUFFLE_ITEMS_STORAGE_KEY] === true;
-  }
-  normalizeMarketplacePostingInterval();
-  updateMarketplaceListingSelectionState();
-}
-
-async function initializeMarketplaceCleanupSettings() {
-  updateMarketplaceCleanupControls();
-}
-
-function normalizeMarketplacePostingInterval() {
-  if (!marketplaceIntervalMinInput || !marketplaceIntervalMaxInput) {
-    return;
-  }
-  const enteredMinimum = Number(marketplaceIntervalMinInput.value);
-  const minimum =
-    Number.isInteger(enteredMinimum) && enteredMinimum >= MIN_SLEEP_SECONDS
-      ? enteredMinimum
-      : MIN_SLEEP_SECONDS;
-  const enteredMaximum = Number(marketplaceIntervalMaxInput.value);
-  const maximum =
-    Number.isInteger(enteredMaximum) && enteredMaximum >= minimum
-      ? enteredMaximum
-      : Math.max(DEFAULT_MAX_SLEEP_SECONDS, minimum);
-  marketplaceIntervalMinInput.value = String(minimum);
-  marketplaceIntervalMaxInput.value = String(maximum);
-}
-
-async function saveMarketplacePostingSettings() {
-  const apiKey = marketplaceGeminiApiKeyInput?.value.trim() ?? "";
-  if (geminiApiKeyInput) {
-    geminiApiKeyInput.value = apiKey;
-  }
-  await chrome.storage.local.set({
-    [GEMINI_API_KEY_STORAGE_KEY]: apiKey,
-    [MARKETPLACE_GEMINI_REWRITE_ENABLED_STORAGE_KEY]: Boolean(
-      marketplaceGeminiRewriteToggle?.checked,
-    ),
-    [MARKETPLACE_GEMINI_CUSTOM_PROMPT_STORAGE_KEY]:
-      marketplaceGeminiPromptInput?.value.trim() ?? "",
-    [MARKETPLACE_MIN_INTERVAL_STORAGE_KEY]: Number(
-      marketplaceIntervalMinInput?.value ?? MIN_SLEEP_SECONDS,
-    ),
-    [MARKETPLACE_MAX_INTERVAL_STORAGE_KEY]: Number(
-      marketplaceIntervalMaxInput?.value ?? DEFAULT_MAX_SLEEP_SECONDS,
-    ),
-    [MARKETPLACE_SHUFFLE_ITEMS_STORAGE_KEY]: Boolean(
-      marketplaceShuffleItemsToggle?.checked,
-    ),
-  });
-  updateGeminiStatus();
-}
-
-function formatExpiry(value: string | undefined): string {
-  if (!value) {
-    return "soon";
-  }
-
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) {
-    return "soon";
-  }
-
-  return date.toLocaleString();
+  requestAnimationFrame(() =>
+    panel.scrollIntoView({ behavior: "smooth", block: "end" }),
+  );
 }
