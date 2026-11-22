@@ -1,0 +1,1250 @@
+msgid ""
+msgstr ""
+"Source-Language: en\n"
+"Language: vi\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=utf-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Plural-Forms: nplurals=1\n"
+"X-Plurals-Order: other\n"
+"Project-Id-Version: \n"
+"Report-Msgid-Bugs-To: \n"
+"POT-Creation-Date: \n"
+"PO-Revision-Date: \n"
+"Last-Translator: \n"
+"Language-Team: \n"
+
+#: .wuchale-build/i18n.ts
+msgid "Postika"
+msgstr "Postika"
+
+#: .wuchale-build/i18n.ts
+msgid "Language"
+msgstr "Ngôn ngữ"
+
+#: .wuchale-build/i18n.ts
+msgid "Could not load the selected language."
+msgstr "Không thể tải ngôn ngữ đã chọn."
+
+#: .wuchale-build/i18n.ts
+msgid "Search languages…"
+msgstr "Tìm ngôn ngữ…"
+
+#: .wuchale-build/i18n.ts
+msgid "Search languages"
+msgstr "Tìm ngôn ngữ"
+
+#: .wuchale-build/i18n.ts
+msgid "All languages"
+msgstr "Tất cả ngôn ngữ"
+
+#: .wuchale-build/i18n.ts
+msgid "No languages found"
+msgstr "Không tìm thấy ngôn ngữ"
+
+#: .wuchale-build/i18n.ts
+msgid "Try a different search."
+msgstr "Thử tìm kiếm khác."
+
+#: .wuchale-build/i18n.ts
+msgid "Group posting"
+msgstr "Đăng bài vào nhóm"
+
+#: .wuchale-build/i18n.ts
+msgid "Posting steps"
+msgstr "Các bước đăng bài"
+
+#: .wuchale-build/i18n.ts
+msgid "Create post"
+msgstr "Tạo bài viết"
+
+#: .wuchale-build/i18n.ts
+msgid "Select groups"
+msgstr "Chọn nhóm"
+
+#: .wuchale-build/i18n.ts
+#: .wuchale-build/i18n.ts
+msgid "Review & post"
+msgstr "Xem lại và đăng"
+
+#: .wuchale-build/i18n.ts
+msgid "Step 1 of 3"
+msgstr "Bước 1/3"
+
+#: .wuchale-build/i18n.ts
+msgid "Step 2 of 3"
+msgstr "Bước 2/3"
+
+#: .wuchale-build/i18n.ts
+msgid "Step 3 of 3"
+msgstr "Bước 3/3"
+
+#: .wuchale-build/i18n.ts
+msgid "Create your post"
+msgstr "Tạo bài viết của bạn"
+
+#: .wuchale-build/i18n.ts
+msgid "Text formatting"
+msgstr "Định dạng văn bản"
+
+#~ msgid "Text style"
+#~ msgstr ""
+
+#~ msgid "Normal text"
+#~ msgstr ""
+
+#: .wuchale-build/i18n.ts
+msgid "Heading 1"
+msgstr "Tiêu đề 1"
+
+#: .wuchale-build/i18n.ts
+msgid "Heading 2"
+msgstr "Tiêu đề 2"
+
+#: .wuchale-build/i18n.ts
+msgid "Bold"
+msgstr "In đậm"
+
+#: .wuchale-build/i18n.ts
+msgid "Italic"
+msgstr "In nghiêng"
+
+#: .wuchale-build/i18n.ts
+msgid "Undo"
+msgstr "Hoàn tác"
+
+#: .wuchale-build/i18n.ts
+msgid "Redo"
+msgstr "Làm lại"
+
+#: .wuchale-build/i18n.ts
+msgid "Bulleted list"
+msgstr "Danh sách có dấu đầu dòng"
+
+#: .wuchale-build/i18n.ts
+msgid "Numbered list"
+msgstr "Danh sách đánh số"
+
+#: .wuchale-build/i18n.ts
+msgid "Quote"
+msgstr "Trích dẫn"
+
+#: .wuchale-build/i18n.ts
+msgid "Post text"
+msgstr "Nội dung bài viết"
+
+#: .wuchale-build/i18n.ts
+msgid "Write what you want to share..."
+msgstr "Viết điều bạn muốn chia sẻ..."
+
+#: .wuchale-build/i18n.ts
+msgid "Choose images"
+msgstr "Chọn ảnh"
+
+#: .wuchale-build/i18n.ts
+msgid "Click to browse or drag and drop images here"
+msgstr "Nhấp để chọn ảnh hoặc kéo thả ảnh vào đây"
+
+#: .wuchale-build/i18n.ts
+msgid "Next: select groups"
+msgstr "Tiếp: chọn nhóm"
+
+#: .wuchale-build/i18n.ts
+msgid "Select your groups"
+msgstr "Chọn các nhóm của bạn"
+
+#: .wuchale-build/i18n.ts
+msgid "Find my groups"
+msgstr "Tìm nhóm của tôi"
+
+#: .wuchale-build/i18n.ts
+msgid "Refresh groups"
+msgstr "Làm mới danh sách nhóm"
+
+#: .wuchale-build/i18n.ts
+msgid "Could not restore saved images. Please add them again."
+msgstr "Không thể khôi phục ảnh đã lưu. Vui lòng thêm lại ảnh."
+
+#: .wuchale-build/i18n.ts
+msgid "Could not save your images. They may not be available next time."
+msgstr "Không thể lưu ảnh. Ảnh có thể không còn khi bạn mở lại."
+
+#~ msgid "Click Find my groups, then select where you want to post."
+#~ msgstr ""
+
+#. 0: count
+#: .wuchale-build/i18n.ts
+msgid "{0} loaded"
+msgstr "Đã tải {0}"
+
+#: .wuchale-build/i18n.ts
+msgid "Select all groups"
+msgstr "Chọn tất cả nhóm"
+
+#: .wuchale-build/i18n.ts
+msgid "Search groups"
+msgstr "Tìm nhóm"
+
+#: .wuchale-build/i18n.ts
+msgid "Search your groups"
+msgstr "Tìm trong các nhóm của bạn"
+
+#. 0: count
+#. 0: count
+#: .wuchale-build/i18n.ts
+#: .wuchale-build/i18n.ts
+msgid "{0} groups selected"
+msgstr "Đã chọn {0} nhóm"
+
+#~ msgid "Click Find my groups to see the groups you have joined."
+#~ msgstr ""
+
+#: .wuchale-build/i18n.ts
+msgid "Select at least one group to continue."
+msgstr "Chọn ít nhất một nhóm để tiếp tục."
+
+#: .wuchale-build/i18n.ts
+msgid "Back"
+msgstr "Quay lại"
+
+#: .wuchale-build/i18n.ts
+msgid "Next: review post"
+msgstr "Tiếp: xem lại bài viết"
+
+#: .wuchale-build/i18n.ts
+msgid "Your post"
+msgstr "Bài viết của bạn"
+
+#: .wuchale-build/i18n.ts
+msgid "Edit post"
+msgstr "Sửa bài viết"
+
+#: .wuchale-build/i18n.ts
+msgid "Groups"
+msgstr "Nhóm"
+
+#: .wuchale-build/i18n.ts
+msgid "Edit groups"
+msgstr "Sửa lựa chọn nhóm"
+
+#: .wuchale-build/i18n.ts
+msgid "Selected groups"
+msgstr "Các nhóm đã chọn"
+
+#: .wuchale-build/i18n.ts
+msgid "Complete post text"
+msgstr "Toàn bộ nội dung bài viết"
+
+#: .wuchale-build/i18n.ts
+msgid "Time between posts"
+msgstr "Khoảng cách giữa các bài đăng"
+
+#: .wuchale-build/i18n.ts
+msgid "Postika chooses a different wait time within your range between posts."
+msgstr "Postika chọn thời gian chờ khác nhau trong khoảng bạn đặt giữa các lần đăng."
+
+#: .wuchale-build/i18n.ts
+msgid "Shortest wait (seconds)"
+msgstr "Chờ ngắn nhất (giây)"
+
+#: .wuchale-build/i18n.ts
+msgid "Longest wait (seconds)"
+msgstr "Chờ lâu nhất (giây)"
+
+#~ msgid "Both waits must be at least 60 seconds. For example, 60 to 300 means a wait of 1 to 5 minutes."
+#~ msgstr ""
+
+#~ msgid "Post to selected groups"
+#~ msgstr ""
+
+#: .wuchale-build/i18n.ts
+msgid "Activity"
+msgstr "Hoạt động"
+
+#: .wuchale-build/i18n.ts
+msgid "Posting progress"
+msgstr "Tiến trình đăng bài"
+
+#: .wuchale-build/i18n.ts
+msgid "Group posting time"
+msgstr "Thời gian đăng bài vào nhóm"
+
+#: .wuchale-build/i18n.ts
+msgid "Time spent"
+msgstr "Thời gian đã dùng"
+
+#: .wuchale-build/i18n.ts
+msgid "Current post"
+msgstr "Bài viết hiện tại"
+
+#. 0: current; 1: total
+#. 0: current; 1: total
+#: .wuchale-build/i18n.ts
+#: .wuchale-build/i18n.ts
+msgid "Group {0}/{1}"
+msgstr "Nhóm {0}/{1}"
+
+#: .wuchale-build/i18n.ts
+msgid "Posting has not started."
+msgstr "Chưa bắt đầu đăng bài."
+
+#: .wuchale-build/i18n.ts
+msgid "Pause"
+msgstr "Tạm dừng"
+
+#: .wuchale-build/i18n.ts
+msgid "Stop"
+msgstr "Dừng"
+
+#: .wuchale-build/i18n.ts
+msgid "Resume"
+msgstr "Tiếp tục"
+
+#: .wuchale-build/i18n.ts
+msgid "Photo preview"
+msgstr "Xem trước ảnh"
+
+#: .wuchale-build/i18n.ts
+msgid "Close photo preview"
+msgstr "Đóng phần xem trước ảnh"
+
+#: .wuchale-build/i18n.ts
+msgid "View previous photo"
+msgstr "Xem ảnh trước"
+
+#: .wuchale-build/i18n.ts
+msgid "View next photo"
+msgstr "Xem ảnh tiếp theo"
+
+#: .wuchale-build/i18n.ts
+msgid "Photos in post order"
+msgstr "Ảnh theo thứ tự đăng"
+
+#: .wuchale-build/i18n.ts
+msgid "Dismiss notification"
+msgstr "Đóng thông báo"
+
+#: .wuchale-build/i18n.ts
+msgid "Success"
+msgstr "Thành công"
+
+#: .wuchale-build/i18n.ts
+msgid "Please check"
+msgstr "Vui lòng kiểm tra"
+
+#: .wuchale-build/i18n.ts
+msgid "Something went wrong"
+msgstr "Đã xảy ra lỗi"
+
+#: .wuchale-build/i18n.ts
+msgid "Information"
+msgstr "Thông tin"
+
+#: .wuchale-build/i18n.ts
+msgid "No groups found."
+msgstr "Không tìm thấy nhóm."
+
+#. 0: query
+#: .wuchale-build/i18n.ts
+msgid "No groups match \"{0}\"."
+msgstr "Không có nhóm nào khớp với “{0}”."
+
+#: .wuchale-build/i18n.ts
+msgid "Selected Groups"
+msgstr "Các nhóm đã chọn"
+
+#: .wuchale-build/i18n.ts
+msgid "No selected groups match this search."
+msgstr "Không có nhóm đã chọn nào khớp với tìm kiếm này."
+
+#: .wuchale-build/i18n.ts
+msgid "No groups selected yet."
+msgstr "Chưa chọn nhóm nào."
+
+#: .wuchale-build/i18n.ts
+msgid "Other Groups"
+msgstr "Các nhóm khác"
+
+#: .wuchale-build/i18n.ts
+msgid "No remaining groups match this search."
+msgstr "Không có nhóm còn lại nào khớp với tìm kiếm này."
+
+#: .wuchale-build/i18n.ts
+msgid "No other groups available."
+msgstr "Không còn nhóm nào khác."
+
+#: .wuchale-build/i18n.ts
+msgid "Find and select the groups you want to post to"
+msgstr "Tìm và chọn các nhóm bạn muốn đăng bài"
+
+#: .wuchale-build/i18n.ts
+msgid "Group posting is already in progress."
+msgstr "Đang đăng bài vào nhóm."
+
+#: .wuchale-build/i18n.ts
+msgid "Posting…"
+msgstr "Đang đăng…"
+
+#: .wuchale-build/i18n.ts
+msgid "Resuming…"
+msgstr "Đang tiếp tục…"
+
+#: .wuchale-build/i18n.ts
+msgid "Pausing…"
+msgstr "Đang tạm dừng…"
+
+#: .wuchale-build/i18n.ts
+msgid "Stopping…"
+msgstr "Đang dừng…"
+
+#: .wuchale-build/i18n.ts
+msgid "Active time"
+msgstr "Thời gian hoạt động"
+
+#: .wuchale-build/i18n.ts
+msgid "Paused at"
+msgstr "Đã tạm dừng lúc"
+
+#: .wuchale-build/i18n.ts
+msgid "Elapsed"
+msgstr "Thời gian đã trôi qua"
+
+#: .wuchale-build/i18n.ts
+msgid "Last item"
+msgstr "Mục cuối cùng"
+
+#: .wuchale-build/i18n.ts
+msgid "Current item"
+msgstr "Mục hiện tại"
+
+#: .wuchale-build/i18n.ts
+msgid "Item time"
+msgstr "Thời gian xử lý mục"
+
+#: .wuchale-build/i18n.ts
+msgid "Copy Facebook failure response"
+msgstr "Sao chép phản hồi lỗi từ Facebook"
+
+#: .wuchale-build/i18n.ts
+msgid "Facebook failure response copied."
+msgstr "Đã sao chép phản hồi lỗi từ Facebook."
+
+#: .wuchale-build/i18n.ts
+msgid "Unable to copy the Facebook response."
+msgstr "Không thể sao chép phản hồi từ Facebook."
+
+#: .wuchale-build/i18n.ts
+msgid "Done"
+msgstr "Xong"
+
+#: .wuchale-build/i18n.ts
+msgid "Pending"
+msgstr "Đang chờ"
+
+#: .wuchale-build/i18n.ts
+msgid "Fail"
+msgstr "Lỗi"
+
+#: .wuchale-build/i18n.ts
+msgid "Limit"
+msgstr "Giới hạn"
+
+#: .wuchale-build/i18n.ts
+msgid "Next"
+msgstr "Tiếp theo"
+
+#: .wuchale-build/i18n.ts
+msgid "Post"
+msgstr "Đăng"
+
+#: .wuchale-build/i18n.ts
+msgid "Info"
+msgstr "Thông tin"
+
+#: .wuchale-build/i18n.ts
+msgid "Loading..."
+msgstr "Đang tải..."
+
+#: .wuchale-build/i18n.ts
+msgid "Finding the groups you have joined..."
+msgstr "Đang tìm các nhóm bạn đã tham gia..."
+
+#: .wuchale-build/i18n.ts
+msgid "Opening Facebook to find the groups you have joined..."
+msgstr "Đang mở Facebook để tìm các nhóm bạn đã tham gia..."
+
+#: .wuchale-build/i18n.ts
+msgid "Unable to load groups."
+msgstr "Không thể tải danh sách nhóm."
+
+#. 0: count
+#: .wuchale-build/i18n.ts
+msgid "Finished loading {0} groups."
+msgstr "Đã tải {0} nhóm."
+
+#: .wuchale-build/i18n.ts
+msgid "Could not find your groups. Check that you are signed into Facebook and try again."
+msgstr "Không tìm thấy các nhóm của bạn. Kiểm tra xem bạn đã đăng nhập Facebook chưa rồi thử lại."
+
+#: .wuchale-build/i18n.ts
+msgid "Unable to add images."
+msgstr "Không thể thêm ảnh."
+
+#: .wuchale-build/i18n.ts
+msgid "Only image files can be added."
+msgstr "Chỉ có thể thêm tệp ảnh."
+
+#. 0: count
+#: .wuchale-build/i18n.ts
+msgid "{0} duplicate image was skipped."
+msgstr "Đã bỏ qua {0} ảnh trùng lặp."
+
+#. 0: count
+#: .wuchale-build/i18n.ts
+msgid "{0} duplicate images were skipped."
+msgstr "Đã bỏ qua {0} ảnh trùng lặp."
+
+#~ msgid "Image {0} of {1}. Click to preview or drag to reorder."
+#~ msgstr ""
+
+#. 0: name
+#: .wuchale-build/i18n.ts
+msgid "Remove {0}"
+msgstr "Xóa {0}"
+
+#: .wuchale-build/i18n.ts
+msgid "Unable to resume posting."
+msgstr "Không thể tiếp tục đăng bài."
+
+#: .wuchale-build/i18n.ts
+msgid "Unable to pause posting."
+msgstr "Không thể tạm dừng đăng bài."
+
+#: .wuchale-build/i18n.ts
+msgid "Unable to stop posting."
+msgstr "Không thể dừng đăng bài."
+
+#: .wuchale-build/i18n.ts
+msgid "Please select at least one group."
+msgstr "Vui lòng chọn ít nhất một nhóm."
+
+#: .wuchale-build/i18n.ts
+msgid "Write your post and add at least one image before posting."
+msgstr "Viết nội dung và thêm ít nhất một ảnh trước khi đăng."
+
+#. 0: minimum
+#: .wuchale-build/i18n.ts
+msgid "Enter whole numbers of at least {0} seconds for both waits. The longest wait must be at least as long as the shortest wait."
+msgstr "Nhập số nguyên ít nhất {0} giây cho cả hai thời gian chờ. Thời gian chờ lâu nhất phải lớn hơn hoặc bằng thời gian chờ ngắn nhất."
+
+#: .wuchale-build/i18n.ts
+msgid "Your selected groups are no longer available. Click Find my groups, select them again, and try posting."
+msgstr "Các nhóm đã chọn không còn khả dụng. Nhấp Tìm nhóm của tôi, chọn lại nhóm rồi thử đăng."
+
+#: .wuchale-build/i18n.ts
+msgid "Getting ready to post..."
+msgstr "Đang chuẩn bị đăng..."
+
+#: .wuchale-build/i18n.ts
+msgid "Could not start posting. Please try again."
+msgstr "Không thể bắt đầu đăng bài. Vui lòng thử lại."
+
+#. 0: name
+#: .wuchale-build/i18n.ts
+msgid "Unable to read {0}."
+msgstr "Không thể đọc {0}."
+
+#. 0: count
+#: .wuchale-build/i18n.ts
+msgid "Restored {0} loaded groups."
+msgstr "Đã khôi phục {0} nhóm đã tải."
+
+#: .wuchale-build/i18n.ts
+msgid "Unable to restore side panel session."
+msgstr "Không thể khôi phục phiên của bảng điều khiển bên."
+
+#: .wuchale-build/i18n.ts
+msgid "Unable to save side panel session."
+msgstr "Không thể lưu phiên của bảng điều khiển bên."
+
+#: .wuchale-build/i18n.ts
+msgid "Post image preview"
+msgstr "Xem trước ảnh bài viết"
+
+#. 0: index; 1: name
+#: .wuchale-build/i18n.ts
+msgid "View photo {0}: {1}"
+msgstr "Xem ảnh {0}: {1}"
+
+#. 0: count; 1: target
+#: .wuchale-build/i18n.ts
+msgid "{0}/{1} posts submitted"
+msgstr "Đã gửi {0}/{1} bài viết"
+
+#. 0: count; 1: total
+#: .wuchale-build/i18n.ts
+msgid "{0}/{1} groups processed"
+msgstr "Đã xử lý {0}/{1} nhóm"
+
+#: .wuchale-build/i18n.ts
+msgid "Queue"
+msgstr "Hàng đợi"
+
+#. 0: count; 1: duration; 2: failed
+#: .wuchale-build/i18n.ts
+msgid "Completed {0} posts in {1}{2}."
+msgstr "Đã hoàn tất {0} bài viết trong {1}{2}."
+
+#. 0: duration
+#: .wuchale-build/i18n.ts
+msgid "Next post in {0}"
+msgstr "Lần đăng tiếp theo sau {0}"
+
+#: .wuchale-build/i18n.ts
+msgid "Posting paused."
+msgstr "Đã tạm dừng đăng bài."
+
+#. 0: group
+#: .wuchale-build/i18n.ts
+msgid "Posting paused before {0}."
+msgstr "Đã tạm dừng trước khi đăng vào {0}."
+
+#: .wuchale-build/i18n.ts
+msgid "Posting is already in progress."
+msgstr "Đang đăng bài."
+
+#: .wuchale-build/i18n.ts
+msgid "Wait for the current posts to finish, or stop posting before starting again."
+msgstr "Đợi các bài viết hiện tại hoàn tất hoặc dừng đăng trước khi bắt đầu lại."
+
+#: .wuchale-build/i18n.ts
+msgid "Preparing the first post..."
+msgstr "Đang chuẩn bị bài viết đầu tiên..."
+
+#: .wuchale-build/i18n.ts
+msgid "Continuing to post automatically..."
+msgstr "Đang tiếp tục đăng tự động..."
+
+#. 0: current; 1: total; 2: group
+#: .wuchale-build/i18n.ts
+msgid "Preparing post {0}/{1} for {2}..."
+msgstr "Đang chuẩn bị bài viết {0}/{1} cho {2}..."
+
+#. 0: current; 1: total; 2: group
+#: .wuchale-build/i18n.ts
+msgid "Uploading images from post {0}/{1} for {2}..."
+msgstr "Đang tải ảnh của bài viết {0}/{1} lên cho {2}..."
+
+#. 0: current; 1: total; 2: group
+#: .wuchale-build/i18n.ts
+msgid "Preparing text-only post {0}/{1} for {2}..."
+msgstr "Đang chuẩn bị bài viết chỉ có văn bản {0}/{1} cho {2}..."
+
+#. 0: current; 1: total; 2: group
+#: .wuchale-build/i18n.ts
+msgid "Posting post {0}/{1} to {2}..."
+msgstr "Đang đăng bài viết {0}/{1} vào {2}..."
+
+#: .wuchale-build/i18n.ts
+msgid "Your post is pending"
+msgstr "Bài viết của bạn đang chờ"
+
+#. 0: group
+#: .wuchale-build/i18n.ts
+msgid "Posted to {0}."
+msgstr "Đã đăng vào {0}."
+
+#. 0: group
+#: .wuchale-build/i18n.ts
+msgid "Posted successfully to {0}."
+msgstr "Đã đăng thành công vào {0}."
+
+#: .wuchale-build/i18n.ts
+msgid "Your post is awaiting admin approval. If the admin team approves it, it'll become visible in the group."
+msgstr "Bài viết của bạn đang chờ quản trị viên phê duyệt. Nếu được duyệt, bài viết sẽ hiển thị trong nhóm."
+
+#. 0: count
+#: .wuchale-build/i18n.ts
+msgid "Posting finished: {0} posts were submitted."
+msgstr "Đăng bài đã hoàn tất: đã gửi {0} bài viết."
+
+#. 0: posted; 1: failed
+#: .wuchale-build/i18n.ts
+msgid "Posting finished: {0} posts were submitted and {1} groups failed."
+msgstr "Đăng bài đã hoàn tất: đã gửi {0} bài viết và đăng thất bại ở {1} nhóm."
+
+#: .wuchale-build/i18n.ts
+msgid "Facebook temporarily blocked posting on this account. Queue stopped. Try again later."
+msgstr "Facebook đã tạm thời chặn đăng bài trên tài khoản này. Hàng đợi đã dừng. Vui lòng thử lại sau."
+
+#. 0: group
+#: .wuchale-build/i18n.ts
+msgid "Failed to post to {0}."
+msgstr "Không thể đăng vào {0}."
+
+#. 0: group
+#: .wuchale-build/i18n.ts
+msgid "Facebook rejected the post to {0} because this Group cannot accept more pending content from your account."
+msgstr "Facebook đã từ chối bài viết vào {0} vì nhóm này không thể nhận thêm nội dung đang chờ từ tài khoản của bạn."
+
+#: .wuchale-build/i18n.ts
+msgid "Automatic posting stopped."
+msgstr "Đăng bài tự động đã dừng."
+
+#: .wuchale-build/i18n.ts
+msgid "Posting stopped by user."
+msgstr "Người dùng đã dừng đăng bài."
+
+#: .wuchale-build/i18n.ts
+msgid "Show only posted activity"
+msgstr "Chỉ hiển thị các bài đã đăng"
+
+#: .wuchale-build/i18n.ts
+msgid "Show only posts waiting for approval"
+msgstr "Chỉ hiển thị các bài đang chờ phê duyệt"
+
+#: .wuchale-build/i18n.ts
+msgid "Show only failed activity"
+msgstr "Chỉ hiển thị các lần đăng thất bại"
+
+#. 0: count
+#: .wuchale-build/i18n.ts
+msgid "{0} group"
+msgstr "{0} nhóm"
+
+#. 0: count
+#: .wuchale-build/i18n.ts
+msgid "{0} groups"
+msgstr "{0} nhóm"
+
+#. 0: count
+#: .wuchale-build/i18n.ts
+msgid "{0} result"
+msgstr "{0} kết quả"
+
+#. 0: count
+#: .wuchale-build/i18n.ts
+msgid "{0} results"
+msgstr "{0} kết quả"
+
+#: .wuchale-build/i18n.ts
+#: .wuchale-build/i18n.ts
+msgid "Escape"
+msgstr "Escape"
+
+#: .wuchale-build/i18n.ts
+msgid "Enter"
+msgstr "Enter"
+
+#: .wuchale-build/i18n.ts
+msgid "Tab"
+msgstr "Tab"
+
+#: .wuchale-build/i18n.ts
+#: .wuchale-build/i18n.ts
+#: .wuchale-build/i18n.ts
+msgid "ArrowDown"
+msgstr "ArrowDown"
+
+#: .wuchale-build/i18n.ts
+#: .wuchale-build/i18n.ts
+msgid "ArrowUp"
+msgstr "ArrowUp"
+
+#: .wuchale-build/i18n.ts
+msgid "Home"
+msgstr "Home"
+
+#: .wuchale-build/i18n.ts
+msgid "End"
+msgstr "End"
+
+#: .wuchale-build/i18n.ts
+msgid "Clear language search"
+msgstr "Xóa tìm kiếm ngôn ngữ"
+
+#: .wuchale-build/i18n.ts
+msgid "Notifications"
+msgstr "Thông báo"
+
+#: .wuchale-build/i18n.ts
+msgid "Starting group extraction..."
+msgstr "Đang bắt đầu lấy danh sách nhóm..."
+
+#: .wuchale-build/i18n.ts
+msgid "Open Facebook first. This extension only works on facebook.com."
+msgstr "Mở Facebook trước. Tiện ích này chỉ hoạt động trên facebook.com."
+
+#: .wuchale-build/i18n.ts
+msgid "Select at least one post before posting."
+msgstr "Chọn ít nhất một bài viết trước khi đăng."
+
+#: .wuchale-build/i18n.ts
+msgid "Preparing current tab..."
+msgstr "Đang chuẩn bị thẻ hiện tại..."
+
+#: .wuchale-build/i18n.ts
+msgid "Opening Facebook joined groups page..."
+msgstr "Đang mở trang các nhóm Facebook đã tham gia..."
+
+#: .wuchale-build/i18n.ts
+msgid "Facebook joined groups page loaded."
+msgstr "Đã tải trang các nhóm Facebook đã tham gia."
+
+#: .wuchale-build/i18n.ts
+msgid "Changing joined groups sort to trigger Facebook groups request..."
+msgstr "Đang đổi cách sắp xếp nhóm đã tham gia để kích hoạt yêu cầu lấy nhóm từ Facebook..."
+
+#: .wuchale-build/i18n.ts
+msgid "Waiting for fresh Facebook groups request..."
+msgstr "Đang chờ yêu cầu lấy nhóm mới từ Facebook..."
+
+#: .wuchale-build/i18n.ts
+msgid "Captured groups request. Preparing extraction..."
+msgstr "Đã ghi nhận yêu cầu lấy nhóm. Đang chuẩn bị trích xuất..."
+
+#. 0: page
+#: .wuchale-build/i18n.ts
+msgid "Fetching groups page {0}..."
+msgstr "Đang tải trang nhóm {0}..."
+
+#. 0: count
+#: .wuchale-build/i18n.ts
+msgid "Loaded {0} groups so far."
+msgstr "Đã tải được {0} nhóm."
+
+#. 0: count
+#: .wuchale-build/i18n.ts
+msgid "Fetching next page. {0} groups loaded."
+msgstr "Đang tải trang tiếp theo. Đã tải {0} nhóm."
+
+#. 0: status
+#: .wuchale-build/i18n.ts
+msgid "Facebook groups request failed with {0}."
+msgstr "Yêu cầu lấy nhóm từ Facebook thất bại với {0}."
+
+#: .wuchale-build/i18n.ts
+msgid "Unable to fetch groups."
+msgstr "Không thể lấy danh sách nhóm."
+
+#: .wuchale-build/i18n.ts
+msgid "Unable to find the active tab for posting."
+msgstr "Không tìm thấy thẻ đang hoạt động để đăng bài."
+
+#: .wuchale-build/i18n.ts
+msgid "Unable to open joined groups in the current tab."
+msgstr "Không thể mở các nhóm đã tham gia trong thẻ hiện tại."
+
+#: .wuchale-build/i18n.ts
+msgid "Unable to trigger joined groups sort."
+msgstr "Không thể kích hoạt sắp xếp các nhóm đã tham gia."
+
+#: .wuchale-build/i18n.ts
+msgid "The joined groups sort control changed. Please load groups again."
+msgstr "Bộ điều khiển sắp xếp nhóm đã thay đổi. Vui lòng tải lại danh sách nhóm."
+
+#: .wuchale-build/i18n.ts
+msgid "Unable to read groups from joined groups tab."
+msgstr "Không thể đọc danh sách nhóm từ thẻ nhóm đã tham gia."
+
+#: .wuchale-build/i18n.ts
+msgid "Facebook did not return group data."
+msgstr "Facebook không trả về dữ liệu nhóm."
+
+#: .wuchale-build/i18n.ts
+msgid "None of the selected Groups has a visible post composer. Select another standard Group and try again."
+msgstr "Không có nhóm đã chọn nào hiển thị trình soạn bài viết. Chọn một nhóm thông thường khác rồi thử lại."
+
+#: .wuchale-build/i18n.ts
+msgid "Could not set up photo uploads from your first post. Please start posting again."
+msgstr "Không thể thiết lập tải ảnh lên từ bài viết đầu tiên. Vui lòng bắt đầu đăng lại."
+
+#. 0: starter; 1: next
+#: .wuchale-build/i18n.ts
+msgid "{0} does not allow Postika to start posting. Trying {1} instead..."
+msgstr "{0} không cho phép Postika bắt đầu đăng bài. Đang thử {1}..."
+
+#. 0: duration
+#: .wuchale-build/i18n.ts
+msgid "Paused {0}"
+msgstr "Đã tạm dừng {0}"
+
+#. 0: kind; 1: group
+#: .wuchale-build/i18n.ts
+msgid "Fresh {0} request values captured from {1}."
+msgstr "Đã ghi nhận các giá trị mới cho yêu cầu {0} từ {1}."
+
+#: .wuchale-build/i18n.ts
+msgid "Add post text and at least one image to continue."
+msgstr "Thêm nội dung bài viết và ít nhất một ảnh để tiếp tục."
+
+#: .wuchale-build/i18n.ts
+msgid "Add post text to continue."
+msgstr "Thêm nội dung bài viết để tiếp tục."
+
+#: .wuchale-build/i18n.ts
+msgid "Add at least one image to continue."
+msgstr "Thêm ít nhất một ảnh để tiếp tục."
+
+#. 0: count
+#: .wuchale-build/i18n.ts
+msgid "{0} groups selected. Continue to review your post."
+msgstr "Đã chọn {0} nhóm. Tiếp tục để xem lại bài viết."
+
+#. 0: count
+#: .wuchale-build/i18n.ts
+msgid "{0} images"
+msgstr "{0} ảnh"
+
+#: .wuchale-build/i18n.ts
+msgid "Post now"
+msgstr "Đăng ngay"
+
+#: .wuchale-build/i18n.ts
+msgid "Schedule"
+msgstr "Lên lịch"
+
+#: .wuchale-build/i18n.ts
+msgid "Schedule your queue"
+msgstr "Lên lịch cho hàng đợi"
+
+#: .wuchale-build/i18n.ts
+msgid "Confirm schedule"
+msgstr "Xác nhận lịch"
+
+#: .wuchale-build/i18n.ts
+msgid "Cancel"
+msgstr "Hủy"
+
+#. 0: zone
+#: .wuchale-build/i18n.ts
+msgid "Time zone: {0}. Keep Chrome open and your computer awake. Facebook may ask you to sign in when posting starts."
+msgstr "Múi giờ: {0}. Giữ Chrome mở và không để máy tính ở chế độ ngủ. Facebook có thể yêu cầu bạn đăng nhập khi bắt đầu đăng bài."
+
+#: .wuchale-build/i18n.ts
+msgid "Choose a date and time"
+msgstr "Chọn ngày và giờ"
+
+#: .wuchale-build/i18n.ts
+msgid "Choose a weekday for this post"
+msgstr "Chọn một ngày trong tuần cho bài viết này"
+
+#: .wuchale-build/i18n.ts
+msgid "Previous month"
+msgstr "Tháng trước"
+
+#: .wuchale-build/i18n.ts
+msgid "Next month"
+msgstr "Tháng sau"
+
+#: .wuchale-build/i18n.ts
+msgid "Select date"
+msgstr "Chọn ngày"
+
+#: .wuchale-build/i18n.ts
+msgid "Select time"
+msgstr "Chọn giờ"
+
+#: .wuchale-build/i18n.ts
+msgid "Hour"
+msgstr "Giờ"
+
+#: .wuchale-build/i18n.ts
+msgid "Minute"
+msgstr "Phút"
+
+#: .wuchale-build/i18n.ts
+msgid "Increase hour"
+msgstr "Tăng giờ"
+
+#: .wuchale-build/i18n.ts
+msgid "Decrease hour"
+msgstr "Giảm giờ"
+
+#: .wuchale-build/i18n.ts
+msgid "Increase minute"
+msgstr "Tăng phút"
+
+#: .wuchale-build/i18n.ts
+msgid "Decrease minute"
+msgstr "Giảm phút"
+
+#: .wuchale-build/i18n.ts
+msgid "Morning"
+msgstr "Buổi sáng"
+
+#: .wuchale-build/i18n.ts
+msgid "Afternoon"
+msgstr "Buổi chiều"
+
+#: .wuchale-build/i18n.ts
+msgid "Evening"
+msgstr "Buổi tối"
+
+#: .wuchale-build/i18n.ts
+msgid "Choose a date and time in the future."
+msgstr "Chọn ngày và giờ trong tương lai."
+
+#: .wuchale-build/i18n.ts
+msgid "Scheduled"
+msgstr "Đã lên lịch"
+
+#. 0: date
+#: .wuchale-build/i18n.ts
+msgid "Scheduled for {0}. Keep Chrome open and your computer awake."
+msgstr "Đã lên lịch vào {0}. Giữ Chrome mở và không để máy tính ở chế độ ngủ."
+
+#: .wuchale-build/i18n.ts
+msgid "Your queue is scheduled."
+msgstr "Đã lên lịch cho hàng đợi."
+
+#: .wuchale-build/i18n.ts
+msgid "Cancel scheduled queue"
+msgstr "Hủy hàng đợi đã lên lịch"
+
+#: .wuchale-build/i18n.ts
+msgid "Scheduled posting cancelled."
+msgstr "Đã hủy lịch đăng bài."
+
+#: .wuchale-build/i18n.ts
+msgid "Could not schedule this queue. Check that Chrome storage is available and try again."
+msgstr "Không thể lên lịch cho hàng đợi này. Kiểm tra xem bộ nhớ Chrome có sẵn không rồi thử lại."
+
+#: .wuchale-build/i18n.ts
+msgid "The scheduled queue could not be started. Please schedule it again."
+msgstr "Không thể bắt đầu hàng đợi đã lên lịch. Vui lòng lên lịch lại."
+
+#: .wuchale-build/i18n.ts
+msgid "Scheduling this queue..."
+msgstr "Đang lên lịch cho hàng đợi..."
+
+#~ msgid "24-hour clock"
+#~ msgstr ""
+
+#: .wuchale-build/i18n.ts
+msgid "Time format: 24-hour"
+msgstr "Định dạng giờ: 24 giờ"
+
+#: .wuchale-build/i18n.ts
+msgid "Settings & support"
+msgstr "Cài đặt và hỗ trợ"
+
+#: .wuchale-build/i18n.ts
+msgid "Dark mode"
+msgstr "Chế độ tối"
+
+#: .wuchale-build/i18n.ts
+msgid "WhatsApp developer"
+msgstr "Liên hệ nhà phát triển qua WhatsApp"
+
+#: .wuchale-build/i18n.ts
+msgid "Email developer"
+msgstr "Gửi email cho nhà phát triển"
+
+#: .wuchale-build/i18n.ts
+msgid "Could not load the appearance setting. Using light mode."
+msgstr "Không thể tải cài đặt giao diện. Đang dùng chế độ sáng."
+
+#: .wuchale-build/i18n.ts
+msgid "Could not save the appearance setting. It will reset when Postika closes."
+msgstr "Không thể lưu cài đặt giao diện. Cài đặt sẽ đặt lại khi đóng Postika."
+
+#: .wuchale-build/i18n.ts
+msgid "Download desktop app"
+msgstr "Tải ứng dụng máy tính"
+
+#: .wuchale-build/i18n.ts
+msgid "Images"
+msgstr "Ảnh"
+
+#: .wuchale-build/i18n.ts
+msgid "Required"
+msgstr "Bắt buộc"
+
+#. 0: count
+#: .wuchale-build/i18n.ts
+msgid "{0} images selected"
+msgstr "Đã chọn {0} ảnh"
+
+#: .wuchale-build/i18n.ts
+msgid "Add more"
+msgstr "Thêm ảnh"
+
+#. 0: current; 1: total
+#: .wuchale-build/i18n.ts
+msgid "Image {0} of {1}. Click to preview; drag or use Alt+Left/Right to reorder."
+msgstr "Ảnh {0}/{1}. Nhấp để xem trước; kéo hoặc dùng Alt+Mũi tên trái/phải để đổi thứ tự."
+
+#: .wuchale-build/i18n.ts
+msgid "More formatting"
+msgstr "Thêm định dạng"
+
+#~ msgid "Sign in to Facebook in a Chrome tab before finding groups. Postika opens your joined-groups page to load them."
+#~ msgstr ""
+
+#: .wuchale-build/i18n.ts
+msgid "Sign in to Facebook in a Chrome tab. Postika opens your joined-groups page."
+msgstr "Đăng nhập Facebook trong một thẻ Chrome. Postika sẽ mở trang các nhóm bạn đã tham gia."
+
+#: .wuchale-build/i18n.ts
+msgid "Select the groups where you want to post."
+msgstr "Chọn các nhóm bạn muốn đăng bài."
+
+#: .wuchale-build/i18n.ts
+msgid "Your groups will appear here."
+msgstr "Các nhóm của bạn sẽ xuất hiện ở đây."
+
+#: .wuchale-build/i18n.ts
+msgid "Internet connection lost. Posting paused until the connection returns."
+msgstr "Mất kết nối Internet. Đăng bài được tạm dừng cho đến khi có kết nối lại."
+
+#: .wuchale-build/i18n.ts
+msgid "Posting resumed."
+msgstr "Đã tiếp tục đăng bài."
+
+#: .wuchale-build/i18n.ts
+msgid "Internet connection restored. Resuming posting."
+msgstr "Đã kết nối lại Internet. Đang tiếp tục đăng bài."
+
+#: .wuchale-build/i18n.ts
+msgid "Internet connection restored. Posting remains paused until you resume."
+msgstr "Đã kết nối lại Internet. Việc đăng bài vẫn tạm dừng cho đến khi bạn tiếp tục."
+
+#: .wuchale-build/i18n.ts
+msgid "Facebook did not provide the request values needed to continue. Try again."
+msgstr "Facebook không cung cấp các giá trị yêu cầu cần thiết để tiếp tục. Vui lòng thử lại."
+
+#: .wuchale-build/i18n.ts
+msgid "Facebook did not confirm whether the first post was submitted. Check Facebook before trying again."
+msgstr "Facebook chưa xác nhận bài viết đầu tiên đã được gửi hay chưa. Kiểm tra Facebook trước khi thử lại."
+
+#: .wuchale-build/i18n.ts
+msgid "Saving draft…"
+msgstr "Đang lưu bản nháp…"
+
+#: .wuchale-build/i18n.ts
+msgid "Draft saved on this device."
+msgstr "Đã lưu bản nháp trên thiết bị này."
+
+#: .wuchale-build/i18n.ts
+msgid "Your latest changes could not be saved. Keep this panel open and try again."
+msgstr "Không thể lưu các thay đổi mới nhất. Giữ bảng điều khiển này mở rồi thử lại."
+
+#: .wuchale-build/i18n.ts
+msgid "Try again"
+msgstr "Thử lại"
+
+#: .wuchale-build/i18n.ts
+msgid "Enter a whole number of at least 60 seconds."
+msgstr "Nhập số nguyên ít nhất 60 giây."
+
+#: .wuchale-build/i18n.ts
+msgid "The longest wait must be at least as long as the shortest wait."
+msgstr "Thời gian chờ lâu nhất phải lớn hơn hoặc bằng thời gian chờ ngắn nhất."
+
+#~ msgid "Wait between {0} and {1} between posts."
+#~ msgstr ""
+
+#: .wuchale-build/i18n.ts
+msgid "Enter an hour from 0 to 23."
+msgstr "Nhập giờ từ 0 đến 23."
+
+#: .wuchale-build/i18n.ts
+msgid "Enter minutes from 0 to 59."
+msgstr "Nhập phút từ 0 đến 59."
+
+#: .wuchale-build/i18n.ts
+msgid "Enter whole seconds. Both waits must be at least 60 seconds."
+msgstr "Nhập số giây nguyên. Cả hai thời gian chờ phải ít nhất 60 giây."
+
+#. 0: shortest; 1: longest
+#: .wuchale-build/i18n.ts
+msgid "A wait of {0} to {1} between posts."
+msgstr "Chờ từ {0} đến {1} giữa các lần đăng."
+
+#: .wuchale-build/i18n.ts
+msgid "View last activity"
+msgstr "Xem hoạt động gần nhất"
+
+#: .wuchale-build/i18n.ts
+msgid "Back to review"
+msgstr "Quay lại xem xét"
+
+#: .wuchale-build/i18n.ts
+msgid "Activity stays available until you close this panel or start a new queue."
+msgstr "Hoạt động được giữ lại cho đến khi bạn đóng bảng điều khiển này hoặc bắt đầu hàng đợi mới."
+
+#. 0: name
+#: .wuchale-build/i18n.ts
+msgid "{0}, selected"
+msgstr "{0}, đã chọn"
+
+#: .wuchale-build/i18n.ts
+msgid "posted"
+msgstr "đã đăng"
+
+#: .wuchale-build/i18n.ts
+msgid "awaiting approval"
+msgstr "chờ phê duyệt"
+
+#: .wuchale-build/i18n.ts
+msgid "failed"
+msgstr "thất bại"
+
+#: .wuchale-build/i18n.ts
+msgid "left to submit"
+msgstr "còn chờ gửi"
+
+#: .wuchale-build/i18n.ts
+msgid "under 1s"
+msgstr "dưới 1 giây"
+
+#. 0: hours
+#: .wuchale-build/i18n.ts
+msgid "{0}h"
+msgstr "{0} giờ"
+
+#. 0: minutes
+#: .wuchale-build/i18n.ts
+msgid "{0}m"
+msgstr "{0} phút"
+
+#. 0: seconds
+#: .wuchale-build/i18n.ts
+msgid "{0}s"
+msgstr "{0} giây"
+
+#. 0: duration
+#: .wuchale-build/i18n.ts
+msgid "paused {0}"
+msgstr "đã tạm dừng {0}"
+
+#. 0: count
+#: .wuchale-build/i18n.ts
+msgid " · {0} failed"
+msgstr " · {0} thất bại"
+
+#: .wuchale-build/i18n.ts
+msgid "the first Group"
+msgstr "nhóm đầu tiên"
+
+#: .wuchale-build/i18n.ts
+msgid "selected"
+msgstr "đã chọn"
+
+#. 0: count
+#: .wuchale-build/i18n.ts
+msgid "from {0} loaded"
+msgstr "trong {0} nhóm đã tải"
+
+#: .wuchale-build/i18n.ts
+msgid "1 group selected. Continue to review your post."
+msgstr "Đã chọn 1 nhóm. Tiếp tục để xem lại bài viết."
+
+#: .wuchale-build/i18n.ts
+msgid "1 image"
+msgstr "1 ảnh"
+
+#: .wuchale-build/i18n.ts
+msgid "1 group selected"
+msgstr "Đã chọn 1 nhóm"

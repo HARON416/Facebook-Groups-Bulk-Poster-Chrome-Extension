@@ -5,6 +5,8 @@ export const supportedLocales = [
   { code: "en", name: "English", flag: "🇺🇸" },
   { code: "es", name: "Español", flag: "🇪🇸" },
   { code: "ar", name: "العربية", flag: "🇸🇦" },
+  { code: "ro", name: "Română", flag: "🇷🇴", aliases: ["Romanian"] },
+  { code: "vi", name: "Tiếng Việt", flag: "🇻🇳", aliases: ["Vietnamese"] },
 ] as const;
 
 type MessageKey = keyof ReturnType<typeof translatedMessages>;
@@ -18,6 +20,7 @@ function translatedMessages() {
   return {
     appName: "Postika",
     language: "Language",
+    languageSelected: (name: string) => `${name}, selected`,
     settingsAndSupport: "Settings & support",
     darkMode: "Dark mode",
     downloadDesktopApp: "Download desktop app",
@@ -72,6 +75,11 @@ function translatedMessages() {
       "Could not restore saved images. Please add them again.",
     couldNotSaveDraftImages:
       "Could not save your images. They may not be available next time.",
+    draftSaving: "Saving draft…",
+    draftSaved: "Draft saved on this device.",
+    draftSaveFailed:
+      "Your latest changes could not be saved. Keep this panel open and try again.",
+    retrySave: "Try again",
     findGroupsHelp: "Select the groups where you want to post.",
     loadedCount: (count: number) => `${count} loaded`,
     selectAllGroups: "Select all groups",
@@ -99,7 +107,14 @@ function translatedMessages() {
     shortestWait: "Shortest wait (seconds)",
     longestWait: "Longest wait (seconds)",
     intervalHelp:
-      "Both waits must be at least 60 seconds. For example, 60 to 300 means a wait of 1 to 5 minutes.",
+      "Enter whole seconds. Both waits must be at least 60 seconds.",
+    waitMinimumError: "Enter a whole number of at least 60 seconds.",
+    waitOrderError:
+      "The longest wait must be at least as long as the shortest wait.",
+    waitRangeSummary: (shortest: string, longest: string) =>
+      `A wait of ${shortest} to ${longest} between posts.`,
+    invalidHour: "Enter an hour from 0 to 23.",
+    invalidMinute: "Enter minutes from 0 to 59.",
     postNow: "Post now",
     schedule: "Schedule",
     scheduleQueueTitle: "Schedule your queue",
@@ -136,14 +151,22 @@ function translatedMessages() {
       "The scheduled queue could not be started. Please schedule it again.",
     schedulingQueue: "Scheduling this queue...",
     activity: "Activity",
+    viewLastActivity: "View last activity",
+    backToReview: "Back to review",
+    activityRetention:
+      "Activity stays available until you close this panel or start a new queue.",
     postingProgress: "Posting progress",
     groupPostingTime: "Group posting time",
     timeSpent: "Time spent",
     currentPost: "Current post",
     groupLabel: (current: number, total: number) => `Group ${current}/${total}`,
+    // @wc-include
     posted: "posted",
+    // @wc-include
     awaitingApproval: "awaiting approval",
+    // @wc-include
     failed: "failed",
+    // @wc-include
     leftToSubmit: "left to submit",
     postingNotStarted: "Posting has not started.",
     pause: "Pause",
@@ -180,9 +203,13 @@ function translatedMessages() {
     lastItem: "Last item",
     currentItem: "Current item",
     itemTime: "Item time",
+    // @wc-include
     underOneSecond: "under 1s",
+    // @wc-include
     hoursShort: (hours: number) => `${hours}h`,
+    // @wc-include
     minutesShort: (minutes: number) => `${minutes}m`,
+    // @wc-include
     secondsShort: (seconds: number) => `${seconds}s`,
     copyFacebookResponse: "Copy Facebook failure response",
     responseCopied: "Facebook failure response copied.",
@@ -265,6 +292,7 @@ function translatedMessages() {
     incompatibleGroupStarter: (starter: string, next: string) =>
       `${starter} does not allow Postika to start posting. Trying ${next} instead...`,
     pausedDuration: (duration: string) => `Paused ${duration}`,
+    // @wc-include
     pausedDurationShort: (duration: string) => `paused ${duration}`,
     freshPostRequestCaptured: (kind: string, group: string) =>
       `Fresh ${kind} request values captured from ${group}.`,
@@ -279,6 +307,7 @@ function translatedMessages() {
       `Group ${current}/${total}`,
     completedPosts: (count: number, duration: string, failed: string) =>
       `Completed ${count} posts in ${duration}${failed}.`,
+    // @wc-include
     failedCount: (count: number) => ` · ${count} failed`,
     nextPostIn: (duration: string) => `Next post in ${duration}`,
     postingPaused: "Posting paused.",
@@ -315,6 +344,7 @@ function translatedMessages() {
     accountTemporarilyBlocked:
       "Facebook temporarily blocked posting on this account. Queue stopped. Try again later.",
     failedToPostToGroup: (group: string) => `Failed to post to ${group}.`,
+    // @wc-include
     unknownGroup: "the first Group",
     facebookPendingLimit: (group: string) =>
       `Facebook rejected the post to ${group} because this Group cannot accept more pending content from your account.`,
@@ -325,15 +355,20 @@ function translatedMessages() {
     onlyFailedActivity: "Show only failed activity",
     groupCountSingular: (count: number) => `${count} group`,
     groupCountPlural: (count: number) => `${count} groups`,
+    // @wc-include
     selected: "selected",
+    // @wc-include
     fromLoaded: (count: number) => `from ${count} loaded`,
     result: (count: number) => `${count} result`,
     results: (count: number) => `${count} results`,
+    // @wc-include
     oneGroupSelectedContinue: "1 group selected. Continue to review your post.",
     groupsSelectedContinue: (count: number) =>
       `${count} groups selected. Continue to review your post.`,
+    // @wc-include
     oneImageCount: "1 image",
     imageCount: (count: number) => `${count} images`,
+    // @wc-include
     oneGroupSelected: "1 group selected",
     groupsSelectedCount: (count: number) => `${count} groups selected`,
   };
@@ -401,7 +436,7 @@ function preferredLocale(): string {
   }
   for (const preference of navigator.languages ?? [navigator.language]) {
     const language = preference.toLowerCase().split(/[-_]/, 1)[0];
-    if (language === "es" || language === "ar") return language;
+    if (supportedLocales.some(({ code }) => code === language)) return language;
   }
   return "en";
 }
@@ -459,13 +494,17 @@ const staticTranslations: Array<[string, MessageKey]> = [
   [".interval-card__heading small", "intervalDescription"],
   ['label[for="post-interval-min-input"]', "shortestWait"],
   ['label[for="post-interval-max-input"]', "longestWait"],
-  [".interval-card .section-note", "intervalHelp"],
+  ["#post-interval-help", "intervalHelp"],
+  ["#review-images", "photosInPostOrder"],
   ["#start-posting-btn", "postNow"],
   ["#open-schedule-btn", "schedule"],
   ["#schedule-panel-heading", "scheduleQueueTitle"],
   ["#cancel-schedule-btn", "cancel"],
   ["#confirm-schedule-btn", "confirmSchedule"],
   [".section-heading__eyebrow", "activity"],
+  ["#view-posting-activity", "viewLastActivity"],
+  ["#close-posting-activity", "backToReview"],
+  ["#posting-activity-retention", "activityRetention"],
   ["#posting-progress-title", "postingProgress"],
   ["#posting-timing", "groupPostingTime"],
   ["#posting-timing-label", "timeSpent"],
@@ -541,6 +580,7 @@ function applyStaticTranslations(): void {
       selector === '[role="toolbar"]' ||
       selector === "#review-post-summary" ||
       selector === "#review-groups-list" ||
+      selector === "#review-images" ||
       selector === "#posting-timing" ||
       selector === "#toast-region"
     ) {
@@ -633,16 +673,44 @@ function initializeLanguagePicker(): void {
   const search = document.querySelector<HTMLInputElement>("#language-search");
   const list = document.querySelector<HTMLElement>("#language-options");
   if (!trigger || !menu || !search || !list) return;
+
+  const getOptions = () =>
+    Array.from(list.querySelectorAll<HTMLButtonElement>(".language-option"));
+
+  const syncActiveOption = () => {
+    const options = getOptions();
+    const current =
+      options.find((option) => option.dataset.locale === currentLocale) ??
+      options[0];
+    const activeId = current?.id ?? "";
+
+    list.setAttribute("aria-activedescendant", activeId);
+    search.setAttribute("aria-activedescendant", activeId);
+    if (!activeId) {
+      list.removeAttribute("aria-activedescendant");
+      search.removeAttribute("aria-activedescendant");
+    }
+  };
+
   const close = (restoreFocus = false) => {
     menu.hidden = true;
     trigger.setAttribute("aria-expanded", "false");
     search.setAttribute("aria-expanded", "false");
+    search.removeAttribute("aria-activedescendant");
+    list.removeAttribute("aria-activedescendant");
     if (restoreFocus) trigger.focus();
   };
+
   const render = () => {
-    const query = search.value.trim().toLocaleLowerCase();
-    const matches = supportedLocales.filter(({ name }) =>
-      name.toLocaleLowerCase().includes(query),
+    const normalize = (value: string) =>
+      value.normalize("NFD").replace(/\p{M}/gu, "").toLocaleLowerCase();
+    const query = normalize(search.value.trim());
+    const matches = supportedLocales.filter((locale) =>
+      [
+        locale.name,
+        locale.code,
+        ...("aliases" in locale ? locale.aliases : []),
+      ].some((value) => normalize(value).includes(query)),
     );
     list.replaceChildren();
     for (const locale of matches) {
@@ -656,6 +724,16 @@ function initializeLanguagePicker(): void {
         String(locale.code === currentLocale),
       );
       option.dataset.locale = locale.code;
+      option.setAttribute(
+        "aria-label",
+        locale.code === currentLocale
+          ? msg("languageSelected", locale.name)
+          : locale.name,
+      );
+      option.addEventListener("focus", () => {
+        list.setAttribute("aria-activedescendant", option.id);
+        search.setAttribute("aria-activedescendant", option.id);
+      });
       const label = document.createElement("span");
       label.className = "language-option__label";
       const flag = document.createElement("span");
@@ -683,9 +761,7 @@ function initializeLanguagePicker(): void {
           });
       });
       option.addEventListener("keydown", (event) => {
-        const options = Array.from(
-          list.querySelectorAll<HTMLButtonElement>(".language-option"),
-        );
+        const options = getOptions();
         const index = options.indexOf(option);
         const targetIndex =
           event.key === "ArrowDown"
@@ -707,6 +783,8 @@ function initializeLanguagePicker(): void {
       });
       list.append(option);
     }
+
+    syncActiveOption();
     const heading = document.querySelector<HTMLElement>(
       "#language-menu-heading",
     );
@@ -720,17 +798,20 @@ function initializeLanguagePicker(): void {
     const empty = document.querySelector<HTMLElement>("#language-empty");
     if (empty) empty.hidden = matches.length > 0;
   };
+
   window.addEventListener("postika:locale-changed", render);
   trigger.addEventListener("click", () => {
     menu.hidden = !menu.hidden;
     trigger.setAttribute("aria-expanded", String(!menu.hidden));
     search.setAttribute("aria-expanded", String(!menu.hidden));
+    menu.setAttribute("aria-hidden", String(menu.hidden));
     if (!menu.hidden) {
       search.value = "";
       render();
       search.focus();
     }
   });
+
   search.addEventListener("input", render);
   search.addEventListener("keydown", (event) => {
     if (event.key === "Escape") {
@@ -744,14 +825,17 @@ function initializeLanguagePicker(): void {
         list.querySelector<HTMLButtonElement>(".language-option")?.click();
     } else if (event.key === "ArrowDown" || event.key === "ArrowUp") {
       event.preventDefault();
-      const options = Array.from(
-        list.querySelectorAll<HTMLButtonElement>(".language-option"),
-      );
+      const options = getOptions();
       const selected = options.findIndex(
         (option) => option.getAttribute("aria-selected") === "true",
       );
       const fallback = event.key === "ArrowDown" ? 0 : options.length - 1;
-      options[selected >= 0 ? selected : fallback]?.focus();
+      const target = options[selected >= 0 ? selected : fallback];
+      if (target) {
+        target.focus();
+        list.setAttribute("aria-activedescendant", target.id);
+        search.setAttribute("aria-activedescendant", target.id);
+      }
     } else if (event.key === "Tab" && !event.shiftKey) {
       close();
     }

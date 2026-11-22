@@ -41,6 +41,7 @@ export function initializeSchedulePicker(
   let currentTime = now;
   let selected = new Date(now.getTime() + 5 * 60_000);
   let month = new Date(selected.getFullYear(), selected.getMonth(), 1);
+  const timeDraft: Partial<Record<"hour" | "minute", string>> = {};
   const presets = [
     { label: "morning", hour: 9 },
     { label: "afternoon", hour: 13 },
@@ -48,7 +49,59 @@ export function initializeSchedulePicker(
   ] as const;
 
   function isValid(): boolean {
-    return selected.getTime() > Date.now();
+    return (
+      !timeError("hour") &&
+      !timeError("minute") &&
+      selected.getTime() > Date.now()
+    );
+  }
+
+  function normalizedDigits(value: string): string {
+    return value
+      .normalize("NFKC")
+      .replace(/[٠-٩۰-۹]/g, (digit) =>
+        String(digit.charCodeAt(0) - (digit >= "۰" ? 0x06f0 : 0x0660)),
+      );
+  }
+
+  function timeError(part: "hour" | "minute"): string {
+    if (timeDraft[part] === undefined) return "";
+    const value = normalizedDigits(timeDraft[part]);
+    return /^\d{1,2}$/.test(value) &&
+      Number(value) <= (part === "hour" ? 23 : 59)
+      ? ""
+      : msg(part === "hour" ? "invalidHour" : "invalidMinute");
+  }
+
+  function updateTimeValidation(): void {
+    for (const part of ["hour", "minute"] as const) {
+      const message = timeError(part);
+      const input = root.querySelector<HTMLInputElement>(
+        `[data-focus-key="${part}-input"]`,
+      );
+      input?.setAttribute("aria-invalid", String(Boolean(message)));
+      input?.setCustomValidity(message);
+      const error = root.querySelector<HTMLElement>(`#schedule-${part}-error`);
+      if (error) {
+        if (error.textContent !== message) error.textContent = message;
+        error.hidden = !message;
+      }
+    }
+    const invalidTime = Boolean(timeError("hour") || timeError("minute"));
+    const validation = root.querySelector<HTMLElement>(".schedule-validation");
+    if (validation)
+      validation.textContent =
+        invalidTime || selected.getTime() > Date.now()
+          ? ""
+          : msg("futureDateRequired");
+    const summaryTime = root.querySelector<HTMLElement>(
+      ".schedule-selection-summary strong",
+    );
+    if (summaryTime)
+      summaryTime.textContent = invalidTime
+        ? "—"
+        : `${pad(selected.getHours())}:${pad(selected.getMinutes())}`;
+    onChange(isValid());
   }
 
   function createButton(
@@ -115,12 +168,12 @@ export function initializeSchedulePicker(
       const date = new Date(
         currentTime.getFullYear(),
         currentTime.getMonth(),
-        currentTime.getDate() +
-          ((index - currentTime.getDay() + 7) % 7),
+        currentTime.getDate() + ((index - currentTime.getDay() + 7) % 7),
         selected.getHours(),
         selected.getMinutes(),
       );
-      if (date.getTime() <= currentTime.getTime()) date.setDate(date.getDate() + 7);
+      if (date.getTime() <= currentTime.getTime())
+        date.setDate(date.getDate() + 7);
       return date;
     });
     weekdays.forEach((date, index) => {
@@ -146,7 +199,9 @@ export function initializeSchedulePicker(
         day: "numeric",
         year: "numeric",
       });
-      button.addEventListener("click", () => selectDay(date, `weekday-${index}`));
+      button.addEventListener("click", () =>
+        selectDay(date, `weekday-${index}`),
+      );
       weekdayShortcuts.append(button);
     });
 
@@ -282,7 +337,11 @@ export function initializeSchedulePicker(
     const summary = document.createElement("div");
     summary.className = "schedule-selection-summary";
     summary.setAttribute("aria-live", "polite");
-    summary.append(icon("M8 3v4m8-4v4M4 10h16M6 5h12a2 2 0 0 1 2 2v11a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2Z"));
+    summary.append(
+      icon(
+        "M8 3v4m8-4v4M4 10h16M6 5h12a2 2 0 0 1 2 2v11a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2Z",
+      ),
+    );
     const summaryDate = document.createElement("span");
     summaryDate.textContent = selected.toLocaleDateString(locale, {
       weekday: "short",
@@ -299,7 +358,7 @@ export function initializeSchedulePicker(
     validation.setAttribute("role", "status");
     validation.textContent = isValid() ? "" : msg("futureDateRequired");
     root.append(dateSection, timeSection, summary, validation);
-    onChange(isValid());
+    updateTimeValidation();
     if (focusKey) {
       Array.from(root.querySelectorAll<HTMLElement>("[data-focus-key]"))
         .find((element) => element.dataset.focusKey === focusKey)
@@ -326,11 +385,12 @@ export function initializeSchedulePicker(
       input.type = "text";
       input.inputMode = "numeric";
       input.maxLength = 2;
-      input.value = pad(part === "hour" ? hour : minute);
+      input.value = timeDraft[part] ?? pad(part === "hour" ? hour : minute);
       input.setAttribute("aria-label", label);
+      input.setAttribute("aria-describedby", `schedule-${part}-error`);
       input.dataset.focusKey = `${part}-input`;
       input.addEventListener("focus", () => input.select());
-      input.addEventListener("change", (event) => inputTime(event, part));
+      input.addEventListener("input", (event) => inputTime(event, part));
       input.addEventListener("keydown", (event) => {
         if (event.key === "Enter") {
           event.preventDefault();
@@ -349,7 +409,12 @@ export function initializeSchedulePicker(
       down.addEventListener("click", () => stepTime(part, -1));
       const unitLabel = document.createElement("span");
       unitLabel.textContent = label;
-      unit.append(up, input, down, unitLabel);
+      const error = document.createElement("p");
+      error.id = `schedule-${part}-error`;
+      error.className = "field-error";
+      error.setAttribute("role", "status");
+      error.hidden = true;
+      unit.append(up, input, down, unitLabel, error);
       container.append(unit);
     }
   }
@@ -373,7 +438,13 @@ export function initializeSchedulePicker(
     render(offset < 0 ? "previous-month" : "next-month");
   }
 
-  function setTime(hour: number, minute: number, focusKey?: string): void {
+  function setTime(
+    hour: number,
+    minute: number,
+    focusKey?: string,
+    resetParts: Array<"hour" | "minute"> = ["hour", "minute"],
+  ): void {
+    resetParts.forEach((part) => delete timeDraft[part]);
     selected = new Date(selected);
     selected.setHours(hour, minute, 0, 0);
     currentTime = new Date();
@@ -387,22 +458,31 @@ export function initializeSchedulePicker(
       part === "hour" ? (hour + direction + 24) % 24 : hour,
       part === "minute" ? (minute + direction + 60) % 60 : minute,
       `${part}-${direction > 0 ? "up" : "down"}`,
+      [part],
     );
   }
 
   function inputTime(event: Event, part: "hour" | "minute"): void {
     const input = event.currentTarget as HTMLInputElement;
-    const value = Number(input.value);
-    const maximum = part === "hour" ? 23 : 59;
-    if (!/^\d{1,2}$/.test(input.value) || value > maximum) {
-      render(`${part}-input`);
-      return;
+    timeDraft[part] = input.value;
+    if (!timeError(part)) {
+      const value = Number(normalizedDigits(input.value));
+      if (part === "hour") selected.setHours(value);
+      else selected.setMinutes(value);
+      selected.setSeconds(0, 0);
     }
-    setTime(
-      part === "hour" ? value : selected.getHours(),
-      part === "minute" ? value : selected.getMinutes(),
-      `${part}-input`,
-    );
+    root
+      .querySelectorAll<HTMLElement>(".schedule-time-preset")
+      .forEach((button, index) => {
+        button.classList.toggle(
+          "chosen",
+          !timeError("hour") &&
+            !timeError("minute") &&
+            selected.getHours() === presets[index].hour &&
+            selected.getMinutes() === 0,
+        );
+      });
+    updateTimeValidation();
   }
 
   function presetIsPast(hour: number): boolean {
@@ -427,7 +507,10 @@ export function initializeSchedulePicker(
       next.setDate(1);
       next.setMonth(next.getMonth() + (event.key === "PageUp" ? -1 : 1));
       next.setDate(
-        Math.min(date, new Date(next.getFullYear(), next.getMonth() + 1, 0).getDate()),
+        Math.min(
+          date,
+          new Date(next.getFullYear(), next.getMonth() + 1, 0).getDate(),
+        ),
       );
     } else if (event.key in shifts) {
       next.setDate(next.getDate() + shifts[event.key]);
@@ -453,7 +536,9 @@ export function initializeSchedulePicker(
       dayKey(next) !== dayKey(currentTime)
     ) {
       currentTime = next;
-      render();
+      // Never replace the field while someone is typing into it.
+      if (root.contains(document.activeElement)) updateTimeValidation();
+      else render();
     }
   }
 

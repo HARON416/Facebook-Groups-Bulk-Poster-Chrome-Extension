@@ -148,6 +148,9 @@ let activePostingTabId: number | undefined;
 let postingCaptureTabId: number | undefined;
 let capturedUploadTemplate: CapturedRequest | undefined;
 let capturedPostTemplate: CapturedRequest | undefined;
+// Reuse page-side Blobs instead of serializing the same base64 image for every
+// group. Weak keys avoid retaining images after their queue finishes.
+let uploadImageCacheKeys = new WeakMap<UiPostImage, string>();
 
 type QueueTimer = {
   startedAt: number;
@@ -1866,6 +1869,7 @@ async function runGraphqlPostingQueue(
   }
 
   activePosting = true;
+  uploadImageCacheKeys = new WeakMap();
   groupsPostingTimer = createQueueTimer(request.startedAt);
   void chrome.storage.session.remove(LAST_GROUP_POSTING_STATUS_STORAGE_KEY);
   activePostingSuccessTarget = targetGroupCount;
@@ -2380,8 +2384,23 @@ async function runGraphqlPostingQueue(
     connectivityMonitor.stop();
     stopPostingTemplateCapture();
     if (postingTabId) {
+      try {
+        await chrome.scripting.executeScript({
+          target: { tabId: postingTabId },
+          func: () => {
+            delete (globalThis as typeof globalThis & {
+              __postikaUploadBlobs?: Map<string, Blob>;
+            }).__postikaUploadBlobs;
+          },
+        });
+      } catch {
+        // Closing the tab also releases its cached media.
+      }
       await readFirstPostResponseCapture(postingTabId, true);
     }
+    uploadImageCacheKeys = new WeakMap();
+    capturedUploadTemplate = undefined;
+    capturedPostTemplate = undefined;
     debugLog("Posting queue finished.", {
       total,
       successCount,
@@ -3004,6 +3023,8 @@ async function uploadImage(
   image: UiPostImage,
 ): Promise<UploadResponse> {
   await logPageCookieDiagnostics(tabId, "Before upload replay");
+  const existingCacheKey = uploadImageCacheKeys.get(image);
+  const cacheKey = existingCacheKey ?? crypto.randomUUID();
   let result:
     | chrome.scripting.InjectionResult<{
         status: number;
@@ -3011,15 +3032,33 @@ async function uploadImage(
         responseText: string;
         contentType?: string;
         error?: string;
+        mediaCacheMiss?: boolean;
       }>
     | undefined;
 
   try {
+    // The replay consumes only URL, headers and form fields, not the original
+    // captured body (which may contain the first upload's multipart media).
+    const { url, headers } = uploadTemplate;
+    const { farr: _originalMedia, ...formData } = uploadTemplate.formData;
+    const template = { url, headers, formData };
     [result] = await chrome.scripting.executeScript({
       target: { tabId },
       func: uploadImageInPage,
-      args: [uploadTemplate, image],
+      args: [template, existingCacheKey ? { name: image.name } : image, cacheKey],
     });
+    if (result?.result?.mediaCacheMiss) {
+      // Facebook navigation destroys the isolated world and its Blob cache.
+      // A cache miss occurs before the upload, so retrying cannot duplicate it.
+      [result] = await chrome.scripting.executeScript({
+        target: { tabId },
+        func: uploadImageInPage,
+        args: [template, image, cacheKey],
+      });
+    }
+    if (result?.result && !result.result.mediaCacheMiss) {
+      uploadImageCacheKeys.set(image, cacheKey);
+    }
   } catch (error) {
     return {
       success: false,
@@ -3712,16 +3751,31 @@ async function logPageCookieDiagnostics(
 }
 
 async function uploadImageInPage(
-  uploadTemplate: CapturedRequest,
-  image: UiPostImage,
+  uploadTemplate: Pick<CapturedRequest, "url" | "headers" | "formData">,
+  image: { name: string; dataUrl?: string },
+  cacheKey: string,
 ): Promise<{
   status: number;
   ok: boolean;
   responseText: string;
   contentType: string;
   error?: string;
+  mediaCacheMiss?: boolean;
 }> {
   try {
+    const scope = globalThis as typeof globalThis & {
+      __postikaUploadBlobs?: Map<string, Blob>;
+    };
+    const blobs = (scope.__postikaUploadBlobs ??= new Map());
+    let blob = blobs.get(cacheKey);
+    if (!blob) {
+      if (!image.dataUrl) {
+        return { status: 0, ok: false, responseText: "", contentType: "", mediaCacheMiss: true };
+      }
+      const response = await fetch(image.dataUrl);
+      blob = await response.blob();
+      blobs.set(cacheKey, blob);
+    }
     const buildHeaders = (headers: Record<string, string>): HeadersInit => {
       const replayHeaders: Record<string, string> = {};
       const allowedHeaders = [
@@ -3745,8 +3799,6 @@ async function uploadImageInPage(
       return replayHeaders;
     };
 
-    const response = await fetch(image.dataUrl);
-    const blob = await response.blob();
     const formData = new FormData();
 
     for (const [key, value] of Object.entries(uploadTemplate.formData)) {

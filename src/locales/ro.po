@@ -1,0 +1,1250 @@
+msgid ""
+msgstr ""
+"Source-Language: en\n"
+"Language: ro\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=utf-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Plural-Forms: nplurals=3\n"
+"X-Plurals-Order: one, few, other\n"
+"Project-Id-Version: \n"
+"Report-Msgid-Bugs-To: \n"
+"POT-Creation-Date: \n"
+"PO-Revision-Date: \n"
+"Last-Translator: \n"
+"Language-Team: \n"
+
+#: .wuchale-build/i18n.ts
+msgid "Postika"
+msgstr "Postika"
+
+#: .wuchale-build/i18n.ts
+msgid "Language"
+msgstr "Limbă"
+
+#: .wuchale-build/i18n.ts
+msgid "Could not load the selected language."
+msgstr "Nu s-a putut încărca limba selectată."
+
+#: .wuchale-build/i18n.ts
+msgid "Search languages…"
+msgstr "Caută limbi…"
+
+#: .wuchale-build/i18n.ts
+msgid "Search languages"
+msgstr "Caută limbi"
+
+#: .wuchale-build/i18n.ts
+msgid "All languages"
+msgstr "Toate limbile"
+
+#: .wuchale-build/i18n.ts
+msgid "No languages found"
+msgstr "Nu s-au găsit limbi"
+
+#: .wuchale-build/i18n.ts
+msgid "Try a different search."
+msgstr "Încearcă o altă căutare."
+
+#: .wuchale-build/i18n.ts
+msgid "Group posting"
+msgstr "Publicare în grupuri"
+
+#: .wuchale-build/i18n.ts
+msgid "Posting steps"
+msgstr "Pașii publicării"
+
+#: .wuchale-build/i18n.ts
+msgid "Create post"
+msgstr "Creează postarea"
+
+#: .wuchale-build/i18n.ts
+msgid "Select groups"
+msgstr "Selectează grupurile"
+
+#: .wuchale-build/i18n.ts
+#: .wuchale-build/i18n.ts
+msgid "Review & post"
+msgstr "Verifică și publică"
+
+#: .wuchale-build/i18n.ts
+msgid "Step 1 of 3"
+msgstr "Pasul 1 din 3"
+
+#: .wuchale-build/i18n.ts
+msgid "Step 2 of 3"
+msgstr "Pasul 2 din 3"
+
+#: .wuchale-build/i18n.ts
+msgid "Step 3 of 3"
+msgstr "Pasul 3 din 3"
+
+#: .wuchale-build/i18n.ts
+msgid "Create your post"
+msgstr "Creează postarea ta"
+
+#: .wuchale-build/i18n.ts
+msgid "Text formatting"
+msgstr "Formatarea textului"
+
+#~ msgid "Text style"
+#~ msgstr ""
+
+#~ msgid "Normal text"
+#~ msgstr ""
+
+#: .wuchale-build/i18n.ts
+msgid "Heading 1"
+msgstr "Titlu 1"
+
+#: .wuchale-build/i18n.ts
+msgid "Heading 2"
+msgstr "Titlu 2"
+
+#: .wuchale-build/i18n.ts
+msgid "Bold"
+msgstr "Aldin"
+
+#: .wuchale-build/i18n.ts
+msgid "Italic"
+msgstr "Cursiv"
+
+#: .wuchale-build/i18n.ts
+msgid "Undo"
+msgstr "Anulează"
+
+#: .wuchale-build/i18n.ts
+msgid "Redo"
+msgstr "Refă"
+
+#: .wuchale-build/i18n.ts
+msgid "Bulleted list"
+msgstr "Listă cu marcatori"
+
+#: .wuchale-build/i18n.ts
+msgid "Numbered list"
+msgstr "Listă numerotată"
+
+#: .wuchale-build/i18n.ts
+msgid "Quote"
+msgstr "Citat"
+
+#: .wuchale-build/i18n.ts
+msgid "Post text"
+msgstr "Textul postării"
+
+#: .wuchale-build/i18n.ts
+msgid "Write what you want to share..."
+msgstr "Scrie ce dorești să distribui..."
+
+#: .wuchale-build/i18n.ts
+msgid "Choose images"
+msgstr "Alege imagini"
+
+#: .wuchale-build/i18n.ts
+msgid "Click to browse or drag and drop images here"
+msgstr "Apasă pentru a alege imagini sau trage-le aici"
+
+#: .wuchale-build/i18n.ts
+msgid "Next: select groups"
+msgstr "Înainte: selectează grupurile"
+
+#: .wuchale-build/i18n.ts
+msgid "Select your groups"
+msgstr "Selectează grupurile tale"
+
+#: .wuchale-build/i18n.ts
+msgid "Find my groups"
+msgstr "Găsește grupurile mele"
+
+#: .wuchale-build/i18n.ts
+msgid "Refresh groups"
+msgstr "Actualizează grupurile"
+
+#: .wuchale-build/i18n.ts
+msgid "Could not restore saved images. Please add them again."
+msgstr "Nu s-au putut restaura imaginile salvate. Adaugă-le din nou."
+
+#: .wuchale-build/i18n.ts
+msgid "Could not save your images. They may not be available next time."
+msgstr "Nu s-au putut salva imaginile. Este posibil să nu fie disponibile data viitoare."
+
+#~ msgid "Click Find my groups, then select where you want to post."
+#~ msgstr ""
+
+#. 0: count
+#: .wuchale-build/i18n.ts
+msgid "{0} loaded"
+msgstr "{0} încărcate"
+
+#: .wuchale-build/i18n.ts
+msgid "Select all groups"
+msgstr "Selectează toate grupurile"
+
+#: .wuchale-build/i18n.ts
+msgid "Search groups"
+msgstr "Caută grupuri"
+
+#: .wuchale-build/i18n.ts
+msgid "Search your groups"
+msgstr "Caută în grupurile tale"
+
+#. 0: count
+#. 0: count
+#: .wuchale-build/i18n.ts
+#: .wuchale-build/i18n.ts
+msgid "{0} groups selected"
+msgstr "{0} grupuri selectate"
+
+#~ msgid "Click Find my groups to see the groups you have joined."
+#~ msgstr ""
+
+#: .wuchale-build/i18n.ts
+msgid "Select at least one group to continue."
+msgstr "Selectează cel puțin un grup pentru a continua."
+
+#: .wuchale-build/i18n.ts
+msgid "Back"
+msgstr "Înapoi"
+
+#: .wuchale-build/i18n.ts
+msgid "Next: review post"
+msgstr "Înainte: verifică postarea"
+
+#: .wuchale-build/i18n.ts
+msgid "Your post"
+msgstr "Postarea ta"
+
+#: .wuchale-build/i18n.ts
+msgid "Edit post"
+msgstr "Editează postarea"
+
+#: .wuchale-build/i18n.ts
+msgid "Groups"
+msgstr "Grupuri"
+
+#: .wuchale-build/i18n.ts
+msgid "Edit groups"
+msgstr "Editează grupurile"
+
+#: .wuchale-build/i18n.ts
+msgid "Selected groups"
+msgstr "Grupurile selectate"
+
+#: .wuchale-build/i18n.ts
+msgid "Complete post text"
+msgstr "Textul complet al postării"
+
+#: .wuchale-build/i18n.ts
+msgid "Time between posts"
+msgstr "Intervalul dintre postări"
+
+#: .wuchale-build/i18n.ts
+msgid "Postika chooses a different wait time within your range between posts."
+msgstr "Postika alege un timp de așteptare diferit, din intervalul stabilit, între postări."
+
+#: .wuchale-build/i18n.ts
+msgid "Shortest wait (seconds)"
+msgstr "Așteptare minimă (secunde)"
+
+#: .wuchale-build/i18n.ts
+msgid "Longest wait (seconds)"
+msgstr "Așteptare maximă (secunde)"
+
+#~ msgid "Both waits must be at least 60 seconds. For example, 60 to 300 means a wait of 1 to 5 minutes."
+#~ msgstr ""
+
+#~ msgid "Post to selected groups"
+#~ msgstr ""
+
+#: .wuchale-build/i18n.ts
+msgid "Activity"
+msgstr "Activitate"
+
+#: .wuchale-build/i18n.ts
+msgid "Posting progress"
+msgstr "Progresul publicării"
+
+#: .wuchale-build/i18n.ts
+msgid "Group posting time"
+msgstr "Timpul publicării în grupuri"
+
+#: .wuchale-build/i18n.ts
+msgid "Time spent"
+msgstr "Timp scurs"
+
+#: .wuchale-build/i18n.ts
+msgid "Current post"
+msgstr "Postarea curentă"
+
+#. 0: current; 1: total
+#. 0: current; 1: total
+#: .wuchale-build/i18n.ts
+#: .wuchale-build/i18n.ts
+msgid "Group {0}/{1}"
+msgstr "Grupul {0}/{1}"
+
+#: .wuchale-build/i18n.ts
+msgid "Posting has not started."
+msgstr "Publicarea nu a început."
+
+#: .wuchale-build/i18n.ts
+msgid "Pause"
+msgstr "Pauză"
+
+#: .wuchale-build/i18n.ts
+msgid "Stop"
+msgstr "Oprește"
+
+#: .wuchale-build/i18n.ts
+msgid "Resume"
+msgstr "Reia"
+
+#: .wuchale-build/i18n.ts
+msgid "Photo preview"
+msgstr "Previzualizarea imaginii"
+
+#: .wuchale-build/i18n.ts
+msgid "Close photo preview"
+msgstr "Închide previzualizarea imaginii"
+
+#: .wuchale-build/i18n.ts
+msgid "View previous photo"
+msgstr "Vezi imaginea anterioară"
+
+#: .wuchale-build/i18n.ts
+msgid "View next photo"
+msgstr "Vezi imaginea următoare"
+
+#: .wuchale-build/i18n.ts
+msgid "Photos in post order"
+msgstr "Imagini în ordinea publicării"
+
+#: .wuchale-build/i18n.ts
+msgid "Dismiss notification"
+msgstr "Închide notificarea"
+
+#: .wuchale-build/i18n.ts
+msgid "Success"
+msgstr "Succes"
+
+#: .wuchale-build/i18n.ts
+msgid "Please check"
+msgstr "Verifică"
+
+#: .wuchale-build/i18n.ts
+msgid "Something went wrong"
+msgstr "A apărut o problemă"
+
+#: .wuchale-build/i18n.ts
+msgid "Information"
+msgstr "Informații"
+
+#: .wuchale-build/i18n.ts
+msgid "No groups found."
+msgstr "Nu s-au găsit grupuri."
+
+#. 0: query
+#: .wuchale-build/i18n.ts
+msgid "No groups match \"{0}\"."
+msgstr "Niciun grup nu corespunde căutării „{0}”."
+
+#: .wuchale-build/i18n.ts
+msgid "Selected Groups"
+msgstr "Grupuri selectate"
+
+#: .wuchale-build/i18n.ts
+msgid "No selected groups match this search."
+msgstr "Niciun grup selectat nu corespunde căutării."
+
+#: .wuchale-build/i18n.ts
+msgid "No groups selected yet."
+msgstr "Nu ai selectat încă niciun grup."
+
+#: .wuchale-build/i18n.ts
+msgid "Other Groups"
+msgstr "Alte grupuri"
+
+#: .wuchale-build/i18n.ts
+msgid "No remaining groups match this search."
+msgstr "Niciun grup rămas nu corespunde căutării."
+
+#: .wuchale-build/i18n.ts
+msgid "No other groups available."
+msgstr "Nu sunt disponibile alte grupuri."
+
+#: .wuchale-build/i18n.ts
+msgid "Find and select the groups you want to post to"
+msgstr "Găsește și selectează grupurile în care vrei să publici"
+
+#: .wuchale-build/i18n.ts
+msgid "Group posting is already in progress."
+msgstr "Publicarea în grupuri este deja în desfășurare."
+
+#: .wuchale-build/i18n.ts
+msgid "Posting…"
+msgstr "Se publică…"
+
+#: .wuchale-build/i18n.ts
+msgid "Resuming…"
+msgstr "Se reia…"
+
+#: .wuchale-build/i18n.ts
+msgid "Pausing…"
+msgstr "Se pune pe pauză…"
+
+#: .wuchale-build/i18n.ts
+msgid "Stopping…"
+msgstr "Se oprește…"
+
+#: .wuchale-build/i18n.ts
+msgid "Active time"
+msgstr "Timp activ"
+
+#: .wuchale-build/i18n.ts
+msgid "Paused at"
+msgstr "Pus pe pauză la"
+
+#: .wuchale-build/i18n.ts
+msgid "Elapsed"
+msgstr "Timp scurs"
+
+#: .wuchale-build/i18n.ts
+msgid "Last item"
+msgstr "Ultimul element"
+
+#: .wuchale-build/i18n.ts
+msgid "Current item"
+msgstr "Elementul curent"
+
+#: .wuchale-build/i18n.ts
+msgid "Item time"
+msgstr "Timpul elementului"
+
+#: .wuchale-build/i18n.ts
+msgid "Copy Facebook failure response"
+msgstr "Copiază răspunsul de eroare Facebook"
+
+#: .wuchale-build/i18n.ts
+msgid "Facebook failure response copied."
+msgstr "Răspunsul de eroare Facebook a fost copiat."
+
+#: .wuchale-build/i18n.ts
+msgid "Unable to copy the Facebook response."
+msgstr "Nu s-a putut copia răspunsul Facebook."
+
+#: .wuchale-build/i18n.ts
+msgid "Done"
+msgstr "Finalizat"
+
+#: .wuchale-build/i18n.ts
+msgid "Pending"
+msgstr "În așteptare"
+
+#: .wuchale-build/i18n.ts
+msgid "Fail"
+msgstr "Eșec"
+
+#: .wuchale-build/i18n.ts
+msgid "Limit"
+msgstr "Limită"
+
+#: .wuchale-build/i18n.ts
+msgid "Next"
+msgstr "Următorul"
+
+#: .wuchale-build/i18n.ts
+msgid "Post"
+msgstr "Publică"
+
+#: .wuchale-build/i18n.ts
+msgid "Info"
+msgstr "Info"
+
+#: .wuchale-build/i18n.ts
+msgid "Loading..."
+msgstr "Se încarcă..."
+
+#: .wuchale-build/i18n.ts
+msgid "Finding the groups you have joined..."
+msgstr "Se caută grupurile din care faci parte..."
+
+#: .wuchale-build/i18n.ts
+msgid "Opening Facebook to find the groups you have joined..."
+msgstr "Se deschide Facebook pentru a găsi grupurile din care faci parte..."
+
+#: .wuchale-build/i18n.ts
+msgid "Unable to load groups."
+msgstr "Nu s-au putut încărca grupurile."
+
+#. 0: count
+#: .wuchale-build/i18n.ts
+msgid "Finished loading {0} groups."
+msgstr "S-au încărcat {0} grupuri."
+
+#: .wuchale-build/i18n.ts
+msgid "Could not find your groups. Check that you are signed into Facebook and try again."
+msgstr "Nu s-au găsit grupurile tale. Verifică dacă ești conectat la Facebook și încearcă din nou."
+
+#: .wuchale-build/i18n.ts
+msgid "Unable to add images."
+msgstr "Nu s-au putut adăuga imaginile."
+
+#: .wuchale-build/i18n.ts
+msgid "Only image files can be added."
+msgstr "Se pot adăuga doar fișiere imagine."
+
+#. 0: count
+#: .wuchale-build/i18n.ts
+msgid "{0} duplicate image was skipped."
+msgstr "A fost omisă {0} imagine duplicată."
+
+#. 0: count
+#: .wuchale-build/i18n.ts
+msgid "{0} duplicate images were skipped."
+msgstr "Au fost omise {0} imagini duplicate."
+
+#~ msgid "Image {0} of {1}. Click to preview or drag to reorder."
+#~ msgstr ""
+
+#. 0: name
+#: .wuchale-build/i18n.ts
+msgid "Remove {0}"
+msgstr "Elimină {0}"
+
+#: .wuchale-build/i18n.ts
+msgid "Unable to resume posting."
+msgstr "Nu s-a putut relua publicarea."
+
+#: .wuchale-build/i18n.ts
+msgid "Unable to pause posting."
+msgstr "Nu s-a putut pune publicarea pe pauză."
+
+#: .wuchale-build/i18n.ts
+msgid "Unable to stop posting."
+msgstr "Nu s-a putut opri publicarea."
+
+#: .wuchale-build/i18n.ts
+msgid "Please select at least one group."
+msgstr "Selectează cel puțin un grup."
+
+#: .wuchale-build/i18n.ts
+msgid "Write your post and add at least one image before posting."
+msgstr "Scrie postarea și adaugă cel puțin o imagine înainte de a publica."
+
+#. 0: minimum
+#: .wuchale-build/i18n.ts
+msgid "Enter whole numbers of at least {0} seconds for both waits. The longest wait must be at least as long as the shortest wait."
+msgstr "Introdu numere întregi de cel puțin {0} secunde pentru ambele durate de așteptare. Durata maximă trebuie să fie cel puțin egală cu cea minimă."
+
+#: .wuchale-build/i18n.ts
+msgid "Your selected groups are no longer available. Click Find my groups, select them again, and try posting."
+msgstr "Grupurile selectate nu mai sunt disponibile. Apasă Găsește grupurile mele, selectează-le din nou și încearcă să publici."
+
+#: .wuchale-build/i18n.ts
+msgid "Getting ready to post..."
+msgstr "Se pregătește publicarea..."
+
+#: .wuchale-build/i18n.ts
+msgid "Could not start posting. Please try again."
+msgstr "Nu s-a putut începe publicarea. Încearcă din nou."
+
+#. 0: name
+#: .wuchale-build/i18n.ts
+msgid "Unable to read {0}."
+msgstr "Nu s-a putut citi {0}."
+
+#. 0: count
+#: .wuchale-build/i18n.ts
+msgid "Restored {0} loaded groups."
+msgstr "S-au restaurat {0} grupuri încărcate."
+
+#: .wuchale-build/i18n.ts
+msgid "Unable to restore side panel session."
+msgstr "Nu s-a putut restaura sesiunea panoului lateral."
+
+#: .wuchale-build/i18n.ts
+msgid "Unable to save side panel session."
+msgstr "Nu s-a putut salva sesiunea panoului lateral."
+
+#: .wuchale-build/i18n.ts
+msgid "Post image preview"
+msgstr "Previzualizarea imaginii postării"
+
+#. 0: index; 1: name
+#: .wuchale-build/i18n.ts
+msgid "View photo {0}: {1}"
+msgstr "Vezi imaginea {0}: {1}"
+
+#. 0: count; 1: target
+#: .wuchale-build/i18n.ts
+msgid "{0}/{1} posts submitted"
+msgstr "{0}/{1} postări trimise"
+
+#. 0: count; 1: total
+#: .wuchale-build/i18n.ts
+msgid "{0}/{1} groups processed"
+msgstr "{0}/{1} grupuri procesate"
+
+#: .wuchale-build/i18n.ts
+msgid "Queue"
+msgstr "Coadă de publicare"
+
+#. 0: count; 1: duration; 2: failed
+#: .wuchale-build/i18n.ts
+msgid "Completed {0} posts in {1}{2}."
+msgstr "S-au finalizat {0} postări în {1}{2}."
+
+#. 0: duration
+#: .wuchale-build/i18n.ts
+msgid "Next post in {0}"
+msgstr "Următoarea postare în {0}"
+
+#: .wuchale-build/i18n.ts
+msgid "Posting paused."
+msgstr "Publicarea este pe pauză."
+
+#. 0: group
+#: .wuchale-build/i18n.ts
+msgid "Posting paused before {0}."
+msgstr "Publicarea este pe pauză înainte de {0}."
+
+#: .wuchale-build/i18n.ts
+msgid "Posting is already in progress."
+msgstr "Publicarea este deja în desfășurare."
+
+#: .wuchale-build/i18n.ts
+msgid "Wait for the current posts to finish, or stop posting before starting again."
+msgstr "Așteaptă finalizarea postărilor curente sau oprește publicarea înainte de a începe din nou."
+
+#: .wuchale-build/i18n.ts
+msgid "Preparing the first post..."
+msgstr "Se pregătește prima postare..."
+
+#: .wuchale-build/i18n.ts
+msgid "Continuing to post automatically..."
+msgstr "Publicarea automată continuă..."
+
+#. 0: current; 1: total; 2: group
+#: .wuchale-build/i18n.ts
+msgid "Preparing post {0}/{1} for {2}..."
+msgstr "Se pregătește postarea {0}/{1} pentru {2}..."
+
+#. 0: current; 1: total; 2: group
+#: .wuchale-build/i18n.ts
+msgid "Uploading images from post {0}/{1} for {2}..."
+msgstr "Se încarcă imaginile postării {0}/{1} pentru {2}..."
+
+#. 0: current; 1: total; 2: group
+#: .wuchale-build/i18n.ts
+msgid "Preparing text-only post {0}/{1} for {2}..."
+msgstr "Se pregătește postarea doar cu text {0}/{1} pentru {2}..."
+
+#. 0: current; 1: total; 2: group
+#: .wuchale-build/i18n.ts
+msgid "Posting post {0}/{1} to {2}..."
+msgstr "Se publică postarea {0}/{1} în {2}..."
+
+#: .wuchale-build/i18n.ts
+msgid "Your post is pending"
+msgstr "Postarea ta este în așteptare"
+
+#. 0: group
+#: .wuchale-build/i18n.ts
+msgid "Posted to {0}."
+msgstr "Publicat în {0}."
+
+#. 0: group
+#: .wuchale-build/i18n.ts
+msgid "Posted successfully to {0}."
+msgstr "Publicat cu succes în {0}."
+
+#: .wuchale-build/i18n.ts
+msgid "Your post is awaiting admin approval. If the admin team approves it, it'll become visible in the group."
+msgstr "Postarea ta așteaptă aprobarea administratorilor. Dacă echipa de administrare o aprobă, va deveni vizibilă în grup."
+
+#. 0: count
+#: .wuchale-build/i18n.ts
+msgid "Posting finished: {0} posts were submitted."
+msgstr "Publicarea s-a încheiat: au fost trimise {0} postări."
+
+#. 0: posted; 1: failed
+#: .wuchale-build/i18n.ts
+msgid "Posting finished: {0} posts were submitted and {1} groups failed."
+msgstr "Publicarea s-a încheiat: au fost trimise {0} postări, iar publicarea a eșuat în {1} grupuri."
+
+#: .wuchale-build/i18n.ts
+msgid "Facebook temporarily blocked posting on this account. Queue stopped. Try again later."
+msgstr "Facebook a blocat temporar publicarea pentru acest cont. Coada de publicare a fost oprită. Încearcă mai târziu."
+
+#. 0: group
+#: .wuchale-build/i18n.ts
+msgid "Failed to post to {0}."
+msgstr "Nu s-a putut publica în {0}."
+
+#. 0: group
+#: .wuchale-build/i18n.ts
+msgid "Facebook rejected the post to {0} because this Group cannot accept more pending content from your account."
+msgstr "Facebook a respins postarea în {0}, deoarece acest grup nu mai poate accepta conținut în așteptare de la contul tău."
+
+#: .wuchale-build/i18n.ts
+msgid "Automatic posting stopped."
+msgstr "Publicarea automată s-a oprit."
+
+#: .wuchale-build/i18n.ts
+msgid "Posting stopped by user."
+msgstr "Publicarea a fost oprită de utilizator."
+
+#: .wuchale-build/i18n.ts
+msgid "Show only posted activity"
+msgstr "Afișează doar postările publicate"
+
+#: .wuchale-build/i18n.ts
+msgid "Show only posts waiting for approval"
+msgstr "Afișează doar postările care așteaptă aprobarea"
+
+#: .wuchale-build/i18n.ts
+msgid "Show only failed activity"
+msgstr "Afișează doar publicările eșuate"
+
+#. 0: count
+#: .wuchale-build/i18n.ts
+msgid "{0} group"
+msgstr "{0} grup"
+
+#. 0: count
+#: .wuchale-build/i18n.ts
+msgid "{0} groups"
+msgstr "{0} grupuri"
+
+#. 0: count
+#: .wuchale-build/i18n.ts
+msgid "{0} result"
+msgstr "{0} rezultat"
+
+#. 0: count
+#: .wuchale-build/i18n.ts
+msgid "{0} results"
+msgstr "{0} rezultate"
+
+#: .wuchale-build/i18n.ts
+#: .wuchale-build/i18n.ts
+msgid "Escape"
+msgstr "Escape"
+
+#: .wuchale-build/i18n.ts
+msgid "Enter"
+msgstr "Enter"
+
+#: .wuchale-build/i18n.ts
+msgid "Tab"
+msgstr "Tab"
+
+#: .wuchale-build/i18n.ts
+#: .wuchale-build/i18n.ts
+#: .wuchale-build/i18n.ts
+msgid "ArrowDown"
+msgstr "ArrowDown"
+
+#: .wuchale-build/i18n.ts
+#: .wuchale-build/i18n.ts
+msgid "ArrowUp"
+msgstr "ArrowUp"
+
+#: .wuchale-build/i18n.ts
+msgid "Home"
+msgstr "Home"
+
+#: .wuchale-build/i18n.ts
+msgid "End"
+msgstr "End"
+
+#: .wuchale-build/i18n.ts
+msgid "Clear language search"
+msgstr "Șterge căutarea limbilor"
+
+#: .wuchale-build/i18n.ts
+msgid "Notifications"
+msgstr "Notificări"
+
+#: .wuchale-build/i18n.ts
+msgid "Starting group extraction..."
+msgstr "Se începe extragerea grupurilor..."
+
+#: .wuchale-build/i18n.ts
+msgid "Open Facebook first. This extension only works on facebook.com."
+msgstr "Deschide mai întâi Facebook. Această extensie funcționează doar pe facebook.com."
+
+#: .wuchale-build/i18n.ts
+msgid "Select at least one post before posting."
+msgstr "Selectează cel puțin o postare înainte de a publica."
+
+#: .wuchale-build/i18n.ts
+msgid "Preparing current tab..."
+msgstr "Se pregătește fila curentă..."
+
+#: .wuchale-build/i18n.ts
+msgid "Opening Facebook joined groups page..."
+msgstr "Se deschide pagina grupurilor Facebook din care faci parte..."
+
+#: .wuchale-build/i18n.ts
+msgid "Facebook joined groups page loaded."
+msgstr "Pagina grupurilor Facebook din care faci parte s-a încărcat."
+
+#: .wuchale-build/i18n.ts
+msgid "Changing joined groups sort to trigger Facebook groups request..."
+msgstr "Se schimbă sortarea grupurilor pentru a declanșa cererea Facebook pentru grupuri..."
+
+#: .wuchale-build/i18n.ts
+msgid "Waiting for fresh Facebook groups request..."
+msgstr "Se așteaptă o nouă cerere Facebook pentru grupuri..."
+
+#: .wuchale-build/i18n.ts
+msgid "Captured groups request. Preparing extraction..."
+msgstr "Cererea pentru grupuri a fost capturată. Se pregătește extragerea..."
+
+#. 0: page
+#: .wuchale-build/i18n.ts
+msgid "Fetching groups page {0}..."
+msgstr "Se preia pagina {0} de grupuri..."
+
+#. 0: count
+#: .wuchale-build/i18n.ts
+msgid "Loaded {0} groups so far."
+msgstr "S-au încărcat {0} grupuri până acum."
+
+#. 0: count
+#: .wuchale-build/i18n.ts
+msgid "Fetching next page. {0} groups loaded."
+msgstr "Se preia pagina următoare. S-au încărcat {0} grupuri."
+
+#. 0: status
+#: .wuchale-build/i18n.ts
+msgid "Facebook groups request failed with {0}."
+msgstr "Cererea Facebook pentru grupuri a eșuat cu {0}."
+
+#: .wuchale-build/i18n.ts
+msgid "Unable to fetch groups."
+msgstr "Nu s-au putut prelua grupurile."
+
+#: .wuchale-build/i18n.ts
+msgid "Unable to find the active tab for posting."
+msgstr "Nu s-a găsit fila activă pentru publicare."
+
+#: .wuchale-build/i18n.ts
+msgid "Unable to open joined groups in the current tab."
+msgstr "Nu s-au putut deschide grupurile din care faci parte în fila curentă."
+
+#: .wuchale-build/i18n.ts
+msgid "Unable to trigger joined groups sort."
+msgstr "Nu s-a putut declanșa sortarea grupurilor din care faci parte."
+
+#: .wuchale-build/i18n.ts
+msgid "The joined groups sort control changed. Please load groups again."
+msgstr "Controlul de sortare a grupurilor s-a schimbat. Încarcă din nou grupurile."
+
+#: .wuchale-build/i18n.ts
+msgid "Unable to read groups from joined groups tab."
+msgstr "Nu s-au putut citi grupurile din fila grupurilor din care faci parte."
+
+#: .wuchale-build/i18n.ts
+msgid "Facebook did not return group data."
+msgstr "Facebook nu a returnat date despre grupuri."
+
+#: .wuchale-build/i18n.ts
+msgid "None of the selected Groups has a visible post composer. Select another standard Group and try again."
+msgstr "Niciunul dintre grupurile selectate nu are un editor de postări vizibil. Selectează un alt grup standard și încearcă din nou."
+
+#: .wuchale-build/i18n.ts
+msgid "Could not set up photo uploads from your first post. Please start posting again."
+msgstr "Nu s-a putut configura încărcarea imaginilor din prima postare. Începe din nou publicarea."
+
+#. 0: starter; 1: next
+#: .wuchale-build/i18n.ts
+msgid "{0} does not allow Postika to start posting. Trying {1} instead..."
+msgstr "{0} nu permite Postika să înceapă publicarea. Se încearcă în {1}..."
+
+#. 0: duration
+#: .wuchale-build/i18n.ts
+msgid "Paused {0}"
+msgstr "Pauză de {0}"
+
+#. 0: kind; 1: group
+#: .wuchale-build/i18n.ts
+msgid "Fresh {0} request values captured from {1}."
+msgstr "S-au capturat valori noi pentru cererea {0} din {1}."
+
+#: .wuchale-build/i18n.ts
+msgid "Add post text and at least one image to continue."
+msgstr "Adaugă textul postării și cel puțin o imagine pentru a continua."
+
+#: .wuchale-build/i18n.ts
+msgid "Add post text to continue."
+msgstr "Adaugă textul postării pentru a continua."
+
+#: .wuchale-build/i18n.ts
+msgid "Add at least one image to continue."
+msgstr "Adaugă cel puțin o imagine pentru a continua."
+
+#. 0: count
+#: .wuchale-build/i18n.ts
+msgid "{0} groups selected. Continue to review your post."
+msgstr "{0} grupuri selectate. Continuă pentru a verifica postarea."
+
+#. 0: count
+#: .wuchale-build/i18n.ts
+msgid "{0} images"
+msgstr "{0} imagini"
+
+#: .wuchale-build/i18n.ts
+msgid "Post now"
+msgstr "Publică acum"
+
+#: .wuchale-build/i18n.ts
+msgid "Schedule"
+msgstr "Programează"
+
+#: .wuchale-build/i18n.ts
+msgid "Schedule your queue"
+msgstr "Programează coada de publicare"
+
+#: .wuchale-build/i18n.ts
+msgid "Confirm schedule"
+msgstr "Confirmă programarea"
+
+#: .wuchale-build/i18n.ts
+msgid "Cancel"
+msgstr "Anulează"
+
+#. 0: zone
+#: .wuchale-build/i18n.ts
+msgid "Time zone: {0}. Keep Chrome open and your computer awake. Facebook may ask you to sign in when posting starts."
+msgstr "Fus orar: {0}. Lasă Chrome deschis și computerul pornit, fără modul de repaus. Facebook îți poate cere să te conectezi când începe publicarea."
+
+#: .wuchale-build/i18n.ts
+msgid "Choose a date and time"
+msgstr "Alege o dată și o oră"
+
+#: .wuchale-build/i18n.ts
+msgid "Choose a weekday for this post"
+msgstr "Alege o zi a săptămânii pentru această postare"
+
+#: .wuchale-build/i18n.ts
+msgid "Previous month"
+msgstr "Luna anterioară"
+
+#: .wuchale-build/i18n.ts
+msgid "Next month"
+msgstr "Luna următoare"
+
+#: .wuchale-build/i18n.ts
+msgid "Select date"
+msgstr "Selectează data"
+
+#: .wuchale-build/i18n.ts
+msgid "Select time"
+msgstr "Selectează ora"
+
+#: .wuchale-build/i18n.ts
+msgid "Hour"
+msgstr "Oră"
+
+#: .wuchale-build/i18n.ts
+msgid "Minute"
+msgstr "Minut"
+
+#: .wuchale-build/i18n.ts
+msgid "Increase hour"
+msgstr "Mărește ora"
+
+#: .wuchale-build/i18n.ts
+msgid "Decrease hour"
+msgstr "Micșorează ora"
+
+#: .wuchale-build/i18n.ts
+msgid "Increase minute"
+msgstr "Mărește minutele"
+
+#: .wuchale-build/i18n.ts
+msgid "Decrease minute"
+msgstr "Micșorează minutele"
+
+#: .wuchale-build/i18n.ts
+msgid "Morning"
+msgstr "Dimineață"
+
+#: .wuchale-build/i18n.ts
+msgid "Afternoon"
+msgstr "După-amiază"
+
+#: .wuchale-build/i18n.ts
+msgid "Evening"
+msgstr "Seară"
+
+#: .wuchale-build/i18n.ts
+msgid "Choose a date and time in the future."
+msgstr "Alege o dată și o oră în viitor."
+
+#: .wuchale-build/i18n.ts
+msgid "Scheduled"
+msgstr "Programat"
+
+#. 0: date
+#: .wuchale-build/i18n.ts
+msgid "Scheduled for {0}. Keep Chrome open and your computer awake."
+msgstr "Programat pentru {0}. Lasă Chrome deschis și computerul fără modul de repaus."
+
+#: .wuchale-build/i18n.ts
+msgid "Your queue is scheduled."
+msgstr "Coada de publicare a fost programată."
+
+#: .wuchale-build/i18n.ts
+msgid "Cancel scheduled queue"
+msgstr "Anulează coada programată"
+
+#: .wuchale-build/i18n.ts
+msgid "Scheduled posting cancelled."
+msgstr "Publicarea programată a fost anulată."
+
+#: .wuchale-build/i18n.ts
+msgid "Could not schedule this queue. Check that Chrome storage is available and try again."
+msgstr "Nu s-a putut programa această coadă. Verifică dacă stocarea Chrome este disponibilă și încearcă din nou."
+
+#: .wuchale-build/i18n.ts
+msgid "The scheduled queue could not be started. Please schedule it again."
+msgstr "Coada programată nu a putut fi pornită. Programeaz-o din nou."
+
+#: .wuchale-build/i18n.ts
+msgid "Scheduling this queue..."
+msgstr "Se programează coada de publicare..."
+
+#~ msgid "24-hour clock"
+#~ msgstr ""
+
+#: .wuchale-build/i18n.ts
+msgid "Time format: 24-hour"
+msgstr "Format orar: 24 de ore"
+
+#: .wuchale-build/i18n.ts
+msgid "Settings & support"
+msgstr "Setări și asistență"
+
+#: .wuchale-build/i18n.ts
+msgid "Dark mode"
+msgstr "Mod întunecat"
+
+#: .wuchale-build/i18n.ts
+msgid "WhatsApp developer"
+msgstr "Contactează dezvoltatorul pe WhatsApp"
+
+#: .wuchale-build/i18n.ts
+msgid "Email developer"
+msgstr "Trimite un e-mail dezvoltatorului"
+
+#: .wuchale-build/i18n.ts
+msgid "Could not load the appearance setting. Using light mode."
+msgstr "Nu s-a putut încărca setarea aspectului. Se folosește modul luminos."
+
+#: .wuchale-build/i18n.ts
+msgid "Could not save the appearance setting. It will reset when Postika closes."
+msgstr "Nu s-a putut salva setarea aspectului. Se va reseta la închiderea Postika."
+
+#: .wuchale-build/i18n.ts
+msgid "Download desktop app"
+msgstr "Descarcă aplicația pentru desktop"
+
+#: .wuchale-build/i18n.ts
+msgid "Images"
+msgstr "Imagini"
+
+#: .wuchale-build/i18n.ts
+msgid "Required"
+msgstr "Obligatoriu"
+
+#. 0: count
+#: .wuchale-build/i18n.ts
+msgid "{0} images selected"
+msgstr "{0} imagini selectate"
+
+#: .wuchale-build/i18n.ts
+msgid "Add more"
+msgstr "Adaugă mai multe"
+
+#. 0: current; 1: total
+#: .wuchale-build/i18n.ts
+msgid "Image {0} of {1}. Click to preview; drag or use Alt+Left/Right to reorder."
+msgstr "Imaginea {0} din {1}. Apasă pentru previzualizare; trage sau folosește Alt+Săgeată stânga/dreapta pentru a schimba ordinea."
+
+#: .wuchale-build/i18n.ts
+msgid "More formatting"
+msgstr "Mai multe formate"
+
+#~ msgid "Sign in to Facebook in a Chrome tab before finding groups. Postika opens your joined-groups page to load them."
+#~ msgstr ""
+
+#: .wuchale-build/i18n.ts
+msgid "Sign in to Facebook in a Chrome tab. Postika opens your joined-groups page."
+msgstr "Conectează-te la Facebook într-o filă Chrome. Postika deschide pagina grupurilor din care faci parte."
+
+#: .wuchale-build/i18n.ts
+msgid "Select the groups where you want to post."
+msgstr "Selectează grupurile în care vrei să publici."
+
+#: .wuchale-build/i18n.ts
+msgid "Your groups will appear here."
+msgstr "Grupurile tale vor apărea aici."
+
+#: .wuchale-build/i18n.ts
+msgid "Internet connection lost. Posting paused until the connection returns."
+msgstr "Conexiunea la internet s-a întrerupt. Publicarea este pe pauză până la restabilirea conexiunii."
+
+#: .wuchale-build/i18n.ts
+msgid "Posting resumed."
+msgstr "Publicarea a fost reluată."
+
+#: .wuchale-build/i18n.ts
+msgid "Internet connection restored. Resuming posting."
+msgstr "Conexiunea la internet a fost restabilită. Se reia publicarea."
+
+#: .wuchale-build/i18n.ts
+msgid "Internet connection restored. Posting remains paused until you resume."
+msgstr "Conexiunea la internet a fost restabilită. Publicarea rămâne pe pauză până când o reiei."
+
+#: .wuchale-build/i18n.ts
+msgid "Facebook did not provide the request values needed to continue. Try again."
+msgstr "Facebook nu a furnizat valorile necesare ale cererii pentru a continua. Încearcă din nou."
+
+#: .wuchale-build/i18n.ts
+msgid "Facebook did not confirm whether the first post was submitted. Check Facebook before trying again."
+msgstr "Facebook nu a confirmat dacă prima postare a fost trimisă. Verifică pe Facebook înainte de a încerca din nou."
+
+#: .wuchale-build/i18n.ts
+msgid "Saving draft…"
+msgstr "Se salvează schița…"
+
+#: .wuchale-build/i18n.ts
+msgid "Draft saved on this device."
+msgstr "Schița a fost salvată pe acest dispozitiv."
+
+#: .wuchale-build/i18n.ts
+msgid "Your latest changes could not be saved. Keep this panel open and try again."
+msgstr "Ultimele modificări nu au putut fi salvate. Lasă acest panou deschis și încearcă din nou."
+
+#: .wuchale-build/i18n.ts
+msgid "Try again"
+msgstr "Încearcă din nou"
+
+#: .wuchale-build/i18n.ts
+msgid "Enter a whole number of at least 60 seconds."
+msgstr "Introdu un număr întreg de cel puțin 60 de secunde."
+
+#: .wuchale-build/i18n.ts
+msgid "The longest wait must be at least as long as the shortest wait."
+msgstr "Așteptarea maximă trebuie să fie cel puțin egală cu cea minimă."
+
+#~ msgid "Wait between {0} and {1} between posts."
+#~ msgstr ""
+
+#: .wuchale-build/i18n.ts
+msgid "Enter an hour from 0 to 23."
+msgstr "Introdu o oră de la 0 la 23."
+
+#: .wuchale-build/i18n.ts
+msgid "Enter minutes from 0 to 59."
+msgstr "Introdu minute de la 0 la 59."
+
+#: .wuchale-build/i18n.ts
+msgid "Enter whole seconds. Both waits must be at least 60 seconds."
+msgstr "Introdu un număr întreg de secunde. Ambele durate de așteptare trebuie să fie de cel puțin 60 de secunde."
+
+#. 0: shortest; 1: longest
+#: .wuchale-build/i18n.ts
+msgid "A wait of {0} to {1} between posts."
+msgstr "O așteptare de la {0} la {1} între postări."
+
+#: .wuchale-build/i18n.ts
+msgid "View last activity"
+msgstr "Vezi ultima activitate"
+
+#: .wuchale-build/i18n.ts
+msgid "Back to review"
+msgstr "Înapoi la verificare"
+
+#: .wuchale-build/i18n.ts
+msgid "Activity stays available until you close this panel or start a new queue."
+msgstr "Activitatea rămâne disponibilă până când închizi acest panou sau începi o nouă coadă de publicare."
+
+#. 0: name
+#: .wuchale-build/i18n.ts
+msgid "{0}, selected"
+msgstr "{0}, selectată"
+
+#: .wuchale-build/i18n.ts
+msgid "posted"
+msgstr "publicate"
+
+#: .wuchale-build/i18n.ts
+msgid "awaiting approval"
+msgstr "așteaptă aprobarea"
+
+#: .wuchale-build/i18n.ts
+msgid "failed"
+msgstr "eșuate"
+
+#: .wuchale-build/i18n.ts
+msgid "left to submit"
+msgstr "rămase de trimis"
+
+#: .wuchale-build/i18n.ts
+msgid "under 1s"
+msgstr "sub 1 s"
+
+#. 0: hours
+#: .wuchale-build/i18n.ts
+msgid "{0}h"
+msgstr "{0} h"
+
+#. 0: minutes
+#: .wuchale-build/i18n.ts
+msgid "{0}m"
+msgstr "{0} min"
+
+#. 0: seconds
+#: .wuchale-build/i18n.ts
+msgid "{0}s"
+msgstr "{0} s"
+
+#. 0: duration
+#: .wuchale-build/i18n.ts
+msgid "paused {0}"
+msgstr "pauză de {0}"
+
+#. 0: count
+#: .wuchale-build/i18n.ts
+msgid " · {0} failed"
+msgstr " · {0} eșuate"
+
+#: .wuchale-build/i18n.ts
+msgid "the first Group"
+msgstr "primul grup"
+
+#: .wuchale-build/i18n.ts
+msgid "selected"
+msgstr "selectate"
+
+#. 0: count
+#: .wuchale-build/i18n.ts
+msgid "from {0} loaded"
+msgstr "din {0} încărcate"
+
+#: .wuchale-build/i18n.ts
+msgid "1 group selected. Continue to review your post."
+msgstr "1 grup selectat. Continuă pentru a verifica postarea."
+
+#: .wuchale-build/i18n.ts
+msgid "1 image"
+msgstr "1 imagine"
+
+#: .wuchale-build/i18n.ts
+msgid "1 group selected"
+msgstr "1 grup selectat"

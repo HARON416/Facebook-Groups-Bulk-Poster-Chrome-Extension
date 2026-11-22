@@ -7,6 +7,12 @@ msgstr ""
 "Content-Transfer-Encoding: 8bit\n"
 "Plural-Forms: nplurals=3\n"
 "X-Plurals-Order: one, many, other\n"
+"Project-Id-Version: \n"
+"Report-Msgid-Bugs-To: \n"
+"POT-Creation-Date: \n"
+"PO-Revision-Date: \n"
+"Last-Translator: \n"
+"Language-Team: \n"
 
 #: .wuchale-build/i18n.ts
 msgid "Postika"
@@ -245,9 +251,8 @@ msgstr "Espera mínima (segundos)"
 msgid "Longest wait (seconds)"
 msgstr "Espera máxima (segundos)"
 
-#: .wuchale-build/i18n.ts
-msgid "Both waits must be at least 60 seconds. For example, 60 to 300 means a wait of 1 to 5 minutes."
-msgstr "Ambas esperas deben ser de al menos 60 segundos. Por ejemplo, de 60 a 300 significa esperar de 1 a 5 minutos."
+#~ msgid "Both waits must be at least 60 seconds. For example, 60 to 300 means a wait of 1 to 5 minutes."
+#~ msgstr "Ambas esperas deben ser de al menos 60 segundos. Por ejemplo, de 60 a 300 significa esperar de 1 a 5 minutos."
 
 #~ msgid "Post to selected groups"
 #~ msgstr "Publicar en los grupos seleccionados"
@@ -1112,3 +1117,134 @@ msgstr "Facebook no proporcionó los datos de solicitud necesarios para continua
 #: .wuchale-build/i18n.ts
 msgid "Facebook did not confirm whether the first post was submitted. Check Facebook before trying again."
 msgstr "Facebook no confirmó si se envió la primera publicación. Compruébalo en Facebook antes de volver a intentarlo."
+
+#: .wuchale-build/i18n.ts
+msgid "Saving draft…"
+msgstr "Guardando borrador…"
+
+#: .wuchale-build/i18n.ts
+msgid "Draft saved on this device."
+msgstr "Borrador guardado en este dispositivo."
+
+#: .wuchale-build/i18n.ts
+msgid "Your latest changes could not be saved. Keep this panel open and try again."
+msgstr "No se pudieron guardar los últimos cambios. Mantén este panel abierto y vuelve a intentarlo."
+
+#: .wuchale-build/i18n.ts
+msgid "Try again"
+msgstr "Intentar de nuevo"
+
+#: .wuchale-build/i18n.ts
+msgid "Enter a whole number of at least 60 seconds."
+msgstr "Introduce un número entero de al menos 60 segundos."
+
+#: .wuchale-build/i18n.ts
+msgid "The longest wait must be at least as long as the shortest wait."
+msgstr "La espera máxima debe ser igual o mayor que la espera mínima."
+
+#~ msgid "Wait between {0} and {1} between posts."
+#~ msgstr "Espera entre {0} y {1} entre publicaciones."
+
+#: .wuchale-build/i18n.ts
+msgid "Enter an hour from 0 to 23."
+msgstr "Introduce una hora de 0 a 23."
+
+#: .wuchale-build/i18n.ts
+msgid "Enter minutes from 0 to 59."
+msgstr "Introduce los minutos de 0 a 59."
+
+#: .wuchale-build/i18n.ts
+msgid "Enter whole seconds. Both waits must be at least 60 seconds."
+msgstr "Introduce segundos enteros. Ambas esperas deben ser de al menos 60 segundos."
+
+#. 0: shortest; 1: longest
+#: .wuchale-build/i18n.ts
+msgid "A wait of {0} to {1} between posts."
+msgstr "Una espera de {0} a {1} entre publicaciones."
+
+#: .wuchale-build/i18n.ts
+msgid "View last activity"
+msgstr "Ver actividad anterior"
+
+#: .wuchale-build/i18n.ts
+msgid "Back to review"
+msgstr "Volver a la revisión"
+
+#: .wuchale-build/i18n.ts
+msgid "Activity stays available until you close this panel or start a new queue."
+msgstr "La actividad estará disponible hasta que cierres este panel o inicies una nueva cola."
+
+#. 0: name
+#: .wuchale-build/i18n.ts
+msgid "{0}, selected"
+msgstr "{0}, seleccionado"
+
+#: .wuchale-build/i18n.ts
+msgid "posted"
+msgstr "publicados"
+
+#: .wuchale-build/i18n.ts
+msgid "awaiting approval"
+msgstr "pendientes de aprobación"
+
+#: .wuchale-build/i18n.ts
+msgid "failed"
+msgstr "fallidos"
+
+#: .wuchale-build/i18n.ts
+msgid "left to submit"
+msgstr "pendientes de enviar"
+
+#: .wuchale-build/i18n.ts
+msgid "under 1s"
+msgstr "menos de 1 s"
+
+#. 0: hours
+#: .wuchale-build/i18n.ts
+msgid "{0}h"
+msgstr "{0} h"
+
+#. 0: minutes
+#: .wuchale-build/i18n.ts
+msgid "{0}m"
+msgstr "{0} min"
+
+#. 0: seconds
+#: .wuchale-build/i18n.ts
+msgid "{0}s"
+msgstr "{0} s"
+
+#. 0: duration
+#: .wuchale-build/i18n.ts
+msgid "paused {0}"
+msgstr "en pausa {0}"
+
+#. 0: count
+#: .wuchale-build/i18n.ts
+msgid " · {0} failed"
+msgstr " · {0} fallidos"
+
+#: .wuchale-build/i18n.ts
+msgid "the first Group"
+msgstr "el primer grupo"
+
+#: .wuchale-build/i18n.ts
+msgid "selected"
+msgstr "seleccionados"
+
+#. 0: count
+#: .wuchale-build/i18n.ts
+msgid "from {0} loaded"
+msgstr "de {0} cargados"
+
+#: .wuchale-build/i18n.ts
+msgid "1 group selected. Continue to review your post."
+msgstr "1 grupo seleccionado. Continúa para revisar tu publicación."
+
+#: .wuchale-build/i18n.ts
+msgid "1 image"
+msgstr "1 imagen"
+
+#: .wuchale-build/i18n.ts
+msgid "1 group selected"
+msgstr "1 grupo seleccionado"

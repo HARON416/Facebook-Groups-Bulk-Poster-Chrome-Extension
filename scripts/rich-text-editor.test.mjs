@@ -171,7 +171,7 @@ test("post editor avoids repeated helper and empty-image messages", () => {
   );
   assert.match(
     sidepanelHtml,
-    /id="image-preview-list" class="image-preview-list"><\/div>/,
+    /<div\b(?=[^>]*\bid="image-preview-list")[^>]*>\s*<\/div>/,
   );
   assert.doesNotMatch(
     postingWizardSource,

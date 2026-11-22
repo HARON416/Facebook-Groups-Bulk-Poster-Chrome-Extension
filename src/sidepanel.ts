@@ -15,6 +15,7 @@ import type {
   UiPostingStatusMessage,
 } from "./config";
 import { sendPostingRequest } from "./posting-request-transfer";
+import { createDraftSaver } from "./draft-storage";
 import { groupsInSelectionOrder } from "./group-posting-order";
 import { overlappingTarget, type DragBounds } from "./drag-target";
 import {
@@ -39,15 +40,29 @@ const APP_THEME_STORAGE_KEY = "postika:theme";
 function showToast(
   message: string,
   tone: StatusBannerTone = "info",
-  durationMs = tone === "error" ? 8_000 : 5_000,
+  durationMs = tone === "error" ? 0 : 5_000,
 ) {
   if (!toastRegion) {
     console[tone === "error" ? "error" : "info"](message);
     return;
   }
+  if (
+    tone === "error" &&
+    Array.from(toastRegion.children).some(
+      (item) =>
+        item instanceof HTMLElement &&
+        item.dataset.message === message &&
+        !item.classList.contains("toast-card--closing"),
+    )
+  )
+    return;
 
   while (toastRegion.childElementCount >= 4) {
-    toastRegion.firstElementChild?.remove();
+    const transient = toastRegion.querySelector(
+      ":scope > :not(.toast-card--error):not(:hover):not(:focus-within)",
+    );
+    if (!transient) break;
+    transient.remove();
   }
 
   const toast = document.createElement("section");
@@ -87,7 +102,30 @@ function showToast(
   close.addEventListener("click", dismiss);
   toast.append(accent, content, close);
   toastRegion.append(toast);
-  removalTimer = window.setTimeout(dismiss, durationMs);
+  let remaining = durationMs;
+  let timerStartedAt = 0;
+  const pause = () => {
+    if (removalTimer === undefined) return;
+    window.clearTimeout(removalTimer);
+    removalTimer = undefined;
+    remaining = Math.max(0, remaining - (Date.now() - timerStartedAt));
+  };
+  const resume = () => {
+    if (
+      durationMs <= 0 ||
+      removalTimer !== undefined ||
+      toast.matches(":hover") ||
+      toast.contains(document.activeElement)
+    )
+      return;
+    timerStartedAt = Date.now();
+    removalTimer = window.setTimeout(dismiss, remaining);
+  };
+  toast.addEventListener("mouseenter", pause);
+  toast.addEventListener("mouseleave", resume);
+  toast.addEventListener("focusin", pause);
+  toast.addEventListener("focusout", () => window.setTimeout(resume, 0));
+  resume();
 }
 
 function initializeAppMenu() {
@@ -101,6 +139,16 @@ function initializeAppMenu() {
     themeToggle?.querySelector<HTMLElement>(".app-menu__label");
   if (!trigger || !menu || !title || !themeToggle || !themeToggleLabel) return;
 
+  const menuItems = () =>
+    Array.from(menu.querySelectorAll<HTMLElement>("[data-app-menu-item]"));
+
+  const focusMenuItem = (index: number) => {
+    const items = menuItems();
+    if (!items.length) return;
+    const target = items[(index + items.length) % items.length];
+    target.focus();
+  };
+
   let theme: "light" | "dark" = "light";
   try {
     theme =
@@ -112,6 +160,8 @@ function initializeAppMenu() {
 
   const render = () => {
     trigger.setAttribute("aria-label", msg("settingsAndSupport"));
+    trigger.setAttribute("aria-haspopup", "menu");
+    menu.setAttribute("aria-label", msg("settingsAndSupport"));
     title.textContent = msg("settingsAndSupport");
     themeToggleLabel.textContent = msg("darkMode");
     themeToggle.setAttribute("aria-pressed", String(theme === "dark"));
@@ -146,19 +196,75 @@ function initializeAppMenu() {
   };
 
   trigger.addEventListener("click", () => {
+    const shouldOpen = menu.hidden;
     menu.hidden = !menu.hidden;
     trigger.setAttribute("aria-expanded", String(!menu.hidden));
-    if (!menu.hidden) themeToggle.focus();
+    if (shouldOpen) {
+      window.setTimeout(() => focusMenuItem(0), 0);
+    }
   });
+
   themeToggle.addEventListener("click", () => {
     theme = theme === "dark" ? "light" : "dark";
     applyTheme(true);
+    close(true);
   });
+
+  menu.addEventListener("keydown", (event) => {
+    const items = menuItems();
+    const currentIndex = items.indexOf(document.activeElement as HTMLElement);
+    if (
+      currentIndex < 0 &&
+      ["ArrowDown", "ArrowUp", "Home", "End"].includes(event.key)
+    ) {
+      focusMenuItem(event.key === "ArrowUp" ? items.length - 1 : 0);
+      return;
+    }
+
+    switch (event.key) {
+      case "ArrowDown":
+        event.preventDefault();
+        focusMenuItem(currentIndex + 1);
+        break;
+      case "ArrowUp":
+        event.preventDefault();
+        focusMenuItem(currentIndex - 1);
+        break;
+      case "Home":
+        event.preventDefault();
+        focusMenuItem(0);
+        break;
+      case "End":
+        event.preventDefault();
+        focusMenuItem(items.length - 1);
+        break;
+      case "Escape":
+        event.preventDefault();
+        close(true);
+        break;
+      case "Enter":
+      case " ":
+        if (
+          document.activeElement instanceof HTMLElement &&
+          document.activeElement !== menu
+        ) {
+          event.preventDefault();
+          document.activeElement.click();
+        }
+        break;
+      default:
+        break;
+    }
+  });
+
   menu.addEventListener("click", (event) => {
-    if (event.target instanceof Element && event.target.closest("a")) {
+    const anchor =
+      event.target instanceof Element ? event.target.closest("a") : null;
+    if (anchor) {
       close();
     }
   });
+
   document.addEventListener("pointerdown", (event) => {
     if (
       event.target instanceof Node &&
@@ -258,10 +364,8 @@ const postIntervalMaxInput = document.querySelector<HTMLInputElement>(
   "#post-interval-max-input",
 );
 const createForm = document.querySelector<HTMLFormElement>("#create-form");
-const photoLightbox = document.querySelector<HTMLElement>("#photo-lightbox");
-const photoLightboxBackdrop = document.querySelector<HTMLElement>(
-  "#photo-lightbox-backdrop",
-);
+const photoLightbox =
+  document.querySelector<HTMLDialogElement>("#photo-lightbox");
 const photoLightboxClose = document.querySelector<HTMLButtonElement>(
   "#photo-lightbox-close",
 );
@@ -290,6 +394,12 @@ const pausePostingButton =
   document.querySelector<HTMLButtonElement>("#pause-posting-btn");
 const stopPostingButton =
   document.querySelector<HTMLButtonElement>("#stop-posting-btn");
+const viewPostingActivityButton = document.querySelector<HTMLButtonElement>(
+  "#view-posting-activity",
+);
+const closePostingActivityButton = document.querySelector<HTMLButtonElement>(
+  "#close-posting-activity",
+);
 const startPostingButton =
   document.querySelector<HTMLButtonElement>("#start-posting-btn");
 const openScheduleButton =
@@ -367,6 +477,8 @@ let latestGroupsPhotoStatusIsError = false;
 type PostingLogFilter = "all" | "posted" | "pending" | "failed";
 let groupsPostingLogFilter: PostingLogFilter = "all";
 let postingLogMessages: UiPostingStatusMessage[] = [];
+const MAX_POSTING_LOG_ENTRIES = 300;
+const MAX_POSTING_RESPONSE_LENGTH = 16_384;
 let latestGroupsPostingTiming: PostingTiming | undefined;
 let latestUiPostingStatusMessage: UiPostingStatusMessage | undefined;
 let latestGroupsStatusMessage = "";
@@ -392,14 +504,18 @@ let selectedImageDropTargetIndex: number | undefined;
 let selectedImageDropSide: "before" | "after" = "before";
 let suppressNextImagePreviewClick = false;
 let photoLightboxIndex = 0;
-let photoLightboxReturnFocus: HTMLElement | undefined;
 let loadedGroups: FacebookGroup[] = [];
 let hasRenderedGroups = false;
 let selectedGroupIds = new Set<string>();
 let groupsSearchQuery = "";
-let shouldSaveDraftImages = false;
+let draftImageRevision = 0;
+let savedDraftImageRevision = 0;
+let draftSaveRevision = 0;
+let draftSaveState: "saving" | "saved" | "error" = "saving";
 let imagePreviewsVisible = false;
 let isPostingActive = false;
+let isPostingActivityOpen = false;
+let postingActivityReturnStep = 3;
 let isPostingScheduling = false;
 let isPostingScheduled = false;
 let isPostingPaused = false;
@@ -409,6 +525,27 @@ let isScheduleOpen = false;
 let isScheduleTimeValid = false;
 let saveSidePanelSessionTimer: number | undefined;
 let isRestoringSidePanelSession = false;
+let lastValidMinimumDelay = MIN_SLEEP_SECONDS;
+let lastValidMaximumDelay = DEFAULT_MAX_SLEEP_SECONDS;
+type DraftSnapshot = {
+  session: SidePanelSession;
+  images?: File[];
+};
+const persistDraft = createDraftSaver<DraftSnapshot>(
+  async ({ session, images: files }) => {
+    const images =
+      files === undefined
+        ? undefined
+        : await Promise.all(files.map(fileToUiPostImage));
+    return {
+      [SIDE_PANEL_SESSION_STORAGE_KEY]: session,
+      ...(images === undefined
+        ? {}
+        : { [SIDE_PANEL_DRAFT_IMAGES_STORAGE_KEY]: images }),
+    };
+  },
+  (values) => chrome.storage.local.set(values),
+);
 const postEditor = initializePostEditor(() => {
   updatePostingReadiness();
   scheduleSaveSidePanelSession();
@@ -419,6 +556,7 @@ const postingWizard = initializePostingWizard(
     images: selectedImageFiles,
     groups: groupsInSelectionOrder(loadedGroups, Array.from(selectedGroupIds)),
     busy: isPostingActive,
+    activityOpen: isPostingActivityOpen,
   }),
   updatePostingButtonState,
   (): PostingWizardMessages => ({
@@ -433,7 +571,9 @@ const postingWizard = initializePostingWizard(
     imageCount: (count) => msg("imageCount", count),
     oneGroupSelected: msg("oneGroupSelected"),
     groupsSelectedCount: (count) => msg("groupsSelectedCount", count),
+    viewPhoto: (index, name) => msg("viewPhoto", index, name),
   }),
+  openPhotoLightbox,
 );
 if (!schedulePickerRoot) {
   throw new Error("The scheduling time picker could not be initialized.");
@@ -442,9 +582,7 @@ const schedulePicker: SchedulePicker = initializeSchedulePicker(
   schedulePickerRoot,
   (valid) => {
     isScheduleTimeValid = valid;
-    if (confirmScheduleButton) {
-      confirmScheduleButton.disabled = !valid;
-    }
+    updateScheduleControls();
   },
   () => msg("twentyFourHourClock"),
 );
@@ -564,8 +702,9 @@ function openPhotoLightbox(index: number, returnFocus: HTMLElement) {
     return;
   }
 
-  closePhotoLightbox(false);
-  photoLightboxReturnFocus = returnFocus;
+  if (photoLightbox.open) closePhotoLightbox();
+  // showModal remembers the focused invoker for native focus restoration.
+  returnFocus.focus({ preventScroll: true });
   photoLightboxIndex = index;
 
   files.forEach((file) => {
@@ -576,11 +715,9 @@ function openPhotoLightbox(index: number, returnFocus: HTMLElement) {
     photoLightboxTitle.textContent = msg("photoImagePreview");
   }
 
-  photoLightbox.hidden = false;
-  document.body.classList.add("photo-lightbox-open");
   renderPhotoLightboxThumbnails();
   renderPhotoLightbox();
-  photoLightboxClose?.focus();
+  photoLightbox.showModal();
 }
 
 function renderPhotoLightbox() {
@@ -658,32 +795,27 @@ function movePhotoLightbox(direction: -1 | 1) {
   renderPhotoLightbox();
 }
 
-function closePhotoLightbox(returnFocus = true) {
-  if (!photoLightbox) {
-    return;
-  }
-
-  photoLightbox.hidden = true;
-  document.body.classList.remove("photo-lightbox-open");
+function clearPhotoLightbox() {
   if (photoLightboxImage) {
-    photoLightboxImage.src = "";
+    photoLightboxImage.removeAttribute("src");
     photoLightboxImage.alt = "";
   }
   photoLightboxThumbnails?.replaceChildren();
   photoLightboxUrls.forEach((url) => URL.revokeObjectURL(url));
   photoLightboxUrls.length = 0;
-
-  if (returnFocus) {
-    photoLightboxReturnFocus?.focus();
-  }
-  photoLightboxReturnFocus = undefined;
 }
 
-photoLightboxClose?.addEventListener("click", () => {
-  closePhotoLightbox();
+function closePhotoLightbox() {
+  photoLightbox?.close();
+  clearPhotoLightbox();
+}
+
+photoLightbox?.addEventListener("close", () => {
+  // Native Escape and light-dismiss also need to release image URLs.
+  if (!photoLightbox.open) clearPhotoLightbox();
 });
 
-photoLightboxBackdrop?.addEventListener("click", () => {
+photoLightboxClose?.addEventListener("click", () => {
   closePhotoLightbox();
 });
 
@@ -695,15 +827,8 @@ photoLightboxNext?.addEventListener("click", () => {
   movePhotoLightbox(1);
 });
 
-document.addEventListener("keydown", (event) => {
-  if (photoLightbox?.hidden !== false) {
-    return;
-  }
-
-  if (event.key === "Escape") {
-    event.preventDefault();
-    closePhotoLightbox();
-  } else if (event.key === "ArrowLeft") {
+photoLightbox?.addEventListener("keydown", (event) => {
+  if (event.key === "ArrowLeft") {
     event.preventDefault();
     movePhotoLightbox(-1);
   } else if (event.key === "ArrowRight") {
@@ -716,13 +841,21 @@ function renderGroups(groups: FacebookGroup[]) {
   if (!groupsList) {
     return;
   }
+  const activeCheckbox = document.activeElement;
+  const focusedGroupId =
+    activeCheckbox instanceof HTMLInputElement &&
+    groupsList.contains(activeCheckbox)
+      ? activeCheckbox.value
+      : undefined;
+  const scrollTop = groupsList.scrollTop;
 
   hasRenderedGroups = true;
   loadedGroups = groups;
   updateLoadGroupsButtonLabel();
+  const availableGroupIds = new Set(groups.map((group) => group.id));
   selectedGroupIds = new Set(
     Array.from(selectedGroupIds).filter((groupId) =>
-      groups.some((group) => group.id === groupId),
+      availableGroupIds.has(groupId),
     ),
   );
 
@@ -876,6 +1009,12 @@ function renderGroups(groups: FacebookGroup[]) {
         : msg("noOtherGroups"),
     ),
   );
+  if (focusedGroupId !== undefined) {
+    Array.from(groupsList.querySelectorAll<HTMLInputElement>("input"))
+      .find((checkbox) => checkbox.value === focusedGroupId)
+      ?.focus({ preventScroll: true });
+    groupsList.scrollTop = scrollTop;
+  }
   updatePostingReadiness();
 }
 
@@ -1136,6 +1275,7 @@ function updatePostingReadiness() {
     minimumDelaySeconds,
     maximumDelaySeconds,
   );
+  updateIntervalFeedback();
 
   updateGroupsSelectionSummary();
 
@@ -1160,26 +1300,55 @@ function isValidPostingInterval(
   );
 }
 
-function normalizePostingInterval() {
+function updateIntervalFeedback() {
   if (!postIntervalMinInput || !postIntervalMaxInput) {
     return;
   }
 
-  const enteredMinimum = Number(postIntervalMinInput.value);
-  const minimumDelaySeconds =
-    Number.isInteger(enteredMinimum) && enteredMinimum >= MIN_SLEEP_SECONDS
-      ? enteredMinimum
-      : MIN_SLEEP_SECONDS;
-  const enteredMaximum = Number(postIntervalMaxInput.value);
-  const maximumDelaySeconds =
-    Number.isInteger(enteredMaximum) && enteredMaximum >= minimumDelaySeconds
-      ? enteredMaximum
-      : Math.max(DEFAULT_MAX_SLEEP_SECONDS, minimumDelaySeconds);
-
-  postIntervalMinInput.value = String(minimumDelaySeconds);
-  postIntervalMaxInput.value = String(maximumDelaySeconds);
-  updatePostingReadiness();
-  scheduleSaveSidePanelSession();
+  const minimum = Number(postIntervalMinInput.value);
+  const maximum = Number(postIntervalMaxInput.value);
+  const minimumError =
+    !postIntervalMinInput.value ||
+    !Number.isInteger(minimum) ||
+    minimum < MIN_SLEEP_SECONDS
+      ? msg("waitMinimumError")
+      : "";
+  const maximumError =
+    !postIntervalMaxInput.value ||
+    !Number.isInteger(maximum) ||
+    maximum < MIN_SLEEP_SECONDS
+      ? msg("waitMinimumError")
+      : !minimumError && maximum < minimum
+        ? msg("waitOrderError")
+        : "";
+  for (const [input, id, message] of [
+    [postIntervalMinInput, "post-interval-min-error", minimumError],
+    [postIntervalMaxInput, "post-interval-max-error", maximumError],
+  ] as const) {
+    input.setAttribute("aria-invalid", String(Boolean(message)));
+    input.setCustomValidity(message);
+    const error = document.getElementById(id)!;
+    if (error.textContent !== message) error.textContent = message;
+    error.hidden = !message;
+  }
+  const summary = document.getElementById("post-interval-summary")!;
+  summary.hidden = Boolean(minimumError || maximumError);
+  if (!summary.hidden) {
+    lastValidMinimumDelay = minimum;
+    lastValidMaximumDelay = maximum;
+    const duration = (seconds: number) =>
+      new Intl.NumberFormat(getLocale(), {
+        style: "unit",
+        unit: seconds % 60 === 0 ? "minute" : "second",
+        unitDisplay: "long",
+      }).format(seconds % 60 === 0 ? seconds / 60 : seconds);
+    const message = msg(
+      "waitRangeSummary",
+      duration(minimum),
+      duration(maximum),
+    );
+    if (summary.textContent !== message) summary.textContent = message;
+  }
 }
 
 function updatePostingButtonState(
@@ -1194,6 +1363,17 @@ function updatePostingButtonState(
   })(),
 ) {
   postingWizard.refresh();
+  if (viewPostingActivityButton) {
+    viewPostingActivityButton.hidden =
+      !latestUiPostingStatusMessage || isPostingActivityOpen || isPostingActive;
+  }
+  if (closePostingActivityButton) {
+    closePostingActivityButton.hidden =
+      !latestUiPostingStatusMessage ||
+      !isPostingActivityOpen ||
+      isPostingActive;
+  }
+  if (postingProgress) postingProgress.hidden = !isPostingActivityOpen;
   if (!startPostingButton) {
     return;
   }
@@ -1472,7 +1652,13 @@ async function restorePostingQueueStatus() {
       GetPostingQueueStatusRequest,
       PostingQueueStatusResponse
     >({ type: "GET_POSTING_QUEUE_STATUS" });
-    if (response?.groups) {
+    // Activity belongs to this open panel. Restore a running queue, but do not
+    // resurrect a finished queue from the worker's last-status snapshot.
+    if (
+      response?.groups &&
+      !isTerminalPostingStatus(response.groups.status) &&
+      response.groups.status !== "idle"
+    ) {
       updateUiPostingStatus(response.groups);
     }
   } catch {
@@ -1584,6 +1770,8 @@ function shouldShowPostingLogEntry(
   status: string | undefined,
   filter: PostingLogFilter,
 ) {
+  // A result filter must never hide why the queue ended.
+  if (isTerminalPostingStatus(status)) return true;
   switch (filter) {
     case "posted":
       return status === "posted";
@@ -1594,6 +1782,10 @@ function shouldShowPostingLogEntry(
     default:
       return true;
   }
+}
+
+function isTerminalPostingStatus(status: string | undefined): boolean {
+  return status === "stopped" || status === "done" || status === "rate_limited";
 }
 
 function toggleGroupsPostingLogFilter(
@@ -1634,11 +1826,7 @@ function updateUiPostingStatus(message: UiPostingStatusMessage) {
 
   updatePostingProgress(message);
 
-  if (
-    message.status === "stopped" ||
-    message.status === "done" ||
-    message.status === "rate_limited"
-  ) {
+  if (isTerminalPostingStatus(message.status)) {
     isPostingActive = false;
     isPostingScheduling = false;
     isPostingScheduled = false;
@@ -1656,8 +1844,9 @@ function updatePostingProgress(
   appendLog = true,
 ) {
   latestUiPostingStatusMessage = message;
+  if (appendLog) isPostingActivityOpen = true;
   if (postingProgress) {
-    postingProgress.hidden = false;
+    postingProgress.hidden = !isPostingActivityOpen;
   }
 
   const successCount = message.successCount ?? 0;
@@ -1723,9 +1912,16 @@ function updatePostingProgress(
       message.current > 0 && message.total > 0
         ? msg("groupNumber", message.current, message.total)
         : msg("queue");
-    postingProgressCurrent.textContent = message.groupName
-      ? `${prefix}: ${message.groupName}`
-      : displayPostingMessage(message);
+    if (isTerminalPostingStatus(message.status)) {
+      const reason = displayPostingMessage(message);
+      const error = message.error ? localizePostingText(message.error) : "";
+      postingProgressCurrent.textContent =
+        error && error !== reason ? `${reason}\n${error}` : reason;
+    } else {
+      postingProgressCurrent.textContent = message.groupName
+        ? `${prefix}: ${message.groupName}`
+        : displayPostingMessage(message);
+    }
   }
 
   if (postingTiming) {
@@ -1757,6 +1953,12 @@ function appendPostingProgressLog(
   if (!postingProgressLog) {
     return;
   }
+  if (message.responseBody && message.responseBody.length > MAX_POSTING_RESPONSE_LENGTH) {
+    message = {
+      ...message,
+      responseBody: message.responseBody.slice(0, MAX_POSTING_RESPONSE_LENGTH) + "\n[Response truncated]",
+    };
+  }
 
   if (trackMessage) {
     const groupId = message.groupId ?? "queue";
@@ -1778,6 +1980,7 @@ function appendPostingProgressLog(
     } else {
       postingLogMessages.unshift(message);
     }
+    postingLogMessages.length = Math.min(postingLogMessages.length, MAX_POSTING_LOG_ENTRIES);
   }
 
   if (message.status !== "waiting" && message.status !== "paused") {
@@ -1875,6 +2078,9 @@ function appendPostingProgressLog(
 
   if (!existingUpdatableItem) {
     postingProgressLog.prepend(item);
+  }
+  while (postingProgressLog.children.length > MAX_POSTING_LOG_ENTRIES) {
+    postingProgressLog.lastElementChild?.remove();
   }
   item.hidden = !shouldShowPostingLogEntry(
     message.status,
@@ -2632,8 +2838,12 @@ postingProgressFailedFilterButton?.addEventListener("click", () => {
   toggleGroupsPostingLogFilter("failed");
 });
 
-postIntervalMinInput?.addEventListener("change", normalizePostingInterval);
-postIntervalMaxInput?.addEventListener("change", normalizePostingInterval);
+for (const input of [postIntervalMinInput, postIntervalMaxInput]) {
+  input?.addEventListener("input", () => {
+    updatePostingReadiness();
+    scheduleSaveSidePanelSession();
+  });
+}
 
 createForm?.addEventListener("submit", (event) => {
   event.preventDefault();
@@ -2735,12 +2945,31 @@ cancelScheduleButton?.addEventListener("click", () => {
 });
 
 confirmScheduleButton?.addEventListener("click", () => {
+  if (!schedulePicker.isValid()) {
+    schedulePicker.focus();
+    return;
+  }
   const scheduledDate = schedulePicker.getDate();
   if (!scheduledDate || scheduledDate.getTime() <= Date.now()) {
     showToast(msg("futureDateRequired"), "warning");
     return;
   }
   void startPosting(scheduledDate);
+});
+
+closePostingActivityButton?.addEventListener("click", () => {
+  if (isPostingActive) return;
+  isPostingActivityOpen = false;
+  updatePostingReadiness();
+  postingWizard.show(postingActivityReturnStep);
+});
+
+viewPostingActivityButton?.addEventListener("click", () => {
+  if (!latestUiPostingStatusMessage) return;
+  postingActivityReturnStep = postingWizard.step;
+  isPostingActivityOpen = true;
+  updatePostingReadiness();
+  postingWizard.show(3);
 });
 
 startPostingButton?.addEventListener("click", () => {
@@ -2859,7 +3088,19 @@ async function startPosting(scheduledDate?: Date) {
     isStopRequestPending = false;
     isPauseResumeRequestPending = false;
     isScheduleOpen = false;
-    updatePostingReadiness();
+    updateUiPostingStatus({
+      type: "UI_POSTING_STATUS",
+      status: "stopped",
+      message: msg("couldNotStartPosting"),
+      error:
+        error instanceof Error ? error.message : msg("couldNotStartPosting"),
+      current: 0,
+      total: postingGroups.length,
+      successCount: 0,
+      failedCount: 0,
+      processedCount: 0,
+      timing: latestGroupsPostingTiming,
+    });
     showToast(
       error instanceof Error ? error.message : msg("couldNotStartPosting"),
       "error",
@@ -2868,6 +3109,7 @@ async function startPosting(scheduledDate?: Date) {
 }
 
 window.addEventListener("postika:locale-changed", () => {
+  renderDraftSaveFeedback();
   refreshToastTranslations();
   if (hasRenderedGroups) renderGroups(loadedGroups);
   updateLoadGroupsButtonLabel();
@@ -2893,7 +3135,7 @@ window.addEventListener("postika:locale-changed", () => {
       latestGroupsPhotoStatusIsError,
     );
   }
-  if (photoLightbox && !photoLightbox.hidden) {
+  if (photoLightbox?.open) {
     if (photoLightboxTitle) {
       photoLightboxTitle.textContent = msg("photoImagePreview");
     }
@@ -2937,6 +3179,7 @@ updatePostingReadiness();
 window.addEventListener("beforeunload", () => {
   flushSidePanelSessionSave();
   clearImagePreviewUrls();
+  postingWizard.destroy();
 });
 
 function fileToUiPostImage(file: File): Promise<UiPostImage> {
@@ -3116,16 +3359,17 @@ function scheduleSaveSidePanelSession(saveImages = false) {
     return;
   }
 
-  shouldSaveDraftImages ||= saveImages;
+  if (saveImages) draftImageRevision += 1;
+  draftSaveRevision += 1;
+  if (draftSaveState !== "error") draftSaveState = "saving";
+  renderDraftSaveFeedback();
   if (saveSidePanelSessionTimer !== undefined) {
     window.clearTimeout(saveSidePanelSessionTimer);
   }
 
   saveSidePanelSessionTimer = window.setTimeout(() => {
     saveSidePanelSessionTimer = undefined;
-    const shouldSaveImages = shouldSaveDraftImages;
-    shouldSaveDraftImages = false;
-    void saveSidePanelSession(shouldSaveImages);
+    void saveSidePanelSession();
   }, 400);
 }
 
@@ -3135,53 +3379,77 @@ function flushSidePanelSessionSave() {
     saveSidePanelSessionTimer = undefined;
   }
 
-  const shouldSaveImages = shouldSaveDraftImages;
-  shouldSaveDraftImages = false;
-  void saveSidePanelSession(shouldSaveImages);
+  void saveSidePanelSession();
 }
 
-async function saveSidePanelSession(saveImages = false) {
+function renderDraftSaveFeedback() {
+  const feedback = document.getElementById("draft-save-feedback");
+  const status = document.getElementById("draft-save-status");
+  const retry = document.querySelector<HTMLButtonElement>("#retry-draft-save");
+  if (!feedback || !status || !retry) return;
+  feedback.hidden = false;
+  feedback.dataset.state = draftSaveState;
+  const message = msg(
+    draftSaveState === "error"
+      ? "draftSaveFailed"
+      : draftSaveState === "saving"
+        ? "draftSaving"
+        : "draftSaved",
+  );
+  if (status.textContent !== message) status.textContent = message;
+  retry.hidden = draftSaveState !== "error";
+  retry.textContent = msg("retrySave");
+}
+
+document.getElementById("retry-draft-save")?.addEventListener("click", () => {
+  if (saveSidePanelSessionTimer !== undefined) {
+    window.clearTimeout(saveSidePanelSessionTimer);
+    saveSidePanelSessionTimer = undefined;
+  }
+  void saveSidePanelSession();
+});
+
+async function saveSidePanelSession() {
+  const revision = ++draftSaveRevision;
+  const imageRevision = draftImageRevision;
+  draftSaveState = "saving";
+  renderDraftSaveFeedback();
   try {
     const session: SidePanelSession = {
-      minimumDelaySeconds: Number(
-        postIntervalMinInput?.value ?? MIN_SLEEP_SECONDS,
-      ),
-      maximumDelaySeconds: Number(
-        postIntervalMaxInput?.value ?? DEFAULT_MAX_SLEEP_SECONDS,
-      ),
+      minimumDelaySeconds: lastValidMinimumDelay,
+      maximumDelaySeconds: lastValidMaximumDelay,
       intervalSettingsVersion: 2,
-      loadedGroups,
+      loadedGroups: [...loadedGroups],
       selectedGroupIds: Array.from(selectedGroupIds),
       groupsSearchQuery,
       imagePreviewsVisible,
       postBodyHtml: postEditor.getContent().html,
     };
 
-    await chrome.storage.local.set({
-      [SIDE_PANEL_SESSION_STORAGE_KEY]: session,
+    await persistDraft({
+      session,
+      images:
+        imageRevision !== savedDraftImageRevision
+          ? [...selectedImageFiles]
+          : undefined,
     });
-    if (saveImages) {
-      try {
-        await chrome.storage.local.remove(SIDE_PANEL_DRAFT_IMAGES_STORAGE_KEY);
-        if (selectedImageFiles.length > 0) {
-          const images = await Promise.all(
-            selectedImageFiles.map(fileToUiPostImage),
-          );
-          await chrome.storage.local.set({
-            [SIDE_PANEL_DRAFT_IMAGES_STORAGE_KEY]: images,
-          });
-        }
-      } catch (error) {
-        console.error("Could not save draft images.", error);
-        showToast(msg("couldNotSaveDraftImages"), "error");
-      }
+    savedDraftImageRevision = Math.max(savedDraftImageRevision, imageRevision);
+    if (revision === draftSaveRevision) {
+      draftSaveState = "saved";
+      renderDraftSaveFeedback();
     }
   } catch (error) {
     console.error("Unable to save side panel session.", error);
+    if (revision === draftSaveRevision) {
+      draftSaveState = "error";
+      renderDraftSaveFeedback();
+    }
   }
 }
 
 function resetPostingProgress(total: number, successTarget?: number) {
+  isPostingActivityOpen = true;
+  postingActivityReturnStep = 3;
   latestGroupsPostingTiming = undefined;
   latestUiPostingStatusMessage = undefined;
   postingLogMessages = [];

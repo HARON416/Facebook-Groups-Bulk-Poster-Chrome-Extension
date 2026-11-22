@@ -5,7 +5,10 @@
   "description": "",
   "scripts": {
     "build": "node scripts/build.mjs",
+    "test": "node --test scripts/*.test.mjs",
+    "test:browser": "node scripts/sidepanel-browser-check.mjs",
     "i18n:extract": "node scripts/wuchale.mjs",
+    "i18n:check": "node node_modules/wuchale/dist/cli/index.js check",
     "watch": "node scripts/build.mjs --watch"
   },
   "keywords": [],

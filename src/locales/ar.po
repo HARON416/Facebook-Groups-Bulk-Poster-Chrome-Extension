@@ -7,6 +7,12 @@ msgstr ""
 "Content-Transfer-Encoding: 8bit\n"
 "Plural-Forms: nplurals=6\n"
 "X-Plurals-Order: zero, one, two, few, many, other\n"
+"Project-Id-Version: \n"
+"Report-Msgid-Bugs-To: \n"
+"POT-Creation-Date: \n"
+"PO-Revision-Date: \n"
+"Last-Translator: \n"
+"Language-Team: \n"
 
 #: .wuchale-build/i18n.ts
 msgid "Postika"
@@ -245,9 +251,8 @@ msgstr "أقصر مدة انتظار (بالثواني)"
 msgid "Longest wait (seconds)"
 msgstr "أطول مدة انتظار (بالثواني)"
 
-#: .wuchale-build/i18n.ts
-msgid "Both waits must be at least 60 seconds. For example, 60 to 300 means a wait of 1 to 5 minutes."
-msgstr "يجب ألا تقل مدتا الانتظار عن 60 ثانية. مثلاً، من 60 إلى 300 يعني الانتظار من دقيقة إلى 5 دقائق."
+#~ msgid "Both waits must be at least 60 seconds. For example, 60 to 300 means a wait of 1 to 5 minutes."
+#~ msgstr "يجب ألا تقل مدتا الانتظار عن 60 ثانية. مثلاً، من 60 إلى 300 يعني الانتظار من دقيقة إلى 5 دقائق."
 
 #~ msgid "Post to selected groups"
 #~ msgstr "النشر في المجموعات المحددة"
@@ -1112,3 +1117,134 @@ msgstr "لم يوفّر Facebook بيانات الطلب اللازمة للمت
 #: .wuchale-build/i18n.ts
 msgid "Facebook did not confirm whether the first post was submitted. Check Facebook before trying again."
 msgstr "لم يؤكد Facebook ما إذا كان قد تم إرسال المنشور الأول. تحقّق من Facebook قبل المحاولة مرة أخرى."
+
+#: .wuchale-build/i18n.ts
+msgid "Saving draft…"
+msgstr "جارٍ حفظ المسودة…"
+
+#: .wuchale-build/i18n.ts
+msgid "Draft saved on this device."
+msgstr "تم حفظ المسودة على هذا الجهاز."
+
+#: .wuchale-build/i18n.ts
+msgid "Your latest changes could not be saved. Keep this panel open and try again."
+msgstr "تعذر حفظ آخر تغييراتك. أبقِ هذه اللوحة مفتوحة وحاول مرة أخرى."
+
+#: .wuchale-build/i18n.ts
+msgid "Try again"
+msgstr "حاول مرة أخرى"
+
+#: .wuchale-build/i18n.ts
+msgid "Enter a whole number of at least 60 seconds."
+msgstr "أدخل عددًا صحيحًا لا يقل عن 60 ثانية."
+
+#: .wuchale-build/i18n.ts
+msgid "The longest wait must be at least as long as the shortest wait."
+msgstr "يجب ألا تقل أطول مدة انتظار عن أقصر مدة انتظار."
+
+#~ msgid "Wait between {0} and {1} between posts."
+#~ msgstr "انتظر مدة تتراوح بين {0} و{1} بين المنشورات."
+
+#: .wuchale-build/i18n.ts
+msgid "Enter an hour from 0 to 23."
+msgstr "أدخل ساعة من 0 إلى 23."
+
+#: .wuchale-build/i18n.ts
+msgid "Enter minutes from 0 to 59."
+msgstr "أدخل الدقائق من 0 إلى 59."
+
+#: .wuchale-build/i18n.ts
+msgid "Enter whole seconds. Both waits must be at least 60 seconds."
+msgstr "أدخل عددًا صحيحًا من الثواني. يجب ألا تقل مدتا الانتظار عن 60 ثانية."
+
+#. 0: shortest; 1: longest
+#: .wuchale-build/i18n.ts
+msgid "A wait of {0} to {1} between posts."
+msgstr "مدة انتظار تتراوح بين {0} و{1} بين المنشورات."
+
+#: .wuchale-build/i18n.ts
+msgid "View last activity"
+msgstr "عرض النشاط الأخير"
+
+#: .wuchale-build/i18n.ts
+msgid "Back to review"
+msgstr "العودة إلى المراجعة"
+
+#: .wuchale-build/i18n.ts
+msgid "Activity stays available until you close this panel or start a new queue."
+msgstr "يبقى النشاط متاحًا حتى تغلق هذه اللوحة أو تبدأ قائمة نشر جديدة."
+
+#. 0: name
+#: .wuchale-build/i18n.ts
+msgid "{0}, selected"
+msgstr "{0}، محددة"
+
+#: .wuchale-build/i18n.ts
+msgid "posted"
+msgstr "تم نشرها"
+
+#: .wuchale-build/i18n.ts
+msgid "awaiting approval"
+msgstr "بانتظار الموافقة"
+
+#: .wuchale-build/i18n.ts
+msgid "failed"
+msgstr "فشلت"
+
+#: .wuchale-build/i18n.ts
+msgid "left to submit"
+msgstr "متبقية للإرسال"
+
+#: .wuchale-build/i18n.ts
+msgid "under 1s"
+msgstr "أقل من ثانية"
+
+#. 0: hours
+#: .wuchale-build/i18n.ts
+msgid "{0}h"
+msgstr "{0} س"
+
+#. 0: minutes
+#: .wuchale-build/i18n.ts
+msgid "{0}m"
+msgstr "{0} د"
+
+#. 0: seconds
+#: .wuchale-build/i18n.ts
+msgid "{0}s"
+msgstr "{0} ث"
+
+#. 0: duration
+#: .wuchale-build/i18n.ts
+msgid "paused {0}"
+msgstr "متوقف مؤقتًا {0}"
+
+#. 0: count
+#: .wuchale-build/i18n.ts
+msgid " · {0} failed"
+msgstr " · فشل {0}"
+
+#: .wuchale-build/i18n.ts
+msgid "the first Group"
+msgstr "المجموعة الأولى"
+
+#: .wuchale-build/i18n.ts
+msgid "selected"
+msgstr "محددة"
+
+#. 0: count
+#: .wuchale-build/i18n.ts
+msgid "from {0} loaded"
+msgstr "من أصل {0} تم تحميلها"
+
+#: .wuchale-build/i18n.ts
+msgid "1 group selected. Continue to review your post."
+msgstr "تم تحديد مجموعة واحدة. تابع لمراجعة منشورك."
+
+#: .wuchale-build/i18n.ts
+msgid "1 image"
+msgstr "صورة واحدة"
+
+#: .wuchale-build/i18n.ts
+msgid "1 group selected"
+msgstr "تم تحديد مجموعة واحدة"

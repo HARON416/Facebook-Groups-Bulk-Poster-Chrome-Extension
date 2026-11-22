@@ -16,7 +16,7 @@
             id="app-menu-trigger"
             class="app-menu-trigger"
             aria-label="Settings &amp; support"
-            aria-haspopup="true"
+            aria-haspopup="menu"
             aria-expanded="false"
             aria-controls="app-menu"
           >
@@ -29,7 +29,9 @@
           <section
             id="app-menu"
             class="app-menu"
+            role="menu"
             aria-labelledby="app-menu-title"
+            aria-orientation="vertical"
             hidden
           >
             <h2 id="app-menu-title">Settings &amp; support</h2>
@@ -37,6 +39,8 @@
               type="button"
               id="theme-toggle"
               class="app-menu__item app-menu__theme"
+              data-app-menu-item
+              role="menuitem"
               aria-pressed="false"
             >
               <span class="app-menu__label">Dark mode</span>
@@ -47,6 +51,8 @@
             <a
               href="https://www.postika.softwrhq.com/downloads"
               class="app-menu__item app-menu__download"
+              data-app-menu-item
+              role="menuitem"
               target="_blank"
               rel="noopener noreferrer"
             >
@@ -66,6 +72,8 @@
             <a
               href="https://wa.me/254718448461?text=Hi%2C%20I%20have%20a%20question%20about%20Postika"
               class="app-menu__item app-menu__whatsapp"
+              data-app-menu-item
+              role="menuitem"
               target="_blank"
               rel="noopener noreferrer"
             >
@@ -74,6 +82,8 @@
             <a
               href="mailto:haronkibetrutoh@gmail.com?subject=Postika%20question"
               class="app-menu__item app-menu__email"
+              data-app-menu-item
+              role="menuitem"
             >
               Email developer
             </a>
@@ -127,6 +137,18 @@
           </div>
         </div>
       </header>
+      <div id="draft-save-feedback" class="draft-save-feedback" hidden>
+        <p id="draft-save-status" role="status" aria-live="polite"></p>
+        <button type="button" id="retry-draft-save" hidden>Try again</button>
+      </div>
+      <button
+        type="button"
+        id="view-posting-activity"
+        class="activity-history-link"
+        hidden
+      >
+        View last activity
+      </button>
       <form id="create-form" class="workflow">
         <div
           id="groups-workflow"
@@ -507,6 +529,11 @@
                     tabindex="0"
                   ></div>
                   <small id="review-image-count"></small>
+                  <ol
+                    id="review-images"
+                    class="review-images"
+                    aria-label="Photos in post order"
+                  ></ol>
                 </div>
                 <button type="button" data-posting-back="1" class="review-edit">
                   Edit post
@@ -550,8 +577,16 @@
                       step="1"
                       value="60"
                       inputmode="numeric"
+                      required
+                      aria-describedby="post-interval-min-error post-interval-summary"
                     />
                   </div>
+                  <p
+                    id="post-interval-min-error"
+                    class="field-error"
+                    role="status"
+                    hidden
+                  ></p>
                 </div>
                 <div class="field">
                   <label for="post-interval-max-input"
@@ -566,14 +601,26 @@
                       step="1"
                       value="300"
                       inputmode="numeric"
+                      required
+                      aria-describedby="post-interval-max-error post-interval-summary"
                     />
                   </div>
+                  <p
+                    id="post-interval-max-error"
+                    class="field-error"
+                    role="status"
+                    hidden
+                  ></p>
                 </div>
               </div>
-              <p class="section-note">
-                Both waits must be at least 60 seconds. For example, 60 to 300
-                means a wait of 1 to 5 minutes.
+              <p id="post-interval-help" class="section-note">
+                Enter whole seconds. Both waits must be at least 60 seconds.
               </p>
+              <p
+                id="post-interval-summary"
+                class="section-note"
+                role="status"
+              ></p>
             </div>
             <section
               id="schedule-panel"
@@ -722,6 +769,14 @@
               <div class="posting-progress__controls">
                 <button
                   type="button"
+                  id="close-posting-activity"
+                  class="button-89 button-89--secondary"
+                  hidden
+                >
+                  Back to review
+                </button>
+                <button
+                  type="button"
                   id="pause-posting-btn"
                   hidden
                   class="button-89 button-89--secondary"
@@ -737,23 +792,24 @@
                   Stop
                 </button>
               </div>
+              <p
+                class="section-note posting-progress__retention-note"
+                id="posting-activity-retention"
+              >
+                Activity stays available until you close this panel or start a
+                new queue.
+              </p>
             </div>
           </section>
         </div>
       </form>
 
-      <div
+      <dialog
         id="photo-lightbox"
         class="photo-lightbox"
-        role="dialog"
-        aria-modal="true"
         aria-labelledby="photo-lightbox-title"
-        hidden
+        closedby="any"
       >
-        <div
-          id="photo-lightbox-backdrop"
-          class="photo-lightbox__backdrop"
-        ></div>
         <div class="photo-lightbox__dialog">
           <div class="photo-lightbox__header">
             <div>
@@ -765,6 +821,7 @@
               id="photo-lightbox-close"
               class="photo-lightbox__close"
               aria-label="Close photo preview"
+              autofocus
             >
               <svg
                 xmlns="http://www.w3.org/2000/svg"
@@ -832,7 +889,7 @@
             ></div>
           </div>
         </div>
-      </div>
+      </dialog>
     </main>
 
     <div

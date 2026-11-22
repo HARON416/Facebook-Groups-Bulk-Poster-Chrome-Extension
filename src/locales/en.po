@@ -245,9 +245,8 @@ msgstr "Shortest wait (seconds)"
 msgid "Longest wait (seconds)"
 msgstr "Longest wait (seconds)"
 
-#: .wuchale-build/i18n.ts
-msgid "Both waits must be at least 60 seconds. For example, 60 to 300 means a wait of 1 to 5 minutes."
-msgstr "Both waits must be at least 60 seconds. For example, 60 to 300 means a wait of 1 to 5 minutes."
+#~ msgid "Both waits must be at least 60 seconds. For example, 60 to 300 means a wait of 1 to 5 minutes."
+#~ msgstr "Both waits must be at least 60 seconds. For example, 60 to 300 means a wait of 1 to 5 minutes."
 
 #~ msgid "Post to selected groups"
 #~ msgstr "Post to selected groups"
@@ -1112,3 +1111,134 @@ msgstr "Facebook did not provide the request values needed to continue. Try agai
 #: .wuchale-build/i18n.ts
 msgid "Facebook did not confirm whether the first post was submitted. Check Facebook before trying again."
 msgstr "Facebook did not confirm whether the first post was submitted. Check Facebook before trying again."
+
+#: .wuchale-build/i18n.ts
+msgid "Saving draft…"
+msgstr "Saving draft…"
+
+#: .wuchale-build/i18n.ts
+msgid "Draft saved on this device."
+msgstr "Draft saved on this device."
+
+#: .wuchale-build/i18n.ts
+msgid "Your latest changes could not be saved. Keep this panel open and try again."
+msgstr "Your latest changes could not be saved. Keep this panel open and try again."
+
+#: .wuchale-build/i18n.ts
+msgid "Try again"
+msgstr "Try again"
+
+#: .wuchale-build/i18n.ts
+msgid "Enter a whole number of at least 60 seconds."
+msgstr "Enter a whole number of at least 60 seconds."
+
+#: .wuchale-build/i18n.ts
+msgid "The longest wait must be at least as long as the shortest wait."
+msgstr "The longest wait must be at least as long as the shortest wait."
+
+#~ msgid "Wait between {0} and {1} between posts."
+#~ msgstr "Wait between {0} and {1} between posts."
+
+#: .wuchale-build/i18n.ts
+msgid "Enter an hour from 0 to 23."
+msgstr "Enter an hour from 0 to 23."
+
+#: .wuchale-build/i18n.ts
+msgid "Enter minutes from 0 to 59."
+msgstr "Enter minutes from 0 to 59."
+
+#: .wuchale-build/i18n.ts
+msgid "Enter whole seconds. Both waits must be at least 60 seconds."
+msgstr "Enter whole seconds. Both waits must be at least 60 seconds."
+
+#. 0: shortest; 1: longest
+#: .wuchale-build/i18n.ts
+msgid "A wait of {0} to {1} between posts."
+msgstr "A wait of {0} to {1} between posts."
+
+#: .wuchale-build/i18n.ts
+msgid "View last activity"
+msgstr "View last activity"
+
+#: .wuchale-build/i18n.ts
+msgid "Back to review"
+msgstr "Back to review"
+
+#: .wuchale-build/i18n.ts
+msgid "Activity stays available until you close this panel or start a new queue."
+msgstr "Activity stays available until you close this panel or start a new queue."
+
+#. 0: name
+#: .wuchale-build/i18n.ts
+msgid "{0}, selected"
+msgstr "{0}, selected"
+
+#: .wuchale-build/i18n.ts
+msgid "posted"
+msgstr "posted"
+
+#: .wuchale-build/i18n.ts
+msgid "awaiting approval"
+msgstr "awaiting approval"
+
+#: .wuchale-build/i18n.ts
+msgid "failed"
+msgstr "failed"
+
+#: .wuchale-build/i18n.ts
+msgid "left to submit"
+msgstr "left to submit"
+
+#: .wuchale-build/i18n.ts
+msgid "under 1s"
+msgstr "under 1s"
+
+#. 0: hours
+#: .wuchale-build/i18n.ts
+msgid "{0}h"
+msgstr "{0}h"
+
+#. 0: minutes
+#: .wuchale-build/i18n.ts
+msgid "{0}m"
+msgstr "{0}m"
+
+#. 0: seconds
+#: .wuchale-build/i18n.ts
+msgid "{0}s"
+msgstr "{0}s"
+
+#. 0: duration
+#: .wuchale-build/i18n.ts
+msgid "paused {0}"
+msgstr "paused {0}"
+
+#. 0: count
+#: .wuchale-build/i18n.ts
+msgid " · {0} failed"
+msgstr " · {0} failed"
+
+#: .wuchale-build/i18n.ts
+msgid "the first Group"
+msgstr "the first Group"
+
+#: .wuchale-build/i18n.ts
+msgid "selected"
+msgstr "selected"
+
+#. 0: count
+#: .wuchale-build/i18n.ts
+msgid "from {0} loaded"
+msgstr "from {0} loaded"
+
+#: .wuchale-build/i18n.ts
+msgid "1 group selected. Continue to review your post."
+msgstr "1 group selected. Continue to review your post."
+
+#: .wuchale-build/i18n.ts
+msgid "1 image"
+msgstr "1 image"
+
+#: .wuchale-build/i18n.ts
+msgid "1 group selected"
+msgstr "1 group selected"

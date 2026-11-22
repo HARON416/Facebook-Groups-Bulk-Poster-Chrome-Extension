@@ -2,7 +2,7 @@ import { defineConfig } from "wuchale";
 import { adapter as vanilla } from "wuchale/adapter-vanilla";
 
 export default defineConfig({
-  locales: ["en", "es", "ar"],
+  locales: ["en", "es", "ar", "ro", "vi"],
   localesDir: "src/locales",
   adapters: {
     main: vanilla({

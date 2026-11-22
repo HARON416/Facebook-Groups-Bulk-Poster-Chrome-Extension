@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "name": "Postika – Facebook Groups Auto Poster",
   "short_name": "Postika",
-  "version": "1.6.44",
+  "version": "1.6.46",
   "description": "Post to Facebook Groups in three simple steps: create your post, select groups, then review and post.",
   "icons": {
     "48": "images/icon-48.png",

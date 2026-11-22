@@ -4,6 +4,7 @@ export type PostingWizardState = {
   images: File[];
   groups: { id: string; name: string }[];
   busy: boolean;
+  activityOpen: boolean;
 };
 
 export type PostingWizardMessages = {
@@ -18,14 +19,59 @@ export type PostingWizardMessages = {
   imageCount: (count: number) => string;
   oneGroupSelected: string;
   groupsSelectedCount: (count: number) => string;
+  viewPhoto: (index: number, name: string) => string;
 };
 
 export function initializePostingWizard(
   getState: () => PostingWizardState,
   onStepChange: () => void,
   getMessages: () => PostingWizardMessages,
+  onPreview: (index: number, invoker: HTMLElement) => void,
 ) {
   let step = 1;
+  let reviewFiles: File[] = [];
+  let reviewUrls: string[] = [];
+  const reviewImages =
+    document.querySelector<HTMLOListElement>("#review-images")!;
+  function clearReviewUrls() {
+    reviewUrls.forEach((url) => URL.revokeObjectURL(url));
+    reviewUrls = [];
+  }
+  function refreshImages(images: File[], messages: PostingWizardMessages) {
+    if (
+      images.length !== reviewFiles.length ||
+      images.some((file, index) => file !== reviewFiles[index])
+    ) {
+      clearReviewUrls();
+      reviewFiles = [...images];
+      reviewImages.replaceChildren(
+        ...images.map((file, index) => {
+          const item = document.createElement("li");
+          const button = document.createElement("button");
+          button.type = "button";
+          const image = document.createElement("img");
+          const url = URL.createObjectURL(file);
+          reviewUrls.push(url);
+          image.src = url;
+          image.alt = "";
+          const order = document.createElement("span");
+          order.textContent = String(index + 1);
+          order.setAttribute("aria-hidden", "true");
+          button.append(image, order);
+          button.addEventListener("click", () => onPreview(index, button));
+          item.append(button);
+          return item;
+        }),
+      );
+    }
+    reviewImages.querySelectorAll("button").forEach((button, index) => {
+      button.setAttribute(
+        "aria-label",
+        messages.viewPhoto(index + 1, images[index].name),
+      );
+    });
+    reviewImages.hidden = images.length === 0;
+  }
   const panels = [1, 2, 3].map(
     (number) => document.querySelector<HTMLElement>(`#posting-step-${number}`)!,
   );
@@ -47,18 +93,21 @@ export function initializePostingWizard(
     const messages = getMessages();
     const composed = Boolean(state.body.trim()) && state.images.length > 0;
     const selected = state.groups.length > 0;
-    if (state.busy) step = 3;
+    const showingActivity = state.busy || state.activityOpen;
+    if (showingActivity) step = 3;
     panels.forEach((panel, index) => {
       panel.hidden = index + 1 !== step;
       panel.classList.toggle(
         "posting-step--posting",
-        index === 2 && state.busy,
+        index === 2 && showingActivity,
       );
     });
     tabs.forEach((button, index) => {
       const number = index + 1;
       button.disabled =
-        state.busy || (number > 1 && !composed) || (number === 3 && !selected);
+        showingActivity ||
+        (number > 1 && !composed) ||
+        (number === 3 && !selected);
       if (number === step) button.setAttribute("aria-current", "step");
       else button.removeAttribute("aria-current");
       button.classList.toggle("posting-steps__complete", number < step);
@@ -88,6 +137,7 @@ export function initializePostingWizard(
       state.images.length === 1
         ? messages.oneImageCount
         : messages.imageCount(state.images.length);
+    refreshImages(state.images, messages);
     document.querySelector("#review-groups-summary")!.textContent =
       state.groups.length === 1
         ? messages.oneGroupSelected
@@ -134,6 +184,7 @@ export function initializePostingWizard(
   refresh();
   return {
     refresh,
+    destroy: clearReviewUrls,
     show,
     get step() {
       return step;

@@ -19,6 +19,9 @@ const bundle = await build({
         buildPostVariables,
         createPost: createGraphqlPost,
         uploadImages: uploadImagesForGroup,
+        uploadImage,
+        setFetch: fetcher => { globalThis.fetch = fetcher; },
+        evictMedia: () => { delete globalThis.__postikaUploadBlobs; },
         setNetworkOffline: setPostingNetworkOffline,
         start: startUiPostingRequest,
         stop: stopUiPosting,
@@ -46,6 +49,7 @@ const bundle = await build({
 
 function queueFixture() {
   const statuses = [];
+  const injections = [];
   let listener;
   let alarmListener;
   const scheduledItems = new Map();
@@ -82,6 +86,8 @@ function queueFixture() {
     URL,
     URLSearchParams,
     TextEncoder,
+    Blob,
+    FormData,
     setTimeout,
     clearTimeout,
     AbortController,
@@ -108,9 +114,10 @@ function queueFixture() {
         onUpdated: { addListener: noop },
       },
       scripting: {
-        executeScript: async ({ func, args = [] }) => [
-          { result: await func(...args) },
-        ],
+        executeScript: async ({ func, args = [] }) => {
+          injections.push({ name: func.name, args });
+          return [{ result: await func(...args) }];
+        },
       },
       action: { onClicked: { addListener: noop } },
       webRequest: {
@@ -156,9 +163,53 @@ function queueFixture() {
       fire: () => alarmListener?.({ name: "postika-scheduled-posting" }),
     },
     statuses,
+    injections,
     message: (request, respond) => listener(request, {}, respond),
   };
 }
+
+test("300 uploads transfer image data once and recover after page navigation", async () => {
+  const { queue, injections } = queueFixture();
+  let decodes = 0;
+  let uploads = 0;
+  queue.setFetch(async (url, options) => {
+    if (String(url).startsWith("data:")) {
+      decodes += 1;
+      return { blob: async () => new Blob(["image"]) };
+    }
+    uploads += 1;
+    assert.equal(options.body.get("farr").size, 5);
+    return {
+      status: 200,
+      ok: true,
+      headers: new Headers(),
+      text: async () => '{"__ar":1,"payload":{"photoID":"photo"}}',
+    };
+  });
+  const image = { name: "photo.png", type: "image/png", dataUrl: "data:image/png;base64," + "A".repeat(1024 * 1024) };
+  const template = {
+    url: "https://upload.facebook.com/upload",
+    headers: {},
+    body: "unused original multipart body",
+    formData: { source: "8", farr: "unused original file" },
+  };
+  for (let index = 0; index < 300; index += 1) {
+    assert.equal((await queue.uploadImage(7, template, image)).success, true);
+  }
+  assert.equal(decodes, 1);
+  assert.equal(uploads, 300);
+  const replays = () => injections.filter(entry => entry.name === "uploadImageInPage");
+  assert.equal(replays().filter(entry => entry.args[1].dataUrl).length, 1);
+  for (const replay of replays()) {
+    assert.equal(replay.args[0].body, undefined);
+    assert.equal(replay.args[0].formData.farr, undefined);
+  }
+  queue.evictMedia();
+  assert.equal((await queue.uploadImage(7, template, image)).success, true);
+  assert.equal(decodes, 2);
+  assert.equal(uploads, 301, "cache recovery must not duplicate an upload");
+  assert.equal(replays().length, 302, "one cache miss followed by one recovery");
+});
 
 test("group queue captures once, replays original images, and reports pending/published outcomes", async () => {
   const { queue, statuses, message } = queueFixture();

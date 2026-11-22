@@ -141,7 +141,7 @@ html {
 
 body {
   margin: 0;
-  min-width: 32rem;
+  min-width: 0;
   min-height: 100dvh;
   background: linear-gradient(
     180deg,
@@ -166,10 +166,6 @@ a {
   color: var(--link-color);
 }
 
-body.photo-lightbox-open {
-  overflow: hidden;
-}
-
 .toast-region {
   position: fixed;
   z-index: 10000;
@@ -178,7 +174,14 @@ body.photo-lightbox-open {
   left: 1.2rem;
   display: grid;
   gap: 0.8rem;
+  max-block-size: min(50dvh, 40rem);
+  overflow-y: auto;
+  overscroll-behavior: contain;
   pointer-events: none;
+}
+
+.toast-region:not(:empty) {
+  pointer-events: auto;
 }
 
 .toast-card {
@@ -710,7 +713,7 @@ html[data-theme="dark"] {
   --border: var(--border-color);
   --border-strong: var(--input-border);
   --primary: var(--btn-primary-bg);
-  --primary-dark: var(--btn-primary-bg);
+  --primary-dark: var(--link-color);
   --primary-soft: rgba(102, 179, 255, 0.16);
   --secondary: var(--btn-primary-bg);
   --secondary-soft: rgba(102, 179, 255, 0.16);
@@ -1558,19 +1561,33 @@ html[data-theme="dark"] .posting-timing--complete {
 
 .photo-lightbox {
   position: fixed;
-  z-index: 100;
   inset: 0;
-  display: flex;
+  display: none;
+  width: 100%;
+  height: 100dvh;
+  max-width: none;
+  max-height: none;
+  margin: 0;
+  border: 0;
+  background: transparent;
   align-items: stretch;
   justify-content: stretch;
   padding: 1.2rem;
 }
 
-.photo-lightbox__backdrop {
-  position: absolute;
-  inset: 0;
+.photo-lightbox[open] {
+  display: flex;
+}
+
+.photo-lightbox:modal {
+  overscroll-behavior: contain;
+}
+
+.photo-lightbox::backdrop {
   background: rgba(20, 47, 40, 0.76);
   backdrop-filter: blur(0.8rem);
+  overflow: hidden;
+  overscroll-behavior: contain;
 }
 
 .photo-lightbox__dialog {
@@ -2991,6 +3008,7 @@ html[dir="rtl"] .schedule-month-button:last-child svg {
 
 .schedule-time-heading {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   justify-content: space-between;
   gap: 0.6rem;
@@ -3010,7 +3028,7 @@ html[dir="rtl"] .schedule-month-button:last-child svg {
 
 .schedule-time-controls {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   justify-content: center;
   gap: 1rem;
   margin: 1.6rem 0;
@@ -3022,6 +3040,8 @@ html[dir="rtl"] .schedule-month-button:last-child svg {
 
 .schedule-time-unit {
   display: flex;
+  flex: 1 1 0;
+  min-width: 0;
   flex-direction: column;
   align-items: center;
   gap: 0.3rem;
@@ -3035,7 +3055,7 @@ html[dir="rtl"] .schedule-month-button:last-child svg {
 .schedule-time-step {
   display: grid;
   width: 4rem;
-  height: 2.1rem;
+  height: 2.8rem;
   place-items: center;
   padding: 0;
   border-radius: var(--radius-sm) !important;
@@ -3061,7 +3081,7 @@ html[dir="rtl"] .schedule-month-button:last-child svg {
 }
 
 .schedule-time-colon {
-  margin-top: -1.2rem;
+  margin-top: 4rem;
   color: var(--text-muted);
   font-size: 1.8rem;
 }
@@ -3398,6 +3418,7 @@ html[dir="rtl"] .schedule-month-button:last-child svg {
 
 .posting-progress__log li {
   display: grid;
+  flex: 0 0 auto;
   grid-template-columns: auto minmax(0, 1fr) auto;
   align-items: start;
   gap: 0.85rem;
@@ -3840,6 +3861,16 @@ input[type="radio"]:checked::after {
   min-height: 0;
   max-height: none;
 }
+
+.posting-progress__current {
+  white-space: pre-line;
+  overflow-wrap: anywhere;
+}
+
+.posting-progress__retention-note {
+  flex: 0 0 auto;
+  font-size: 1.3rem;
+}
 .posting-step-heading {
   display: grid;
   gap: 0.5rem;
@@ -3967,7 +3998,8 @@ input[type="radio"]:checked::after {
   outline: 0.2rem solid var(--primary);
   outline-offset: 0.2rem;
 }
-.review-edit {
+.review-edit,
+.activity-history-link {
   flex: 0 0 auto;
   min-width: 8.8rem;
   min-height: 3.8rem;
@@ -3980,6 +4012,15 @@ input[type="radio"]:checked::after {
   font-size: 1.2rem;
   font-weight: 650;
   cursor: pointer;
+}
+.activity-history-link {
+  align-self: flex-end;
+  max-width: calc(100% - 2.8rem);
+  margin: 0.4rem var(--space-panel) 0;
+}
+.activity-history-link:focus-visible {
+  outline: 0.2rem solid var(--link-color);
+  outline-offset: 0.2rem;
 }
 .review-edit:hover:enabled {
   background: var(--primary-soft);
@@ -4019,4 +4060,149 @@ option,
 input::placeholder,
 textarea::placeholder {
   color: var(--text-secondary);
+}
+
+.draft-save-feedback {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 1rem;
+  padding: 0.6rem var(--space-panel);
+  color: var(--text-muted);
+  background: var(--surface);
+  font-size: 1.3rem;
+}
+
+.draft-save-feedback p {
+  flex: 1;
+  min-width: 0;
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.draft-save-feedback[data-state="error"] {
+  color: var(--error);
+  background: var(--error-soft);
+}
+
+.draft-save-feedback button {
+  flex: 0 0 auto;
+  min-height: 3.6rem;
+  border: 0.1rem solid currentColor;
+  border-radius: var(--radius-sm);
+  padding: 0.6rem 1rem;
+  background: var(--surface);
+  color: var(--text);
+  font: inherit;
+  cursor: pointer;
+}
+
+.field-error {
+  margin: 0.4rem 0 0;
+  color: var(--error);
+  font-size: 1.4rem;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+
+input[aria-invalid="true"] {
+  border-color: var(--error);
+}
+
+.interval-card__heading small,
+.number-input-grid .field > label,
+.schedule-panel__note,
+.schedule-time-heading > span,
+.schedule-time-unit > span,
+.schedule-validation {
+  font-size: 1.4rem;
+}
+
+#post-interval-summary {
+  color: var(--text);
+}
+
+.review-images {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.8rem;
+  margin: 0.8rem 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.review-images button {
+  position: relative;
+  display: block;
+  width: 6.4rem;
+  height: 6.4rem;
+  padding: 0;
+  border: 0.1rem solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  background: var(--surface-muted);
+  cursor: pointer;
+}
+
+.review-images img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  border-radius: inherit;
+  object-fit: cover;
+}
+
+.review-images span {
+  position: absolute;
+  inset-block-end: 0.3rem;
+  inset-inline-start: 0.3rem;
+  min-width: 2rem;
+  padding: 0.1rem 0.4rem;
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  color: var(--text);
+  font-size: 1.2rem;
+  font-variant-numeric: tabular-nums;
+  text-align: center;
+}
+
+.review-images button:focus-visible,
+.draft-save-feedback button:focus-visible,
+.photo-lightbox button:focus-visible,
+.number-input-row input:focus-visible,
+.rich-text-editor:focus-visible {
+  outline: 0.2rem solid var(--link-color);
+  outline-offset: 0.2rem;
+}
+
+.schedule-time-unit .field-error {
+  align-self: stretch;
+  text-align: start;
+  direction: ltr;
+}
+
+html[dir="rtl"] .schedule-time-unit .field-error {
+  direction: rtl;
+}
+
+html[data-theme="dark"] .posting-steps button[aria-current] strong {
+  color: var(--link-color);
+}
+
+@media (max-width: 300px) {
+  .number-input-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .review-summary {
+    flex-wrap: wrap;
+  }
+  .posting-steps button {
+    padding-inline: 0.3rem;
+  }
+}
+
+@media (forced-colors: active) {
+  input:focus-visible,
+  .rich-text-editor:focus-visible {
+    outline: 0.2rem solid Highlight;
+  }
 }
