@@ -1242,3 +1242,11 @@ msgstr "1 image"
 #: .wuchale-build/i18n.ts
 msgid "1 group selected"
 msgstr "1 group selected"
+
+#: .wuchale-build/i18n.ts
+msgid "Download diagnostics"
+msgstr "Download diagnostics"
+
+#: .wuchale-build/i18n.ts
+msgid "Could not download diagnostics. Please try again."
+msgstr "Could not download diagnostics. Please try again."

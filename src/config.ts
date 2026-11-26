@@ -120,6 +120,10 @@ export type GetPostingQueueStatusRequest = {
   type: "GET_POSTING_QUEUE_STATUS";
 };
 
+export type PostingHeartbeatRequest = {
+  type: "POSTING_HEARTBEAT";
+};
+
 export type PostingQueueStatusResponse = {
   groups?: UiPostingStatusMessage;
 };
@@ -158,4 +162,5 @@ export type ExtensionRequest =
   | StopUiPostingRequest
   | PauseUiPostingRequest
   | ResumeUiPostingRequest
+  | PostingHeartbeatRequest
   | GetPostingQueueStatusRequest;

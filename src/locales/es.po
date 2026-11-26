@@ -7,12 +7,6 @@ msgstr ""
 "Content-Transfer-Encoding: 8bit\n"
 "Plural-Forms: nplurals=3\n"
 "X-Plurals-Order: one, many, other\n"
-"Project-Id-Version: \n"
-"Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: \n"
-"PO-Revision-Date: \n"
-"Last-Translator: \n"
-"Language-Team: \n"
 
 #: .wuchale-build/i18n.ts
 msgid "Postika"
@@ -1248,3 +1242,11 @@ msgstr "1 imagen"
 #: .wuchale-build/i18n.ts
 msgid "1 group selected"
 msgstr "1 grupo seleccionado"
+
+#: .wuchale-build/i18n.ts
+msgid "Download diagnostics"
+msgstr ""
+
+#: .wuchale-build/i18n.ts
+msgid "Could not download diagnostics. Please try again."
+msgstr ""

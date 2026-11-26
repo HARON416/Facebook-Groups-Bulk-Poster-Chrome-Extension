@@ -1,5 +1,144 @@
 "use strict";
 (() => {
+  // src/posting-diagnostics.ts
+  var MAX_ENTRIES = 100;
+  var HEARTBEAT_MS = 3e4;
+  function createPostingDiagnostics(context, options = {}) {
+    const storage = options.storage ?? chrome.storage.local;
+    const now = options.now ?? Date.now;
+    const version = options.version ?? chrome.runtime.getManifest?.().version ?? "unknown";
+    const key = `postikaDiagnostics:${context}`;
+    const session = `${now()}-${Math.random().toString(36).slice(2, 10)}`;
+    const entries = [];
+    let signature = "";
+    let lastCheckpointAt = -Infinity;
+    let dirty = false;
+    let writer;
+    let timer;
+    let storageError;
+    const ready = Promise.resolve().then(async () => {
+      const values = await storage.get([key]);
+      const previous = values[key];
+      if (previous?.schema !== 1 || !Array.isArray(previous.entries)) return;
+      const allowed = /* @__PURE__ */ new Set([
+        "at",
+        "session",
+        "event",
+        "status",
+        "current",
+        "total",
+        "successCount",
+        "failedCount",
+        "processedCount",
+        "pendingRequestCount",
+        "logEntryCount",
+        "imageBytes",
+        "heapUsedBytes",
+        "heapLimitBytes",
+        "errorName",
+        "errorMessage"
+      ]);
+      const restored = previous.entries.slice(-MAX_ENTRIES).map(
+        (entry) => Object.fromEntries(Object.entries(entry ?? {}).filter(
+          ([name, value]) => allowed.has(name) && (typeof value === "number" || typeof value === "string")
+        ).map(([name, value]) => [name, typeof value === "string" ? value.slice(0, 256) : value]))
+      );
+      entries.unshift(...restored);
+      entries.splice(0, Math.max(0, entries.length - MAX_ENTRIES));
+    }).catch(() => {
+      storageError = "Could not read previous diagnostics";
+    });
+    const snapshot = () => ({ schema: 1, version, entries: entries.map((entry) => ({ ...entry })) });
+    const flush = () => {
+      clearTimeout(timer);
+      timer = void 0;
+      if (writer) return writer;
+      writer = (async () => {
+        await ready;
+        while (dirty) {
+          dirty = false;
+          try {
+            await storage.set({ [key]: snapshot() });
+            storageError = void 0;
+          } catch {
+            dirty = true;
+            storageError = "Could not save diagnostics";
+            break;
+          }
+        }
+      })().finally(() => {
+        writer = void 0;
+      });
+      return writer;
+    };
+    const record = (event, detail = {}) => {
+      const memory = globalThis.performance?.memory;
+      entries.push({
+        at: now(),
+        session,
+        event,
+        ...memory ? { heapUsedBytes: memory.usedJSHeapSize, heapLimitBytes: memory.jsHeapSizeLimit } : {},
+        ...detail
+      });
+      entries.splice(0, Math.max(0, entries.length - MAX_ENTRIES));
+      dirty = true;
+      if (!timer) timer = setTimeout(() => {
+        void flush();
+      }, 250);
+    };
+    const checkpoint = (status, counters = {}) => {
+      const nextSignature = [status.status, status.current, status.total, status.processedCount, status.successCount, status.failedCount].join(":");
+      if (signature === nextSignature && now() - lastCheckpointAt < HEARTBEAT_MS) return;
+      signature = nextSignature;
+      lastCheckpointAt = now();
+      record("checkpoint", {
+        status: status.status,
+        current: status.current,
+        total: status.total,
+        successCount: status.successCount,
+        failedCount: status.failedCount,
+        processedCount: status.processedCount,
+        ...counters
+      });
+    };
+    const captureError = (event, error) => {
+      record(event, {
+        errorName: error instanceof Error ? error.name.slice(0, 80) : typeof error,
+        errorMessage: error instanceof Error ? error.message.slice(0, 256) : typeof error === "string" ? error.slice(0, 256) : "Non-text error"
+      });
+    };
+    record("context-start");
+    return { checkpoint, record, captureError, flush, snapshot, storageError: () => storageError };
+  }
+  function listenForDiagnosticErrors(reporter) {
+    globalThis.addEventListener?.("error", (event) => {
+      reporter.captureError("runtime-error", event.error ?? event.message);
+    });
+    globalThis.addEventListener?.("unhandledrejection", (event) => {
+      reporter.captureError("unhandled-rejection", event.reason);
+    });
+  }
+
+  // src/posting-connectivity.ts
+  async function probePostingUrl(url, signal, fetcher = fetch) {
+    try {
+      const response = await fetcher(url, {
+        cache: "no-store",
+        credentials: "omit",
+        redirect: "manual",
+        signal
+      });
+      const reachable = response.type !== "opaqueredirect";
+      try {
+        await response.body?.cancel();
+      } catch {
+      }
+      return reachable;
+    } catch {
+      return false;
+    }
+  }
+
   // src/group-posting-order.ts
   function shuffleGroups(groups, random = Math.random) {
     const shuffled = [...groups];
@@ -240,6 +379,7 @@
   ];
   var MIN_POSTING_DELAY_SECONDS = 60;
   var LOG_PREFIX = "[Facebook Groups Bulk Poster]";
+  var VERBOSE_POSTING_LOGS = false;
   var SCHEDULED_POSTING_ALARM = "postika-scheduled-posting";
   var MissingFirstGroupComposerError = class extends Error {
     constructor(groupName) {
@@ -288,6 +428,8 @@
     return actorId;
   }
   var pendingRequests = /* @__PURE__ */ new Map();
+  var postingDiagnostics = createPostingDiagnostics("background");
+  listenForDiagnosticErrors(postingDiagnostics);
   var capturedGroupsRequest;
   var captureTabId;
   var activePosting = false;
@@ -421,6 +563,7 @@
     void chrome.sidePanel.open({ windowId: tab.windowId });
   });
   function debugLog(message, data) {
+    if (!VERBOSE_POSTING_LOGS) return;
     if (data === void 0) {
       console.log(`${LOG_PREFIX} ${message}`);
       return;
@@ -428,11 +571,12 @@
     console.log(`${LOG_PREFIX} ${message}`, data);
   }
   function debugWarn(message, data) {
+    postingDiagnostics.record("warning", { errorMessage: message.slice(0, 256) });
     if (data === void 0) {
-      console.log(`${LOG_PREFIX} ${message}`);
+      console.warn(`${LOG_PREFIX} ${message}`);
       return;
     }
-    console.log(`${LOG_PREFIX} ${message}`, data);
+    console.warn(`${LOG_PREFIX} ${message}`, data);
   }
   function isFacebookUrl(url) {
     if (!url) {
@@ -546,6 +690,21 @@
     },
     ["requestHeaders", "extraHeaders"]
   );
+  var captureRequestFilter = {
+    urls: [
+      "https://www.facebook.com/api/graphql/*",
+      "https://web.facebook.com/api/graphql/*",
+      "https://upload.facebook.com/ajax/react_composer/attachments/photo/upload*",
+      "https://www.facebook.com/ajax/react_composer/attachments/photo/upload*",
+      "https://web.facebook.com/ajax/react_composer/attachments/photo/upload*"
+    ]
+  };
+  function releaseCapturedRequest(details) {
+    pendingRequests.delete(details.requestId);
+    loggedUploadCandidateRequestIds.delete(details.requestId);
+  }
+  chrome.webRequest.onCompleted.addListener(releaseCapturedRequest, captureRequestFilter);
+  chrome.webRequest.onErrorOccurred.addListener(releaseCapturedRequest, captureRequestFilter);
   listenForPostingRequests(startUiPostingRequest);
   chrome.alarms.onAlarm.addListener((alarm) => {
     if (alarm.name === SCHEDULED_POSTING_ALARM) {
@@ -747,6 +906,10 @@
   }
   chrome.runtime.onMessage.addListener(
     (request, _sender, sendResponse) => {
+      if (request.type === "POSTING_HEARTBEAT") {
+        sendResponse({ ok: true });
+        return;
+      }
       if (request.type === "GET_POSTING_QUEUE_STATUS") {
         void Promise.all([
           chrome.storage.session.get(LAST_GROUP_POSTING_STATUS_STORAGE_KEY),
@@ -982,6 +1145,7 @@
       return uniqueGroups;
     } finally {
       captureTabId = void 0;
+      if (postingCaptureTabId === void 0) pendingRequests.clear();
     }
   }
   async function getActiveTabForLoadingGroups() {
@@ -1342,7 +1506,8 @@
       loadedCount,
       done
     };
-    void chrome.runtime.sendMessage(status);
+    void chrome.runtime.sendMessage(status).catch(() => {
+    });
   }
   function sleep(duration) {
     return new Promise((resolve) => setTimeout(resolve, duration));
@@ -1401,6 +1566,7 @@
     }
     let stopped = false;
     let controller;
+    let wakeMonitor;
     let failures = 0;
     let sampled = false;
     let resolveReady;
@@ -1418,19 +1584,7 @@
             [
               "https://www.facebook.com/robots.txt",
               "https://web.facebook.com/robots.txt"
-            ].map(async (url) => {
-              try {
-                const response = await fetch(url, {
-                  cache: "no-store",
-                  credentials: "omit",
-                  redirect: "manual",
-                  signal: probeController.signal
-                });
-                return response.type !== "opaqueredirect";
-              } catch {
-                return false;
-              }
-            })
+            ].map((url) => probePostingUrl(url, probeController.signal))
           );
           online = responses.some(Boolean);
         } finally {
@@ -1456,7 +1610,14 @@
         await sample();
         resolveReady();
         while (!stopped && activePosting) {
-          await sleep(3e3);
+          await new Promise((resolve) => {
+            const timer = setTimeout(resolve, postingNetworkOffline ? 3e3 : 3e4);
+            wakeMonitor = () => {
+              clearTimeout(timer);
+              resolve();
+            };
+          });
+          wakeMonitor = void 0;
           if (!stopped) await sample();
         }
       } catch (error) {
@@ -1470,6 +1631,7 @@
       stop: () => {
         stopped = true;
         controller?.abort();
+        wakeMonitor?.();
         resolveReady();
       }
     };
@@ -2296,6 +2458,7 @@
     loggedUploadCandidateRequestIds.clear();
     debugLog("Template capture stopped.");
     postingCaptureTabId = void 0;
+    if (captureTabId === void 0) pendingRequests.clear();
   }
   async function waitForPostingTemplatesInternal(requiresUploadTemplate, statusContext = currentPostingStatusContext()) {
     let activeWaitMs = 0;
@@ -2508,7 +2671,6 @@ ${responseBody ?? ""}`;
     return photoIds;
   }
   async function uploadImage(tabId, uploadTemplate, image) {
-    await logPageCookieDiagnostics(tabId, "Before upload replay");
     const existingCacheKey = uploadImageCacheKeys.get(image);
     const cacheKey = existingCacheKey ?? crypto.randomUUID();
     let result;
@@ -2581,7 +2743,6 @@ ${responseBody ?? ""}`;
     }
   }
   async function createGraphqlPost(tabId, postTemplate, text, photoIds, groupId, preserveCapturedFormatting = false, statusContext = currentPostingStatusContext(), capturedVariables) {
-    await logPageCookieDiagnostics(tabId, "Before GraphQL replay");
     const variables = capturedVariables ?? buildPostVariables(
       postTemplate.formData,
       text,
@@ -2972,38 +3133,6 @@ ${responseBody ?? ""}`;
       return void 0;
     }
   }
-  async function logPageCookieDiagnostics(tabId, label) {
-    try {
-      const [tabInfo, result] = await Promise.all([
-        chrome.tabs.get(tabId),
-        chrome.scripting.executeScript({
-          target: { tabId },
-          func: () => {
-            const cookieNames = document.cookie.split(";").map((part) => part.trim()).filter(Boolean).map((part) => part.split("=")[0]?.trim()).filter((name) => Boolean(name));
-            return {
-              href: window.location.href,
-              origin: window.location.origin,
-              cookieCount: cookieNames.length,
-              cookieNames
-            };
-          }
-        })
-      ]);
-      const pageData = result[0]?.result;
-      debugLog(`${label} page cookie diagnostics.`, {
-        tabUrl: tabInfo.url,
-        pageUrl: pageData?.href,
-        pageOrigin: pageData?.origin,
-        pageCookieCount: pageData?.cookieCount ?? 0,
-        pageCookieNames: pageData?.cookieNames ?? []
-      });
-    } catch (error) {
-      debugWarn(`${label} page cookie diagnostics failed.`, {
-        tabId,
-        error: error instanceof Error ? error.message : String(error)
-      });
-    }
-  }
   async function uploadImageInPage(uploadTemplate, image, cacheKey) {
     try {
       const scope = globalThis;
@@ -3131,6 +3260,7 @@ ${responseBody ?? ""}`;
       timing: queueTimingSnapshot(groupsPostingTimer, partial.groupId)
     };
     latestUiPostingStatus = status;
+    postingDiagnostics.checkpoint(status, { pendingRequestCount: pendingRequests.size });
     if (status.status === "done" || status.status === "stopped") {
       const { responseBody: _responseBody, ...storedStatus } = status;
       void chrome.storage.session.set({
@@ -3139,7 +3269,8 @@ ${responseBody ?? ""}`;
     } else if (status.status === "rate_limited") {
       void chrome.storage.session.remove(LAST_GROUP_POSTING_STATUS_STORAGE_KEY);
     }
-    void chrome.runtime.sendMessage(status);
+    void chrome.runtime.sendMessage(status).catch(() => {
+    });
   }
   function notifyPostingControlStatus(status, message) {
     const latest = latestUiPostingStatus;

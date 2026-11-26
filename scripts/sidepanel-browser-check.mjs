@@ -56,6 +56,7 @@ window.chrome = {
     remove: async keys => { for (const key of Array.isArray(keys) ? keys : [keys]) delete window.__stored[key]; }
   } },
   runtime: {
+    getManifest: () => ({ version: "test-version" }),
     connect() { throw new Error('Posting is forbidden in this browser check'); },
     onMessage: { addListener(listener) { window.__receiveStatus = listener; } },
     sendMessage: async request => {
@@ -618,6 +619,28 @@ try {
       `saved ${otherLocale} choice overrides ${browserLocale} after reopening`,
     );
   }
+  await evaluate(`
+    window.__stored['postikaDiagnostics:background'] = {
+      schema: 1, version: 'test-version',
+      entries: [{ at: Date.now(), event: 'checkpoint', status: 'waiting', processedCount: 250 }]
+    };
+    window.__originalAnchorClick = HTMLAnchorElement.prototype.click;
+    HTMLAnchorElement.prototype.click = function() {
+      fetch(this.href).then(response => response.json()).then(report => { window.__diagnosticReport = report; });
+    };
+    document.querySelector('#app-menu-trigger').click();
+    document.querySelector('#download-diagnostics').click();
+  `);
+  await waitFor(`!!window.__diagnosticReport`);
+  await check(
+    `window.__diagnosticReport['postikaDiagnostics:background'].entries[0].processedCount === 250 && window.__diagnosticReport['postikaDiagnostics:panel'].entries.length <= 100`,
+    "diagnostic download includes bounded persistent background and panel checkpoints",
+  );
+  await check(
+    `!('sidePanelSession' in window.__diagnosticReport) && !('sidePanelDraftImages' in window.__diagnosticReport) && document.querySelector('#download-diagnostics').disabled === false`,
+    "diagnostic download excludes drafts and photos and restores the menu button",
+  );
+  await evaluate(`HTMLAnchorElement.prototype.click = window.__originalAnchorClick`);
   assert.deepEqual(exceptions, [], "no uncaught browser exceptions");
   console.log(
     `${checkCount} browser checks passed; Facebook posting was not exercised.`,

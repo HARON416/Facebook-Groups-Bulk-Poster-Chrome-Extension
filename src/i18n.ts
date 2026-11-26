@@ -26,6 +26,8 @@ function translatedMessages() {
     downloadDesktopApp: "Download desktop app",
     whatsappDeveloper: "WhatsApp developer",
     emailDeveloper: "Email developer",
+    downloadDiagnostics: "Download diagnostics",
+    diagnosticsExportFailed: "Could not download diagnostics. Please try again.",
     themePreferenceLoadFailure:
       "Could not load the appearance setting. Using light mode.",
     themePreferenceSaveFailure:

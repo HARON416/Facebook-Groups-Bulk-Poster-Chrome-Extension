@@ -1,3 +1,5 @@
+import { createPostingDiagnostics, listenForDiagnosticErrors } from "./posting-diagnostics";
+import { probePostingUrl } from "./posting-connectivity";
 import { shuffleGroups } from "./group-posting-order";
 import { inspectPageReadinessInPage } from "./page-readiness";
 import {
@@ -68,6 +70,7 @@ const UPLOAD_CANDIDATE_MATCHES = [
 ];
 const MIN_POSTING_DELAY_SECONDS = 60;
 const LOG_PREFIX = "[Facebook Groups Bulk Poster]";
+const VERBOSE_POSTING_LOGS = false;
 const SCHEDULED_POSTING_ALARM = "postika-scheduled-posting";
 
 class MissingFirstGroupComposerError extends Error {
@@ -129,6 +132,8 @@ async function getFacebookActorId(tabId: number): Promise<string> {
 }
 
 const pendingRequests = new Map<string, PendingRequest>();
+const postingDiagnostics = createPostingDiagnostics("background");
+listenForDiagnosticErrors(postingDiagnostics);
 
 let capturedGroupsRequest: CapturedRequest | undefined;
 let captureTabId: number | undefined;
@@ -332,6 +337,7 @@ chrome.action.onClicked.addListener((tab) => {
 });
 
 function debugLog(message: string, data?: unknown) {
+  if (!VERBOSE_POSTING_LOGS) return;
   if (data === undefined) {
     console.log(`${LOG_PREFIX} ${message}`);
     return;
@@ -341,12 +347,13 @@ function debugLog(message: string, data?: unknown) {
 }
 
 function debugWarn(message: string, data?: unknown) {
+  postingDiagnostics.record("warning", { errorMessage: message.slice(0, 256) });
   if (data === undefined) {
-    console.log(`${LOG_PREFIX} ${message}`);
+    console.warn(`${LOG_PREFIX} ${message}`);
     return;
   }
 
-  console.log(`${LOG_PREFIX} ${message}`, data);
+  console.warn(`${LOG_PREFIX} ${message}`, data);
 }
 
 function isFacebookUrl(url: string | undefined): boolean {
@@ -497,6 +504,23 @@ chrome.webRequest.onBeforeSendHeaders.addListener(
   },
   ["requestHeaders", "extraHeaders"],
 );
+
+// Capture listeners only need these buffers until the request ends.
+const captureRequestFilter = {
+  urls: [
+    "https://www.facebook.com/api/graphql/*",
+    "https://web.facebook.com/api/graphql/*",
+    "https://upload.facebook.com/ajax/react_composer/attachments/photo/upload*",
+    "https://www.facebook.com/ajax/react_composer/attachments/photo/upload*",
+    "https://web.facebook.com/ajax/react_composer/attachments/photo/upload*",
+  ],
+};
+function releaseCapturedRequest(details: { requestId: string }) {
+  pendingRequests.delete(details.requestId);
+  loggedUploadCandidateRequestIds.delete(details.requestId);
+}
+chrome.webRequest.onCompleted.addListener(releaseCapturedRequest, captureRequestFilter);
+chrome.webRequest.onErrorOccurred.addListener(releaseCapturedRequest, captureRequestFilter);
 
 listenForPostingRequests(startUiPostingRequest);
 
@@ -736,6 +760,10 @@ chrome.runtime.onMessage.addListener(
     _sender,
     sendResponse: (response: any) => void,
   ) => {
+    if (request.type === "POSTING_HEARTBEAT") {
+      sendResponse({ ok: true });
+      return;
+    }
     if (request.type === "GET_POSTING_QUEUE_STATUS") {
       void Promise.all([
         chrome.storage.session.get(LAST_GROUP_POSTING_STATUS_STORAGE_KEY),
@@ -1054,6 +1082,7 @@ async function loadGroups(): Promise<FacebookGroup[]> {
     return uniqueGroups;
   } finally {
     captureTabId = undefined;
+    if (postingCaptureTabId === undefined) pendingRequests.clear();
   }
 }
 
@@ -1544,7 +1573,9 @@ function notifyGroupsStatus(
     done,
   };
 
-  void chrome.runtime.sendMessage(status);
+  void chrome.runtime.sendMessage(status).catch(() => {
+    // A closed side panel has no receiver; this is not a posting failure.
+  });
 }
 
 function sleep(duration: number) {
@@ -1622,6 +1653,7 @@ function startPostingConnectivityMonitor(): {
 
   let stopped = false;
   let controller: AbortController | undefined;
+  let wakeMonitor: (() => void) | undefined;
   let failures = 0;
   let sampled = false;
   let resolveReady!: () => void;
@@ -1640,19 +1672,7 @@ function startPostingConnectivityMonitor(): {
           [
             "https://www.facebook.com/robots.txt",
             "https://web.facebook.com/robots.txt",
-          ].map(async (url) => {
-            try {
-              const response = await fetch(url, {
-                cache: "no-store",
-                credentials: "omit",
-                redirect: "manual",
-                signal: probeController.signal,
-              });
-              return response.type !== "opaqueredirect";
-            } catch {
-              return false;
-            }
-          }),
+          ].map((url) => probePostingUrl(url, probeController.signal)),
         );
         online = responses.some(Boolean);
       } finally {
@@ -1680,7 +1700,13 @@ function startPostingConnectivityMonitor(): {
       await sample();
       resolveReady();
       while (!stopped && activePosting) {
-        await sleep(3_000);
+        // Check promptly while recovering an outage; avoid thousands of
+        // unnecessary requests during a healthy, hours-long posting run.
+        await new Promise<void>((resolve) => {
+          const timer = setTimeout(resolve, postingNetworkOffline ? 3_000 : 30_000);
+          wakeMonitor = () => { clearTimeout(timer); resolve(); };
+        });
+        wakeMonitor = undefined;
         if (!stopped) await sample();
       }
     } catch (error) {
@@ -1695,6 +1721,7 @@ function startPostingConnectivityMonitor(): {
     stop: () => {
       stopped = true;
       controller?.abort();
+      wakeMonitor?.();
       resolveReady();
     },
   };
@@ -2723,6 +2750,7 @@ function stopPostingTemplateCapture() {
   loggedUploadCandidateRequestIds.clear();
   debugLog("Template capture stopped.");
   postingCaptureTabId = undefined;
+  if (captureTabId === undefined) pendingRequests.clear();
 }
 
 async function waitForPostingTemplatesInternal(
@@ -3022,7 +3050,6 @@ async function uploadImage(
   uploadTemplate: CapturedRequest,
   image: UiPostImage,
 ): Promise<UploadResponse> {
-  await logPageCookieDiagnostics(tabId, "Before upload replay");
   const existingCacheKey = uploadImageCacheKeys.get(image);
   const cacheKey = existingCacheKey ?? crypto.randomUUID();
   let result:
@@ -3142,7 +3169,6 @@ async function createGraphqlPost(
   statusContext = currentPostingStatusContext(),
   capturedVariables?: string,
 ): Promise<GraphqlPostResult> {
-  await logPageCookieDiagnostics(tabId, "Before GraphQL replay");
   const variables =
     capturedVariables ??
     buildPostVariables(
@@ -3699,57 +3725,6 @@ function safeParseJson(value: string | undefined): unknown {
   }
 }
 
-async function logPageCookieDiagnostics(
-  tabId: number,
-  label: string,
-): Promise<void> {
-  try {
-    const [tabInfo, result] = await Promise.all([
-      chrome.tabs.get(tabId),
-      chrome.scripting.executeScript({
-        target: { tabId },
-        func: () => {
-          const cookieNames = document.cookie
-            .split(";")
-            .map((part) => part.trim())
-            .filter(Boolean)
-            .map((part) => part.split("=")[0]?.trim())
-            .filter((name): name is string => Boolean(name));
-
-          return {
-            href: window.location.href,
-            origin: window.location.origin,
-            cookieCount: cookieNames.length,
-            cookieNames,
-          };
-        },
-      }),
-    ]);
-
-    const pageData = result[0]?.result as
-      | {
-          href: string;
-          origin: string;
-          cookieCount: number;
-          cookieNames: string[];
-        }
-      | undefined;
-
-    debugLog(`${label} page cookie diagnostics.`, {
-      tabUrl: tabInfo.url,
-      pageUrl: pageData?.href,
-      pageOrigin: pageData?.origin,
-      pageCookieCount: pageData?.cookieCount ?? 0,
-      pageCookieNames: pageData?.cookieNames ?? [],
-    });
-  } catch (error) {
-    debugWarn(`${label} page cookie diagnostics failed.`, {
-      tabId,
-      error: error instanceof Error ? error.message : String(error),
-    });
-  }
-}
-
 async function uploadImageInPage(
   uploadTemplate: Pick<CapturedRequest, "url" | "headers" | "formData">,
   image: { name: string; dataUrl?: string },
@@ -3926,6 +3901,7 @@ function notifyUiPostingStatus(
   };
 
   latestUiPostingStatus = status;
+  postingDiagnostics.checkpoint(status, { pendingRequestCount: pendingRequests.size });
   if (status.status === "done" || status.status === "stopped") {
     const { responseBody: _responseBody, ...storedStatus } = status;
     void chrome.storage.session.set({
@@ -3934,7 +3910,9 @@ function notifyUiPostingStatus(
   } else if (status.status === "rate_limited") {
     void chrome.storage.session.remove(LAST_GROUP_POSTING_STATUS_STORAGE_KEY);
   }
-  void chrome.runtime.sendMessage(status);
+  void chrome.runtime.sendMessage(status).catch(() => {
+    // A closed side panel has no receiver; this is not a posting failure.
+  });
 }
 
 function notifyPostingControlStatus(

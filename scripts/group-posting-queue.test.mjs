@@ -16,6 +16,9 @@ const bundle = await build({
       `
       globalThis.queueFixture = {
         run: runGraphqlPostingQueue,
+        seedCapturedRequest: id => { pendingRequests.set(id, { body: "retained request" }); loggedUploadCandidateRequestIds.add(id); },
+        captureSizes: () => ({ pending: pendingRequests.size, logged: loggedUploadCandidateRequestIds.size }),
+        stopCapture: stopPostingTemplateCapture,
         buildPostVariables,
         createPost: createGraphqlPost,
         uploadImages: uploadImagesForGroup,
@@ -52,6 +55,8 @@ function queueFixture() {
   const injections = [];
   let listener;
   let alarmListener;
+  const requestEvents = {};
+  let databaseOpenCount = 0;
   const scheduledItems = new Map();
   const alarms = new Map();
   const noop = () => {};
@@ -123,6 +128,8 @@ function queueFixture() {
       webRequest: {
         onBeforeRequest: { addListener: noop },
         onBeforeSendHeaders: { addListener: noop },
+        onCompleted: { addListener: callback => { requestEvents.completed = callback; } },
+        onErrorOccurred: { addListener: callback => { requestEvents.failed = callback; } },
       },
       alarms: {
         onAlarm: {
@@ -146,6 +153,7 @@ function queueFixture() {
     },
     indexedDB: {
       open: () => {
+        databaseOpenCount += 1;
         const request = { result: database };
         queueMicrotask(() => request.onsuccess?.());
         return request;
@@ -163,10 +171,24 @@ function queueFixture() {
       fire: () => alarmListener?.({ name: "postika-scheduled-posting" }),
     },
     statuses,
+    requestEvents,
     injections,
+    databaseOpenCount: () => databaseOpenCount,
     message: (request, respond) => listener(request, {}, respond),
   };
 }
+
+test("panel heartbeats keep the worker reachable without reading scheduled media", async () => {
+  const fixture = queueFixture();
+  const before = fixture.databaseOpenCount();
+  for (let i = 0; i < 1000; i += 1) {
+    const response = await new Promise(resolve => fixture.message({ type: "POSTING_HEARTBEAT" }, resolve));
+    assert.equal(response.ok, true);
+  }
+  assert.equal(fixture.databaseOpenCount(), before);
+  await new Promise(resolve => fixture.message({ type: "GET_POSTING_QUEUE_STATUS" }, resolve));
+  assert.equal(fixture.databaseOpenCount(), before + 1);
+});
 
 test("300 uploads transfer image data once and recover after page navigation", async () => {
   const { queue, injections } = queueFixture();
@@ -1116,4 +1138,20 @@ test("the scheduled alarm launches the persisted posting queue", async () => {
   assert.equal(statuses.at(-1).status, "done");
   assert.equal(schedule.saved(), undefined);
   assert.equal(schedule.hasAlarm(), false);
+});
+
+
+test("request buffers release completed/failed captures and clear when capture stops", () => {
+  const { queue, requestEvents } = queueFixture();
+  for (let index = 0; index < 1000; index++) {
+    const requestId = String(index);
+    queue.seedCapturedRequest(requestId);
+    (index % 2 ? requestEvents.completed : requestEvents.failed)({ requestId });
+  }
+  assert.equal(queue.captureSizes().pending, 0);
+  assert.equal(queue.captureSizes().logged, 0);
+  queue.seedCapturedRequest("unfinished");
+  queue.stopCapture();
+  assert.equal(queue.captureSizes().pending, 0);
+  assert.equal(queue.captureSizes().logged, 0);
 });

@@ -1,3 +1,4 @@
+import { createPostingDiagnostics, DIAGNOSTIC_KEYS, listenForDiagnosticErrors } from "./posting-diagnostics";
 import type {
   FacebookGroup,
   GetPostingQueueStatusRequest,
@@ -28,6 +29,8 @@ import {
   type SchedulePicker,
 } from "./schedule-picker";
 import { getLocale, initializeI18n, msg } from "./i18n";
+const panelDiagnostics = createPostingDiagnostics("panel");
+listenForDiagnosticErrors(panelDiagnostics);
 const SIDE_PANEL_SESSION_STORAGE_KEY = "sidePanelSession";
 const SIDE_PANEL_DRAFT_IMAGES_STORAGE_KEY = "sidePanelDraftImages";
 const MIN_SLEEP_SECONDS = 60;
@@ -164,6 +167,9 @@ function initializeAppMenu() {
     menu.setAttribute("aria-label", msg("settingsAndSupport"));
     title.textContent = msg("settingsAndSupport");
     themeToggleLabel.textContent = msg("darkMode");
+    menu.querySelector("#download-diagnostics")?.replaceChildren(
+      document.createTextNode(msg("downloadDiagnostics")),
+    );
     themeToggle.setAttribute("aria-pressed", String(theme === "dark"));
     themeToggle.setAttribute("aria-label", msg("darkMode"));
     menu
@@ -201,6 +207,35 @@ function initializeAppMenu() {
     trigger.setAttribute("aria-expanded", String(!menu.hidden));
     if (shouldOpen) {
       window.setTimeout(() => focusMenuItem(0), 0);
+    }
+  });
+
+  const diagnosticsButton = menu.querySelector<HTMLButtonElement>("#download-diagnostics");
+  diagnosticsButton?.addEventListener("click", async () => {
+    diagnosticsButton.disabled = true;
+    try {
+      await panelDiagnostics.flush();
+      const stored = await chrome.storage.local.get([...DIAGNOSTIC_KEYS]);
+      const blob = new Blob([JSON.stringify({
+        exportedAt: new Date().toISOString(),
+        version: chrome.runtime.getManifest().version,
+        userAgent: navigator.userAgent,
+        [DIAGNOSTIC_KEYS[0]]: stored[DIAGNOSTIC_KEYS[0]],
+        // Preserve the panel's latest sample even if its storage write failed.
+        [DIAGNOSTIC_KEYS[1]]: panelDiagnostics.snapshot(),
+        storageError: panelDiagnostics.storageError(),
+      }, null, 2)], { type: "application/json" });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = `postika-diagnostics-${Date.now()}.json`;
+      link.click();
+      window.setTimeout(() => URL.revokeObjectURL(url), 1_000);
+      close(true);
+    } catch {
+      showToast(msg("diagnosticsExportFailed"), "error");
+    } finally {
+      diagnosticsButton.disabled = false;
     }
   });
 
@@ -1642,7 +1677,7 @@ window.setInterval(renderAllPostingTimers, 1_000);
 // Keep the worker reachable while a queue is paused or waiting between groups.
 window.setInterval(() => {
   void chrome.runtime
-    .sendMessage({ type: "GET_POSTING_QUEUE_STATUS" })
+    .sendMessage({ type: "POSTING_HEARTBEAT" })
     .catch(() => {});
 }, 10_000);
 
@@ -1696,6 +1731,10 @@ chrome.runtime.onMessage.addListener(
     }
 
     if (message.type === "UI_POSTING_STATUS") {
+      panelDiagnostics.checkpoint(message, {
+        logEntryCount: postingProgressLog?.children.length ?? 0,
+        imageBytes: selectedImageFiles.reduce((bytes, file) => bytes + file.size, 0),
+      });
       updateUiPostingStatus(message);
     }
   },
